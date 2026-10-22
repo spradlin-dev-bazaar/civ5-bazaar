@@ -1,6 +1,6 @@
 # Plugin host: one DLL, many plugin DLLs
 
-Status: planned 2026-10-19, reworked 2026-10-21, not started. Nothing in this document has been built or verified unless a section says so.
+Status: planned 2026-10-19, reworked 2026-10-21. P0, the proof of concept, was finished on 2026-10-22: the generator, the hooked host, plugin loading and unloading and crash handling all work in the game with small test plugins. The calls from the engine into the host stay on the p0 branch until P1. The Plugins screen and everything from P1 on are not built yet. Anything else in this document is a plan unless a section says otherwise.
 
 ## Goal
 
@@ -43,9 +43,9 @@ VMC is built from the same 1.0.3.276 SDK source as the MCP DLL, with a VS2015 so
 
 ### 1. Everything exported, layouts frozen
 
-A plugin needs real access to players, units, cities, plots, deals, diplomacy, notifications and the globals (`GC`, `gDLL`). The host exports every engine class with one macro on the class declaration (`CIV_HOST_API`). Plugins link against the host's import library.
+A plugin needs real access to players, units, cities, plots, deals, diplomacy, notifications and the globals (`GC`, `gDLL`). The host exports every engine function defined in a source file, except templates and functions private to one file. The build marks each one in its generated copy of the engine, so the committed engine files stay untouched; marking whole classes instead would make the compiler build member functions the game never uses, and some of those do not compile. Plugins link against the host's import library.
 
-The numbers allow it: 325 classes and roughly 10,900 out-of-line functions, against a limit of 65,535 exports per DLL. The build prints the count.
+The numbers allow it: the host built from the Firaxis source exports about 14,500 functions (counted 2026-10-22), against a limit of 65,535 exports per DLL. The build prints the count.
 
 What makes it safe: both sides are built by the same compiler with the shared C runtime (`/MD`) and the same compile flags, so objects, strings and vectors cross the boundary unchanged. The flags must be byte-identical (the map-drawing crash of v40 came from one mismatched define); the SDK ships a property sheet that pins them.
 
@@ -71,11 +71,13 @@ A hook is a list the host owns. At a hook point the host calls every plugin that
 
 **Generated hooks.** The build generates a typed wrapper for every function the host defines in a source file. Each wrapper:
 
-1. runs every plugin registered **before** the function, in load order; a before-hook may veto, which skips the function and the remaining before-hooks;
+1. runs every plugin registered **before** the function, in load order; a before-hook may veto, which skips the function, its replacement and the remaining before-hooks. A function that returns a value then returns what the vetoing hook set, or 0, false or empty if it set nothing; a function that returns a reference runs anyway, since there is no empty reference;
 2. runs the function, or the one plugin registered to **replace** it;
-3. runs every plugin registered **after** the function, in reverse load order, handing each the result and letting it change it.
+3. runs every plugin registered **after** the function, in reverse load order, handing each the result and letting it change it. This happens after a veto too.
 
-Replace is exclusive: a second replace on a function that already has one is refused at load, logged with both plugin names, and shown on the Plugins screen. Before and after stack without limit.
+Replace is exclusive: a second replace on a function that already has one is refused at load, logged with both plugin names, and shown on the Plugins screen. Before and after stack without limit. A replacement receives the original function as its first argument, so it can run the engine's own version and adjust around it, or ignore it and do the whole job itself.
+
+Each hook has a number from a committed list, tools/generator/hook-ids.txt. A number always means the same function, and new functions only add numbers at the end, so a plugin built against an older host keeps working on a newer one. If a function's parameters change, it gets a new number, because a plugin written for the old parameters would break.
 
 The generator reads the headers and writes one wrapper per function with that function's real signature. It runs as part of every host build. Functions written in headers stay inline and are not hook points; the SDK lists them.
 
@@ -107,14 +109,16 @@ Rules fixes currently inside the DLL that are **not** MCP:
 
 ### 4. Failure containment
 
-C++ exceptions are off in the host and in plugins; this uses Windows structured exception handling, which works without them. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
+C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
 
-- the host logs the plugin, the function and the stack, as the crash handler does today;
-- the plugin is quarantined for the rest of the session: none of its hooks run again;
-- an in-game notification names the plugin, says it was disabled for this session, and points to Mods > Plugins;
+- the host logs the plugin and the function; the call stack, as the MCP mod's crash handler logs it today, comes in P1;
+- the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
+- an in-game notification names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable and that any save should go to a new slot, and points to Mods > Plugins. A pop-up in the middle of the screen is planned instead (issue #4);
 - the game keeps running.
 
-Known limit: a plugin that faulted halfway through a replace has left the original unrun and the state possibly half-changed. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
+Before unloading any plugin, the host checks that none of its threads is still running inside its DLL. A plugin that left one running, or whose shutdown function crashed, stays in memory and is refused until Civilization V restarts, because unloading it could crash the game.
+
+Known limit: a plugin that faulted halfway through a replace may already have changed some state, and the original then runs on top of it. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
 
 ### 5. The Plugins screen
 
@@ -171,7 +175,7 @@ The documentation ships in the SDK and on a GitHub Pages site for each release.
 
 ## The MCP plugin
 
-`Claude/` (37 files, ~11,800 lines), today part of the Local MCP Server mod in the civ5-mods repository, moves to a new repository of its own and becomes `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
+`Claude/` (37 files, ~11,800 lines, counted 2026-10-21), today part of the Local MCP Server mod in the civ5-mods repository, moves to a new repository of its own and becomes `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
 
 1. replace each engine edit with a hook registration from the table above;
 2. move the `CvLuaGame.cpp` methods into the plugin and register them through `RegisterLuaMethods`;
@@ -190,7 +194,7 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 ## Phases
 
 **P0 — proof of concept (days to two weeks).** In this repository, against the plain Firaxis source, before touching VMC. The first step imports the SDK source unchanged and adds a build script. P0's edits to engine files stay on a separate branch, so the main branch holds the Firaxis source unchanged until VMC is copied over it in P1; anything worth keeping, such as the generator and the build script, moves to the main branch. The rest:
-- export every class with the macro; build; read the export count;
+- export every engine function from the generated copy; build; read the export count;
 - write the generator and run it over the whole codebase; the exit is a clean build with every wrapper in place, which flushes out the awkward signatures (overloads, templates, default arguments, operators, the variadic random-number functions);
 - time an AI turn on the plain build and on the wrapped build, with Visual C++ 2008 and with Clang against the same 2008 binary interface (the Community Patch builds that way), and record the four numbers;
 - a toy plugin that reads a player's gold through the exports, registers a before-hook and an after-hook on one function, and replaces another; a second toy plugin that replaces the same function and is refused;

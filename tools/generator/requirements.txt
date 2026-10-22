@@ -1,0 +1,3 @@
+# Python tools: the hook generator (libclang) and the lint check.
+libclang==18.1.1
+ruff==0.17.1
