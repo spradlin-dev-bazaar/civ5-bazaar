@@ -352,14 +352,19 @@ def hook_key(fn):
     return key + (" const" if fn["const"] else "")
 
 
+def cpp_name(text):
+    """Text as a C++ name that is never reserved: no repeated underscores, no leading digit."""
+    name = re.sub(r"_+", "_", re.sub(r"\W+", "_", text)).strip("_")
+    return "File_" + name if name[:1].isdigit() else name
+
+
 def hook_name(fn, taken):
     """A C++ identifier for the plugin header, unique among the names already taken."""
-    words = [re.sub(r"\W+", "_", part).strip("_") for part in named_scopes(fn)]
     leaf = "op_" + operator_leaf(fn["name"]) if fn["name"].startswith("operator") else fn["name"]
-    name = "_".join([w for w in words if w] + [leaf])
+    name = cpp_name("_".join(named_scopes(fn) + [leaf]))
     if name in taken:
-        params = "_".join(re.sub(r"\W+", "_", p["type"]).strip("_") for p in fn["params"]) or "void"
-        name = "%s_with_%s%s" % (name, params, "_const" if fn["const"] else "")
+        params = "_".join(p["type"] for p in fn["params"]) or "void"
+        name = cpp_name("%s_with_%s%s" % (name, params, "_const" if fn["const"] else ""))
     base, n = name, 2
     while name in taken:
         name, n = "%s_%d" % (base, n), n + 1

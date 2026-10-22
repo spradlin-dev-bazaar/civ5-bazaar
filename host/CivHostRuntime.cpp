@@ -350,7 +350,7 @@ namespace
 		s_plugins.push_back(blank);
 		if (duplicate)
 		{
-			Refuse(s_plugins[index], CIV_PLUGIN_DUPLICATE, "It is listed more than once; only the first listing was loaded.");
+			Refuse(s_plugins[index], CIV_PLUGIN_DUPLICATE, "It is listed more than once, so this listing was skipped.");
 			return;
 		}
 		if (const KeptPlugin* kept = KeptInMemory(path))

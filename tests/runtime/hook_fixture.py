@@ -26,7 +26,24 @@ def ids(hooks):
     return sorted((fn["hook_key"], fn["hook_id"], fn["hook_name"]) for fn in hooks)
 
 
+def naming_problems():
+    """Names that would not be valid, unreserved C++: a file name with a leading digit, a __ type."""
+    local = {"name": "Helper", "namespaces": [], "class": None, "linkage": "INTERNAL", "file": "2DGrid.cpp"}
+    local.update(params=[], const=False)
+    overload = {"name": "Pack", "namespaces": [], "class": "CvUnit", "linkage": "EXTERNAL", "file": "CvUnit.cpp"}
+    overload.update(params=[{"type": "unsigned __int64"}], const=False)
+    expected = [
+        (generate.hook_name(local, set()), "File_2DGrid_cpp_Helper"),
+        (generate.hook_name(overload, {"CvUnit_Pack"}), "CvUnit_Pack_with_unsigned_int64"),
+    ]
+    return ["%s, expected %s" % pair for pair in expected if pair[0] != pair[1]]
+
+
 if __name__ == "__main__":
+    problems = naming_problems()
+    if problems:
+        print("FAIL: hook names: " + "; ".join(problems))
+        sys.exit(1)
     project = fixture_project()
     if os.path.exists(project.registry):
         os.remove(project.registry)
