@@ -29,6 +29,7 @@ extern CivHookPoint g_CivHookPoints[];
 // One byte per hook point, apart from the hook lists, so the check every wrapper makes stays in cache.
 extern unsigned char g_CivHookActive[];
 extern const int g_CivHookPointCount;
+extern const char* const g_CivHookPointNames[];
 
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 // False when there is no replacement or it faulted; the wrapper then runs the original.

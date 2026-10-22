@@ -75,3 +75,8 @@ CvGameCoreSource/BuildTemp/
 tests/runtime/out/
 __pycache__/
 tests/ingame/out/
+
+# Visual Studio 2008 per-user files
+*.suo
+*.ncb
+*.user

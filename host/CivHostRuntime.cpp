@@ -2,11 +2,10 @@
 #include "CivHostRuntime.h"
 
 #include <windows.h>
+#include <tlhelp32.h>
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
-
-extern const char* const g_CivHookPointNames[];
 
 namespace
 {
@@ -127,15 +126,17 @@ namespace
 		return ran;
 	}
 
+	// The player hears about a plugin's first fault only; later ones are logged.
 	void Quarantine(int plugin, int hookId, const char* where, unsigned int code)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
-		rec.quarantined = true;
 		char problem[512];
-		_snprintf_s(problem, sizeof(problem), _TRUNCATE,
-			"Faulted (code 0x%08X) in %s.", code, where);
-		rec.problems.push_back(problem);
+		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", code, where);
 		Log("Plugin %s: %s", rec.name.c_str(), problem);
+		if (rec.quarantined)
+			return;
+		rec.quarantined = true;
+		rec.problems.push_back(problem);
 		if (s_faultSink)
 			s_faultSink(plugin, rec.name.c_str(), hookId, code);
 	}
@@ -261,20 +262,120 @@ namespace
 		unsigned int code = 0;
 		if (!shutdown || GuardedCall(&ShutdownThunk, &shutdown, &code))
 			return true;
-		if (rec.quarantined)
-			Log("Plugin %s: Faulted (code 0x%08X) in its shutdown function.", rec.name.c_str(), code);
-		else
-			Quarantine(plugin, -1, "its shutdown function", code);
+		Quarantine(plugin, -1, "its shutdown function", code);
 		return false;
 	}
 
-	// A plugin whose shutdown faulted may still have threads or callbacks pointing into its DLL, so the DLL
-	// stays loaded and the plugin stays refused until Civilization V restarts.
+	typedef LONG(WINAPI* QueryThreadFn)(HANDLE thread, int infoClass, void* info, ULONG size, ULONG* written);
+
+	const int kThreadBasicInformation = 0;
+	const int kThreadStartAddress = 9;
+
+	struct ThreadBasicInfo
+	{
+		LONG exitStatus;
+		NT_TIB* tib;
+		void* clientProcess;
+		void* clientThread;
+		ULONG_PTR affinity;
+		LONG priority;
+		LONG basePriority;
+	};
+
+	// No C++ objects may live in this frame, or __try is not allowed.
+	// A stack value counts only if it could be a return address into the DLL: the bytes before it are one of
+	// the x86 CALL forms. Ordinary numbers that merely fall inside the DLL's address range then rarely match.
+	bool IsReturnInto(DWORD value, const BYTE* start, const BYTE* end)
+	{
+		const BYTE* p = reinterpret_cast<const BYTE*>(value);
+		if (p < start + 7 || p >= end)
+			return false;
+		if (p[-5] == 0xE8)
+			return true;
+		for (int length = 2; length <= 7; ++length)
+			if (p[-length] == 0xFF && (p[1 - length] & 0x38) == 0x10)
+				return true;
+		return false;
+	}
+
+	// No C++ objects may live in this frame, or __try is not allowed.
+	bool StackPointsInto(const NT_TIB* tib, DWORD esp, const BYTE* start, const BYTE* end)
+	{
+		__try
+		{
+			const DWORD* top = static_cast<const DWORD*>(tib->StackBase);
+			for (const DWORD* p = reinterpret_cast<const DWORD*>(esp); p < top; ++p)
+				if (IsReturnInto(*p, start, end))
+					return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+		}
+		return false;
+	}
+
+	// The thread is suspended only while its registers and stack are read, which takes no locks, so it
+	// cannot be holding anything this thread then waits for. Anything that cannot be checked counts as
+	// inside: keeping a DLL loaded is the safe mistake.
+	bool ThreadIsInside(DWORD id, const BYTE* start, const BYTE* end, QueryThreadFn query)
+	{
+		HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, id);
+		if (!thread)
+			return GetLastError() != ERROR_INVALID_PARAMETER; // that error means the thread has already ended
+		bool inside = true;
+		DWORD exitCode = 0;
+		const BYTE* entry = 0;
+		ThreadBasicInfo info = {};
+		if (GetExitCodeThread(thread, &exitCode) && exitCode != STILL_ACTIVE)
+			inside = false;
+		else if (query(thread, kThreadStartAddress, &entry, sizeof(entry), 0) == 0 && entry >= start && entry < end)
+			inside = true;
+		else if (query(thread, kThreadBasicInformation, &info, sizeof(info), 0) == 0 && SuspendThread(thread) != (DWORD)-1)
+		{
+			CONTEXT context;
+			context.ContextFlags = CONTEXT_CONTROL;
+			if (GetThreadContext(thread, &context))
+			{
+				const BYTE* eip = reinterpret_cast<const BYTE*>(context.Eip);
+				inside = (eip >= start && eip < end) || StackPointsInto(info.tib, context.Esp, start, end);
+			}
+			ResumeThread(thread);
+		}
+		CloseHandle(thread);
+		return inside;
+	}
+
+	// A thread the plugin left running, even one only waiting, would crash once the DLL is gone. A thread
+	// started through the C runtime begins outside the DLL, so its stack is searched as well. A thread
+	// started after the snapshot is not seen; by then the plugin's own shutdown has already run.
+	bool ThreadStillInside(HMODULE module)
+	{
+		QueryThreadFn query = (QueryThreadFn)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationThread");
+		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+		if (!query || snapshot == INVALID_HANDLE_VALUE)
+			return true;
+		const BYTE* start = reinterpret_cast<const BYTE*>(module);
+		const IMAGE_NT_HEADERS* headers = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+			start + reinterpret_cast<const IMAGE_DOS_HEADER*>(start)->e_lfanew);
+		const BYTE* end = start + headers->OptionalHeader.SizeOfImage;
+		THREADENTRY32 entry;
+		entry.dwSize = sizeof(entry);
+		bool inside = false;
+		for (BOOL more = Thread32First(snapshot, &entry); more && !inside; more = Thread32Next(snapshot, &entry))
+			if (entry.th32OwnerProcessID == GetCurrentProcessId() && entry.th32ThreadID != GetCurrentThreadId())
+				inside = ThreadIsInside(entry.th32ThreadID, start, end, query);
+		CloseHandle(snapshot);
+		return inside;
+	}
+
+	// A plugin whose shutdown faulted, or that still has a thread inside its DLL, may still have code
+	// referenced elsewhere, so the DLL stays loaded and the plugin stays refused until Civilization V restarts.
 	void Unload(int plugin)
 	{
 		const bool clean = ShutDownCleanly(plugin);
 		CivPluginRecord& rec = s_plugins[plugin];
-		if (clean)
+		const bool threadLeft = clean && ThreadStillInside((HMODULE)rec.module);
+		if (clean && !threadLeft)
 		{
 			FreeLibrary((HMODULE)rec.module);
 			delete rec.host;
@@ -285,7 +386,10 @@ namespace
 			rec.host->pluginIndex = -1;
 			KeptPlugin kept = { rec.path, rec.name };
 			s_kept.push_back(kept);
-			Log("Plugin %s stays in memory because its shutdown function faulted.", rec.name.c_str());
+			if (threadLeft)
+				Log("Plugin %s stays in memory because one of its threads is still running.", rec.name.c_str());
+			else
+				Log("Plugin %s stays in memory because its shutdown function faulted.", rec.name.c_str());
 		}
 		rec.module = 0;
 		rec.host = 0;
@@ -356,11 +460,12 @@ namespace
 		if (const KeptPlugin* kept = KeptInMemory(path))
 		{
 			s_plugins[index].name = kept->name;
-			Refuse(s_plugins[index], CIV_PLUGIN_STILL_IN_MEMORY, "It stopped working earlier and could not be shut down safely, so it stays off until you restart Civilization V.");
+			Refuse(s_plugins[index], CIV_PLUGIN_STILL_IN_MEMORY, "It could not be shut down safely earlier, so it stays off until you restart Civilization V.");
 			return;
 		}
 
-		HMODULE module = LoadLibraryA(path.c_str());
+		// Lets a plugin's own helper DLLs load from its folder rather than the game's.
+		HMODULE module = LoadLibraryExA(path.c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
 		if (!module)
 		{
 			char problem[256];

@@ -390,6 +390,8 @@ class Registry:
     def __init__(self, path):
         self.path = path
         self.entries = {}
+        ids = set()
+        self.names = set()
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 for number, line in enumerate(f, 1):
@@ -398,8 +400,14 @@ class Registry:
                     fields = line.rstrip("\n").split("\t", 2)
                     if len(fields) != 3 or not fields[0].isdigit():
                         raise RuntimeError("%s line %d is not 'id<TAB>name<TAB>function'" % (path, number))
-                    self.entries[fields[2]] = (int(fields[0]), fields[1])
-        self.names = set(name for _, name in self.entries.values())
+                    hook_id, name, key = int(fields[0]), fields[1], fields[2]
+                    # A merge of two branches that both added hooks can repeat an id, which would make one
+                    # function's hooks run on another.
+                    if hook_id in ids or name in self.names or key in self.entries:
+                        raise RuntimeError("%s line %d repeats an id, name or function seen earlier" % (path, number))
+                    ids.add(hook_id)
+                    self.names.add(name)
+                    self.entries[key] = (hook_id, name)
         self.next_id = max([i for i, _ in self.entries.values()] or [-1]) + 1
         self.added = 0
 

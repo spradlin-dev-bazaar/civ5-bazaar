@@ -50,6 +50,19 @@ def vs_env():
     return env
 
 
+def build_problem(dll, want_bench):
+    """Why this DLL is the wrong build to package, or None. Benchmark builds start autoplay by themselves."""
+    if not os.path.exists(dll):
+        return "%s does not exist; build it first." % dll
+    with open(dll, "rb") as f:
+        bench = b"CivTurnBench.csv" in f.read()
+    if bench and not want_bench:
+        return "%s is a benchmark build; rebuild it without the bench option." % dll
+    if want_bench and not bench:
+        return "%s is not a benchmark build; rebuild it with the bench option." % dll
+    return None
+
+
 def md5(path):
     with open(path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest().upper()
@@ -125,12 +138,18 @@ def write_bench_mod(build):
 
 
 def main(args):
+    if args not in ([], ["bench", "plain"], ["bench", "host"]):
+        print("usage: package.py [bench plain|bench host]")
+        return 1
+    bench = bool(args)
+    dll = BENCH_DLLS[args[1]] if bench else os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll")
+    problem = build_problem(dll, bench)
+    if problem:
+        print(problem)
+        return 1
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
-    if args[:1] == ["bench"]:
-        if args[1:] not in (["plain"], ["host"]):
-            print("usage: package.py [bench plain|bench host]")
-            return 1
+    if bench:
         return write_bench_mod(args[1])
     build = os.path.join(OUT, "build")
     os.makedirs(build)

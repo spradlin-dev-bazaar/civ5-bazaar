@@ -338,6 +338,37 @@ static void TestPluginList()
 		"the half-loaded plugin is unloaded at the next list change");
 }
 
+static void TestThreads()
+{
+	printf("\n-- plugins with threads of their own\n");
+	const std::vector<std::string> threads(1, Dll("toy_threads.dll"));
+	const std::vector<std::string> none;
+	typedef void (*StartFn)(int);
+
+	CivHostSetPlugins(threads);
+	StartFn start = (StartFn)ToyExport("toy_threads.dll", "ToyStartThread");
+	Check(start != 0, "the thread test plugin can start a thread");
+	if (start)
+		start(0);
+	Check(CivHostSetPlugins(none) == CIV_PLUGINS_CHANGED && !GetModuleHandleA(Dll("toy_threads.dll").c_str()),
+		"a plugin whose shutdown stops its thread is unloaded");
+
+	CivHostSetPlugins(threads);
+	start = (StartFn)ToyExport("toy_threads.dll", "ToyStartThread");
+	VoidFn leaveRunning = (VoidFn)ToyExport("toy_threads.dll", "ToyLeaveThreadRunning");
+	if (start && leaveRunning)
+	{
+		start(1);
+		leaveRunning();
+	}
+	s_log.clear();
+	CivHostSetPlugins(none);
+	Check(GetModuleHandleA(Dll("toy_threads.dll").c_str()) != 0 && LogHas("one of its threads is still running"),
+		"a plugin that leaves a thread running, even one started through the C runtime, stays in memory");
+	CivHostSetPlugins(threads);
+	Check(HasStatus("toy_threads.dll", CIV_PLUGIN_STILL_IN_MEMORY), "it is refused when listed again");
+}
+
 int main(int argc, char** argv)
 {
 	s_dir = argc > 1 ? std::string(argv[1]) + "\\" : std::string();
@@ -355,6 +386,7 @@ int main(int argc, char** argv)
 	TestStrings();
 	TestUnload();
 	TestPluginList();
+	TestThreads();
 
 	printf("\n-- cost per call (Square, %d calls each)\n", calls);
 	Load("toy_bench.dll");

@@ -1,0 +1,4 @@
+# Parse errors outside function bodies that are known to be harmless, as file<TAB>message.
+# CvDatabaseUtility.h names a template parameter 'default', which MSVC accepts and clang does not; templates get no hooks.
+CvDatabaseUtility.h	invalid parameter name: 'default' is a keyword
+CvDatabaseUtility.h	expected expression

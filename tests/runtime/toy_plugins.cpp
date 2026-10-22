@@ -47,11 +47,12 @@ TOY_EXPORT int ToyRegisterLate()
 	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
 }
 
-typedef void (*ProbeFn)();
-static ProbeFn s_shutdownProbe = 0;
+typedef void (*ActionFn)();
+static ActionFn s_ownShutdown = 0;
+static ActionFn s_shutdownProbe = 0;
 static bool s_faultOnShutdown = false;
 
-TOY_EXPORT void ToySetShutdownProbe(ProbeFn probe)
+TOY_EXPORT void ToySetShutdownProbe(ActionFn probe)
 {
 	s_shutdownProbe = probe;
 }
@@ -64,6 +65,8 @@ TOY_EXPORT void ToyFaultOnShutdown()
 TOY_EXPORT void CivPluginShutdown()
 {
 	s_host->Log(s_host->pluginIndex, "shutting down");
+	if (s_ownShutdown)
+		s_ownShutdown();
 	if (s_shutdownProbe)
 		s_shutdownProbe();
 	if (s_faultOnShutdown)
@@ -371,6 +374,60 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_host = host;
 	Describe(info, "Toy Reentrant", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
+	return true;
+}
+
+#elif defined(TOY_THREADS)
+
+// Without this, windows.h brings in winsock.h, whose s_host macro would rename the toys' s_host.
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <process.h>
+
+static volatile LONG s_stop = 0;
+static HANDLE s_thread = 0;
+static bool s_leaveRunning = false;
+
+static DWORD WINAPI WindowsLoop(void*)
+{
+	while (!s_stop)
+		Sleep(5);
+	return 0;
+}
+
+static unsigned __stdcall RuntimeLoop(void*)
+{
+	while (!s_stop)
+		Sleep(5);
+	return 0;
+}
+
+static void StopThread()
+{
+	if (!s_thread || s_leaveRunning)
+		return;
+	InterlockedExchange(&s_stop, 1);
+	WaitForSingleObject(s_thread, INFINITE);
+	CloseHandle(s_thread);
+	s_thread = 0;
+}
+
+TOY_EXPORT void ToyStartThread(int throughRuntime)
+{
+	s_stop = 0;
+	s_thread = throughRuntime ? (HANDLE)_beginthreadex(0, 0, &RuntimeLoop, 0, 0, 0) : CreateThread(0, 0, &WindowsLoop, 0, 0, 0);
+}
+
+TOY_EXPORT void ToyLeaveThreadRunning()
+{
+	s_leaveRunning = true;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Threads", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	s_ownShutdown = &StopThread;
 	return true;
 }
 

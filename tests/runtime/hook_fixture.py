@@ -1,6 +1,7 @@
 """Run the real generator over the test fixture, so the runtime tests exercise its actual output.
 
-It generates twice: the second run must reload the id registry and change nothing.
+It generates three times. The second run adds a function that the generator reaches first, which must
+take a new id while every existing function keeps its own; the third run removes it again.
 """
 
 import os
@@ -14,16 +15,44 @@ import common  # noqa: E402
 import generate  # noqa: E402
 
 
-def fixture_project():
+BUILD = os.path.join(HERE, "out", "civgen")
+
+
+def fixture_project(sources):
     root = os.path.join(HERE, "fixture")
-    build = os.path.join(HERE, "out", "civgen")
-    return common.Project(
-        root, ["fake_engine.cpp"], [root, common.HOST_DIR], build, os.path.join(build, "hook-ids.txt")
-    )
+    return common.Project(root, sources, [root, common.HOST_DIR], BUILD, os.path.join(BUILD, "hook-ids.txt"))
 
 
-def ids(hooks):
-    return sorted((fn["hook_key"], fn["hook_id"], fn["hook_name"]) for fn in hooks)
+def generate_hooks(sources):
+    project = fixture_project(sources)
+    if analyze.project_errors(project, analyze.run(project)):
+        raise SystemExit("FAIL: the fixture does not parse")
+    return dict((fn["hook_key"], (fn["hook_id"], fn["hook_name"])) for fn in generate.run(project))
+
+
+def registry_problems(first, second, third):
+    problems = ["%s changed from %s to %s" % (k, first[k], second[k]) for k in first if second.get(k) != first[k]]
+    newest = max(i for i, _ in first.values())
+    problems += [
+        "%s took id %d, not a new one" % (k, v[0]) for k, v in second.items() if k not in first and v[0] <= newest
+    ]
+    if len(second) != len(first) + 1:
+        problems.append("the added function did not get a hook")
+    if third != first:
+        problems.append("removing the added function changed the others")
+    return problems
+
+
+def duplicate_problems():
+    path = os.path.join(BUILD, "duplicate-ids.txt")
+    os.makedirs(BUILD, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("0\tA\tfirst()\n0\tB\tsecond()\n")
+    try:
+        generate.Registry(path)
+    except RuntimeError:
+        return []
+    return ["a registry that repeats an id was accepted"]
 
 
 def naming_problems():
@@ -40,17 +69,15 @@ def naming_problems():
 
 
 if __name__ == "__main__":
-    problems = naming_problems()
+    problems = naming_problems() + duplicate_problems()
+    registry = os.path.join(BUILD, "hook-ids.txt")
+    if os.path.exists(registry):
+        os.remove(registry)
+    first = generate_hooks(["fake_engine.cpp"])
+    second = generate_hooks(["aaa_extra.cpp", "fake_engine.cpp"])
+    third = generate_hooks(["fake_engine.cpp"])
+    problems += registry_problems(first, second, third)
     if problems:
-        print("FAIL: hook names: " + "; ".join(problems))
-        sys.exit(1)
-    project = fixture_project()
-    if os.path.exists(project.registry):
-        os.remove(project.registry)
-    analyze.run(project)
-    first = generate.run(project)
-    second = generate.run(project)
-    if not first or ids(first) != ids(second):
-        print("FAIL: a second generator run changed hook ids or names")
+        print("FAIL: " + "; ".join(problems))
         sys.exit(1)
     sys.exit(0)

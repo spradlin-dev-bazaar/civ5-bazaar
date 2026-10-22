@@ -194,16 +194,19 @@ def analyze_tu(job):
     tu = idx.parse(src, args=project.clang_args(), options=ci.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
     with open(src, "rb") as f:
         data = f.read()
-    errors = [
-        (os.path.abspath(d.location.file.name) if d.location.file else "", d.location.line, d.spelling)
-        for d in tu.diagnostics
-        if d.severity >= ci.Diagnostic.Error
-    ]
     functions = []
     for c in tu.cursor.walk_preorder():
         if c.kind in FUNCTION_KINDS and c.is_definition() and c.location.file:
             if os.path.normcase(os.path.abspath(c.location.file.name)) == os.path.normcase(src):
                 functions.append(function_record(c, data, rel, project))
+    bodies = [(fn["body_start"], fn["def_end"]) for fn in functions]
+    errors = []
+    for d in tu.diagnostics:
+        if d.severity < ci.Diagnostic.Error:
+            continue
+        path = os.path.abspath(d.location.file.name) if d.location.file else ""
+        in_body = os.path.normcase(path) == os.path.normcase(src) and any(s <= d.location.offset < e for s, e in bodies)
+        errors.append((path, d.location.line, d.spelling, in_body))
     return {"rel": rel, "errors": errors, "functions": functions}
 
 
@@ -330,13 +333,32 @@ def run(project):
             reasons[r] = reasons.get(r, 0) + 1
     for r, n in sorted(reasons.items(), key=lambda kv: -kv[1]):
         print("  skipped, %s: %d" % (r, n))
-    project_errors = {(e[0], e[1], e[2]) for r in results for e in r["errors"] if project.contains(e[0])}
-    print("parse errors in project files: %d" % len(project_errors))
-    for e in sorted(project_errors)[:20]:
+    in_bodies = {(e[0], e[1], e[2]) for r in results for e in r["errors"] if project.contains(e[0]) and e[3]}
+    errors = project_errors(project, results)
+    print("parse errors in project files: %d inside function bodies, %d new elsewhere" % (len(in_bodies), len(errors)))
+    for e in sorted(errors)[:20]:
         print("  %s:%d %s" % (os.path.basename(e[0]), e[1], e[2]))
     return results
 
 
+def known_errors():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "known-parse-errors.txt")
+    with open(path, encoding="utf-8") as f:
+        return set(tuple(line.rstrip("\n").split("\t", 1)) for line in f if line.strip() and not line.startswith("#"))
+
+
+def project_errors(project, results):
+    """New parse errors in the project outside function bodies: they can hide functions, so the build must stop.
+    Errors inside a body cannot, since the generator never needs a body's contents."""
+    known = known_errors()
+    return {
+        (e[0], e[1], e[2])
+        for r in results
+        for e in r["errors"]
+        if project.contains(e[0]) and not e[3] and (os.path.basename(e[0]), e[2]) not in known
+    }
+
+
 if __name__ == "__main__":
-    run(common.engine_project())
-    sys.exit(0)
+    project = common.engine_project()
+    sys.exit(1 if project_errors(project, run(project)) else 0)

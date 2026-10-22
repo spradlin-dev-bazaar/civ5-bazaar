@@ -2,6 +2,7 @@
 
 // Benchmark builds only (CIV_TURN_BENCH). The computer plays by itself, and each turn's time goes to
 // CivTurnBench.csv beside this DLL: a new game plays long enough to make a test save, a loaded save plays the benchmark.
+// Include it after CvGame.h: it relies on the engine's types and on the Windows headers of the precompiled header.
 
 #include <stdio.h>
 

@@ -74,7 +74,7 @@ namespace
 		if (hookId < 0)
 			Notify("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\CivHost.log.");
 		else
-			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. Details are in Logs\\CivHost.log.");
+			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\CivHost.log.");
 	}
 
 	// No DllPlugins table means no plugin mod is active; false means the table could not be read.
@@ -170,6 +170,7 @@ void CivHostOnGameUpdate()
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.
 void CivHostOnEngineShutdown()
 {
-	CivHostUnloadPlugins();
+	if (!CivHostUnloadPlugins())
+		LogLine("Plugins were not unloaded because one of them was still running.");
 	s_reportedMissing.clear();
 }
