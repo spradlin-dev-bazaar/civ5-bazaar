@@ -1,4 +1,5 @@
 // One source, built once per toy plugin with a TOY_* define.
+#include "CivHooks.h"
 #include "CivPluginApi.h"
 #include "fake_engine.h"
 
@@ -69,11 +70,16 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	Register(FAKE_HOOK_ADD, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
-	Register(FAKE_HOOK_ADD, CIV_HOOK_AFTER, (void*)&AfterAdd);
-	Register(FAKE_HOOK_NOTIFY, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
-	Register(FAKE_HOOK_NAME, CIV_HOOK_AFTER, (void*)&AfterName);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
+	Register(CivHooks::FakeUnit_name::ID, CIV_HOOK_AFTER, (void*)&AfterName);
 	return true;
+}
+
+TOY_EXPORT int ToyRegisterLate()
+{
+	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 }
 
 TOY_EXPORT void ToyFillStrings(std::string& s, std::vector<std::string>& v)
@@ -107,8 +113,67 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Second", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	Register(FAKE_HOOK_ADD, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
-	Register(FAKE_HOOK_ADD, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	return true;
+}
+
+#elif defined(TOY_SHAPES)
+
+static void AfterTwice(int, int& result)
+{
+	result += 1000;
+}
+
+static void AfterScale(const FakeUnit*, int, int, int& result)
+{
+	result += 1000;
+}
+
+static void AfterLevel(const FakeUnit*, int& result)
+{
+	result += 1000;
+}
+
+static void AfterGreet(const FakeUnit*, std::string, std::string& result)
+{
+	result += "!";
+}
+
+static void AfterEquals(const FakeUnit*, const FakeUnit&, bool& result)
+{
+	result = !result;
+}
+
+static bool BeforeIgnore(FakeUnit*, int)
+{
+	++s_beforeCalls;
+	return false;
+}
+
+static void AfterPlusThousand(int, int& result)
+{
+	result += 1000;
+}
+
+static void AfterUnannounced(int, int, int& result)
+{
+	result += 1000;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Shapes", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
+	Register(CivHooks::FakeUnit_Scale::ID, CIV_HOOK_AFTER, (void*)&AfterScale);
+	Register(CivHooks::FakeUnit_Level::ID, CIV_HOOK_AFTER, (void*)&AfterLevel);
+	Register(CivHooks::FakeUnit_Greet::ID, CIV_HOOK_AFTER, (void*)&AfterGreet);
+	Register(CivHooks::FakeUnit_op_eq::ID, CIV_HOOK_AFTER, (void*)&AfterEquals);
+	Register(CivHooks::FakeUnit_Ignore::ID, CIV_HOOK_BEFORE, (void*)&BeforeIgnore);
+	Register(CivHooks::FakeRules_Bonus::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
+	Register(CivHooks::fake_engine_cpp_Helper::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
+	Register(CivHooks::Unannounced::ID, CIV_HOOK_AFTER, (void*)&AfterUnannounced);
 	return true;
 }
 
@@ -123,7 +188,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Conflict", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	Register(FAKE_HOOK_NOTIFY, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
+	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
 	return true;
 }
 
@@ -142,7 +207,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 #else
 	Describe(info, "Toy Major", CIV_HOST_API_MAJOR + 1, 0);
 #endif
-	Register(FAKE_HOOK_ADD, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	return true;
 }
 
@@ -158,7 +223,23 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	Register(FAKE_HOOK_ADD, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	return true;
+}
+
+#elif defined(TOY_FAULT_BEFORE)
+
+static bool BeforeAdd(const FakeUnit*, int, int, int&)
+{
+	int* volatile nowhere = 0;
+	return *nowhere == 1;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Fault Before", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	return true;
 }
 
@@ -168,7 +249,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Entry Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	int zero = host->pluginIndex - host->pluginIndex;
+	volatile int zero = 0;
 	return 10 / zero == 1;
 }
 
@@ -182,7 +263,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Bench", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	Register(FAKE_HOOK_SQUARE, CIV_HOOK_AFTER, (void*)&AfterSquare);
+	Register(CivHooks::Square::ID, CIV_HOOK_AFTER, (void*)&AfterSquare);
 	return true;
 }
 

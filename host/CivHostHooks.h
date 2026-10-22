@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 struct CivHookEntry
 {
 	void* fn;
@@ -15,7 +17,7 @@ struct CivHookPoint
 	CivHookEntry* replace;
 };
 
-// Every generated thunk context starts with these two fields.
+// The first member of every generated thunk context; the runtime reaches it through a void*.
 struct CivHookCtx
 {
 	void* fn;
@@ -35,12 +37,16 @@ void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* c
 template<class T> struct CivHookArg { typedef T* Ptr; };
 template<class T> struct CivHookArg<T&> { typedef T* Ptr; };
 
+// A vetoed call, or one whose replacement faulted, returns what the hooks left in the slot: the
+// type's default unless a hook set it. A reference result can't be empty, so its wrapper runs the
+// original instead.
 template<class R> struct CivHookResult
 {
 	typedef R Slot;
 	R value;
 	CivHookResult() : value() {}
-	void Set(R v) { value = v; }
+	// Copy-construct rather than assign: some engine handles copy state their operator= drops.
+	void Set(R v) { value.~R(); new (&value) R(v); }
 	bool Empty() const { return false; }
 	R Get() { return value; }
 };

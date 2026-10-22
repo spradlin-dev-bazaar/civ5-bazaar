@@ -85,6 +85,11 @@ void CivHostOnDatabaseReady()
 	if (!DB.SelectWhere(tables, "sqlite_master", "type = 'table' AND name = 'DllPlugins'") || !tables.Step())
 		return;
 	s_loaded = true;
+	if (UserFolder().empty())
+	{
+		Notify("Plugins not loaded", "The plugin host could not find your Documents folder, so it could not look for plugins.");
+		return;
+	}
 
 	CivHostSetLogSink(&LogLine);
 	CivHostSetFaultSink(&OnFault);

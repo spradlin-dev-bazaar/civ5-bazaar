@@ -175,7 +175,6 @@ namespace
 
 	struct EntryCall
 	{
-		CivHookCtx header;
 		CivPluginEntryFn entry;
 		const CivHostInfo* host;
 		CivPluginInfo* info;
@@ -191,6 +190,132 @@ namespace
 	std::string Copy(const char* s)
 	{
 		return s ? std::string(s) : std::string();
+	}
+
+	void Refuse(CivPluginRecord& rec, CivPluginStatus status, const std::string& problem)
+	{
+		if (rec.name.empty())
+			rec.name = rec.path.substr(rec.path.find_last_of("\\/") + 1);
+		rec.status = status;
+		rec.problems.push_back(problem);
+		Log("Plugin %s: %s", rec.name.c_str(), problem.c_str());
+	}
+
+	bool AlreadyListed(const std::string& path)
+	{
+		for (size_t i = 0; i < s_plugins.size(); ++i)
+			if (_stricmp(s_plugins[i].path.c_str(), path.c_str()) == 0)
+				return true;
+		return false;
+	}
+
+	std::string RefusalReason(bool accepted, const CivPluginInfo& info, CivPluginStatus* status)
+	{
+		char problem[256];
+		if (!accepted)
+		{
+			*status = CIV_PLUGIN_ENTRY_DECLINED;
+			return "Declined to load.";
+		}
+		if (info.builtApiMajor != CIV_HOST_API_MAJOR)
+		{
+			*status = CIV_PLUGIN_OTHER_MAJOR;
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for host API %d.%d, which this host (API %d.%d) cannot run.",
+				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+			return problem;
+		}
+		if (info.builtApiMinor > CIV_HOST_API_MINOR)
+		{
+			*status = CIV_PLUGIN_NEWER_API;
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for a newer host (API %d.%d); this host is API %d.%d.",
+				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+			return problem;
+		}
+		return std::string();
+	}
+
+	void LoadOne(const std::string& requested)
+	{
+		char full[MAX_PATH];
+		const DWORD length = GetFullPathNameA(requested.c_str(), MAX_PATH, full, 0);
+		const std::string path = (length > 0 && length < MAX_PATH) ? std::string(full) : requested;
+		const int index = (int)s_plugins.size();
+		CivPluginRecord blank;
+		blank.path = path;
+		blank.builtApiMajor = 0;
+		blank.builtApiMinor = 0;
+		blank.status = CIV_PLUGIN_FILE_NOT_LOADED;
+		blank.quarantined = false;
+		const bool duplicate = AlreadyListed(path);
+		s_plugins.push_back(blank);
+		if (duplicate)
+		{
+			Refuse(s_plugins[index], CIV_PLUGIN_DUPLICATE, "It is listed more than once; only the first listing was loaded.");
+			return;
+		}
+
+		HMODULE module = LoadLibraryA(path.c_str());
+		if (!module)
+		{
+			char problem[256];
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Windows could not load the file (error %lu).", GetLastError());
+			Refuse(s_plugins[index], CIV_PLUGIN_FILE_NOT_LOADED, problem);
+			return;
+		}
+		CivPluginEntryFn entry = (CivPluginEntryFn)GetProcAddress(module, CIV_PLUGIN_ENTRY_NAME);
+		if (!entry)
+		{
+			Refuse(s_plugins[index], CIV_PLUGIN_NO_ENTRY, "The file has no " CIV_PLUGIN_ENTRY_NAME " function, so it is not a plugin.");
+			FreeLibrary(module);
+			return;
+		}
+
+		// A loaded plugin may keep this pointer for the whole session.
+		CivHostInfo* host = new CivHostInfo;
+		host->apiMajor = CIV_HOST_API_MAJOR;
+		host->apiMinor = CIV_HOST_API_MINOR;
+		host->pluginIndex = index;
+		host->RegisterHook = &RegisterHook;
+		host->Log = &PluginLog;
+		CivPluginInfo info = { 0, 0, 0, 0 };
+		EntryCall call = { entry, host, &info, false };
+		s_pending.clear();
+		s_loadingPlugin = index;
+		unsigned int code = 0;
+		const bool ran = GuardedCall(&EntryThunk, &call, &code);
+		s_loadingPlugin = -1;
+		if (!ran && code == EXCEPTION_STACK_OVERFLOW)
+			_resetstkoflw();
+
+		CivPluginRecord& rec = s_plugins[index];
+		rec.name = info.name ? Copy(info.name) : path;
+		rec.version = Copy(info.version);
+		rec.builtApiMajor = info.builtApiMajor;
+		rec.builtApiMinor = info.builtApiMinor;
+
+		if (!ran)
+		{
+			// The module stays loaded: the fault may have left its code referenced elsewhere.
+			char problem[256];
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted while loading (code 0x%08X) and was disabled for this session.", code);
+			s_pending.clear();
+			rec.quarantined = true;
+			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
+			return;
+		}
+		CivPluginStatus status = CIV_PLUGIN_LOADED;
+		const std::string problem = RefusalReason(call.accepted, info, &status);
+		if (!problem.empty())
+		{
+			s_pending.clear();
+			Refuse(rec, status, problem);
+			FreeLibrary(module);
+			delete host;
+			return;
+		}
+		CommitPending(index);
+		rec.status = CIV_PLUGIN_LOADED;
+		Log("Plugin %s %s loaded (built for API %d.%d).", rec.name.c_str(), rec.version.c_str(), rec.builtApiMajor, rec.builtApiMinor);
 	}
 }
 
@@ -241,98 +366,5 @@ const std::vector<CivPluginRecord>& CivHostPlugins()
 void CivHostLoadPlugins(const std::vector<std::string>& paths)
 {
 	for (size_t i = 0; i < paths.size(); ++i)
-	{
-		const int index = (int)s_plugins.size();
-		CivPluginRecord blank;
-		blank.path = paths[i];
-		blank.builtApiMajor = 0;
-		blank.builtApiMinor = 0;
-		blank.status = CIV_PLUGIN_FILE_NOT_LOADED;
-		blank.quarantined = false;
-		s_plugins.push_back(blank);
-		CivPluginRecord& rec = s_plugins.back();
-
-		HMODULE module = LoadLibraryA(paths[i].c_str());
-		if (!module)
-		{
-			char problem[256];
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Windows could not load the file (error %lu).", GetLastError());
-			rec.problems.push_back(problem);
-			Log("Plugin %s: %s", rec.path.c_str(), problem);
-			continue;
-		}
-		CivPluginEntryFn entry = (CivPluginEntryFn)GetProcAddress(module, CIV_PLUGIN_ENTRY_NAME);
-		if (!entry)
-		{
-			rec.status = CIV_PLUGIN_NO_ENTRY;
-			rec.problems.push_back("The file has no " CIV_PLUGIN_ENTRY_NAME " function, so it is not a plugin.");
-			Log("Plugin %s: %s", rec.path.c_str(), rec.problems.back().c_str());
-			FreeLibrary(module);
-			continue;
-		}
-
-		// Plugins may keep this pointer for the whole session.
-		CivHostInfo* host = new CivHostInfo;
-		host->apiMajor = CIV_HOST_API_MAJOR;
-		host->apiMinor = CIV_HOST_API_MINOR;
-		host->pluginIndex = index;
-		host->RegisterHook = &RegisterHook;
-		host->Log = &PluginLog;
-		CivPluginInfo info = { 0, 0, 0, 0 };
-		EntryCall call = { { 0, false }, entry, host, &info, false };
-		s_pending.clear();
-		s_loadingPlugin = index;
-		unsigned int code = 0;
-		const bool ran = GuardedCall(&EntryThunk, &call, &code);
-		s_loadingPlugin = -1;
-		if (!ran && code == EXCEPTION_STACK_OVERFLOW)
-			_resetstkoflw();
-
-		CivPluginRecord& r = s_plugins[index];
-		r.name = Copy(info.name);
-		r.version = Copy(info.version);
-		r.builtApiMajor = info.builtApiMajor;
-		r.builtApiMinor = info.builtApiMinor;
-		if (r.name.empty())
-			r.name = r.path;
-
-		char problem[512];
-		problem[0] = 0;
-		if (!ran)
-		{
-			r.status = CIV_PLUGIN_FAULTED_AT_LOAD;
-			r.quarantined = true;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted while loading (code 0x%08X) and was disabled for this session.", code);
-		}
-		else if (!call.accepted)
-		{
-			r.status = CIV_PLUGIN_ENTRY_DECLINED;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Declined to load.");
-		}
-		else if (info.builtApiMajor != CIV_HOST_API_MAJOR)
-		{
-			r.status = CIV_PLUGIN_OTHER_MAJOR;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for host API %d.%d, which this host (API %d.%d) cannot run.",
-				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-		}
-		else if (info.builtApiMinor > CIV_HOST_API_MINOR)
-		{
-			r.status = CIV_PLUGIN_NEWER_API;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for a newer host (API %d.%d); this host is API %d.%d.",
-				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-		}
-
-		if (problem[0])
-		{
-			s_pending.clear();
-			r.problems.push_back(problem);
-			Log("Plugin %s: %s", r.name.c_str(), problem);
-			if (r.status != CIV_PLUGIN_FAULTED_AT_LOAD)
-				FreeLibrary(module);
-			continue;
-		}
-		CommitPending(index);
-		r.status = CIV_PLUGIN_LOADED;
-		Log("Plugin %s %s loaded (built for API %d.%d).", r.name.c_str(), r.version.c_str(), r.builtApiMajor, r.builtApiMinor);
-	}
+		LoadOne(paths[i]);
 }

@@ -1,6 +1,6 @@
-"""Find every function defined in the engine's source files and every class in its headers.
+"""Find every function defined in a project's source files, and whether it can be hooked.
 
-Writes BuildTemp/civgen/analysis.json, which generate.py turns into hook wrappers.
+Writes analysis.json in the project's build folder, which generate.py turns into hook wrappers.
 """
 
 import json
@@ -24,6 +24,8 @@ FUNCTION_KINDS = (
 )
 CLASS_KINDS = (CK.CLASS_DECL, CK.STRUCT_DECL)
 TEMPLATE_KINDS = (CK.CLASS_TEMPLATE, CK.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION, CK.FUNCTION_TEMPLATE)
+# Windows calls these under its loader lock, or before any plugin can have loaded.
+LOADER_ENTRY_POINTS = {"DllMain", "DllGetGameContext"}
 SCALAR_KINDS = {
     ci.TypeKind.BOOL,
     ci.TypeKind.CHAR_U,
@@ -185,52 +187,33 @@ def declaration_info(defn):
     }
 
 
-def analyze_tu(rel):
-    src = os.path.join(common.ENGINE_DIR, rel)
+def analyze_tu(job):
+    project, rel = job
+    src = os.path.join(project.root, rel)
     idx = ci.Index.create()
-    tu = idx.parse(src, args=common.clang_args(), options=ci.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
-    data = open(src, "rb").read()
+    tu = idx.parse(src, args=project.clang_args(), options=ci.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+    with open(src, "rb") as f:
+        data = f.read()
     errors = [
         (os.path.abspath(d.location.file.name) if d.location.file else "", d.location.line, d.spelling)
         for d in tu.diagnostics
         if d.severity >= ci.Diagnostic.Error
     ]
     functions = []
-    classes = []
     for c in tu.cursor.walk_preorder():
         if c.kind in FUNCTION_KINDS and c.is_definition() and c.location.file:
-            path = os.path.abspath(c.location.file.name)
-            if os.path.normcase(path) != os.path.normcase(src):
-                continue
-            functions.append(function_record(c, data, rel))
-        elif c.kind in CLASS_KINDS + TEMPLATE_KINDS and c.is_definition() and c.location.file:
-            path = os.path.abspath(c.location.file.name)
-            if not common.is_engine_file(path) or c.kind == CK.FUNCTION_TEMPLATE:
-                continue
-            namespaces, local, templated = enclosing_scopes(c)
-            classes.append(
-                {
-                    "usr": c.get_usr(),
-                    "name": c.spelling,
-                    "kind": c.kind.name,
-                    "file": path,
-                    "line": c.location.line,
-                    "name_offset": c.location.offset,
-                    "template": c.kind != CK.CLASS_DECL and c.kind != CK.STRUCT_DECL or templated,
-                    "local": local,
-                    "in_source_file": path.lower().endswith(".cpp"),
-                    "outer_class": qualified_class(c),
-                }
-            )
-    return {"rel": rel, "errors": errors, "functions": functions, "classes": classes}
+            if os.path.normcase(os.path.abspath(c.location.file.name)) == os.path.normcase(src):
+                functions.append(function_record(c, data, rel, project))
+    return {"rel": rel, "errors": errors, "functions": functions}
 
 
-def function_record(c, data, rel):
+def function_record(c, data, rel, project):
     namespaces, local, templated = enclosing_scopes(c)
     rec = {
         "usr": c.get_usr(),
         "kind": c.kind.name,
         "name": c.spelling,
+        "displayname": c.displayname,
         "class": qualified_class(c),
         "namespaces": namespaces,
         "lex_namespaces": lexical_namespaces(c),
@@ -248,6 +231,10 @@ def function_record(c, data, rel):
         reasons.append("constructor or destructor")
     if c.kind == CK.CONVERSION_FUNCTION:
         reasons.append("conversion operator")
+    if c.spelling in LOADER_ENTRY_POINTS:
+        reasons.append("DLL entry point")
+    if c.spelling.startswith(("operator new", "operator delete")):
+        reasons.append("allocation operator")
     if c.kind == CK.FUNCTION_TEMPLATE or templated:
         reasons.append("template")
     if local:
@@ -297,17 +284,20 @@ def function_record(c, data, rel):
     rec["decl"] = declaration_info(c) if not reasons else None
     if not reasons and rec["class"] and rec["decl"] is None:
         reasons.append("member without a separate declaration")
+    if rec["decl"] and not project.contains(rec["decl"]["file"]):
+        reasons.append("declared outside the project")
     rec["skip"] = reasons
-    rec["export_decl"] = export_declaration(c) if not (templated or local or c.kind == CK.FUNCTION_TEMPLATE) else None
+    exportable = not (templated or local or c.kind == CK.FUNCTION_TEMPLATE)
+    rec["export_decl"] = export_declaration(c, project) if exportable else None
     return rec
 
 
-def export_declaration(defn):
+def export_declaration(defn, project):
     """Where to put the export marker: the start of the function's first declaration."""
     if defn.linkage != ci.LinkageKind.EXTERNAL:
         return None
     canon = defn.canonical
-    if canon is None or not canon.location.file or not common.is_engine_file(canon.location.file.name):
+    if canon is None or not canon.location.file or not project.contains(canon.location.file.name):
         return None
     toks = list(canon.get_tokens())
     if not toks or toks[0].extent.start.offset != canon.extent.start.offset:
@@ -320,14 +310,13 @@ def export_declaration(defn):
     }
 
 
-def main():
-    os.makedirs(common.BUILD_DIR, exist_ok=True)
-    sources = common.engine_sources()
+def run(project):
+    os.makedirs(project.build_dir, exist_ok=True)
     t = time.time()
-    with multiprocessing.Pool(min(len(sources), os.cpu_count() or 4)) as pool:
-        results = pool.map(analyze_tu, sources)
-    out = os.path.join(common.BUILD_DIR, "analysis.json")
-    with open(out, "w") as f:
+    jobs = [(project, rel) for rel in project.sources]
+    with multiprocessing.Pool(max(1, min(len(jobs), os.cpu_count() or 4))) as pool:
+        results = pool.map(analyze_tu, jobs)
+    with open(os.path.join(project.build_dir, "analysis.json"), "w") as f:
         json.dump(results, f)
     funcs = [fn for r in results for fn in r["functions"]]
     hookable = [fn for fn in funcs if not fn["skip"]]
@@ -341,12 +330,13 @@ def main():
             reasons[r] = reasons.get(r, 0) + 1
     for r, n in sorted(reasons.items(), key=lambda kv: -kv[1]):
         print("  skipped, %s: %d" % (r, n))
-    engine_errors = {(e[0], e[1], e[2]) for r in results for e in r["errors"] if common.is_engine_file(e[0])}
-    print("parse errors in engine files: %d" % len(engine_errors))
-    for e in sorted(engine_errors)[:20]:
+    project_errors = {(e[0], e[1], e[2]) for r in results for e in r["errors"] if project.contains(e[0])}
+    print("parse errors in project files: %d" % len(project_errors))
+    for e in sorted(project_errors)[:20]:
         print("  %s:%d %s" % (os.path.basename(e[0]), e[1], e[2]))
-    return 0
+    return results
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    run(common.engine_project())
+    sys.exit(0)

@@ -11,11 +11,12 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
-SOURCE_ROOT = os.path.join(REPO, "CvGameCoreSource")
-CIVGEN = os.path.join(SOURCE_ROOT, "BuildTemp", "civgen")
-MIRROR_ENGINE = os.path.join(CIVGEN, "src", "CvGameCoreDLL_Expansion2")
-HOST_OUT = os.path.join(CIVGEN, "src", "BuildOutput", "VS2008_ModWin32")
+sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "generator"))
+
+import common  # noqa: E402
+
+PROJECT = common.engine_project()
+HOST_OUT = os.path.join(PROJECT.mirror_root, "BuildOutput", "VS2008_ModWin32")
 OUT = os.path.join(HERE, "out")
 VSVARS = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsvars32.bat"
 CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
@@ -27,24 +28,6 @@ TOYS = [
     ("RIVAL", "ToyRival", "Toy Rival Plugin", "bd4f6967-e129-4de5-9ac5-58627909ed43"),
     ("CRASH", "ToyCrash", "Toy Crash Plugin", "6172647d-3bcb-41fa-9cde-870a7723518f"),
     ("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
-]
-SUPPORT_INCLUDE = [
-    r"CvWorldBuilderMap\include",
-    r"CvGameCoreDLLUtil\include",
-    r"CvLocalization\include",
-    r"CvGameDatabase\include",
-    r"FirePlace\include",
-    r"FirePlace\include\FireWorks",
-    r"ThirdPartyLibs\Lua51\include",
-]
-SUPPORT_LIBS = [
-    (r"CvWorldBuilderMap\lib", "CvWorldBuilderMapWin32.lib"),
-    (r"CvGameCoreDLLUtil\lib", "CvGameCoreDLLUtilWin32.lib"),
-    (r"CvLocalization\lib", "CvLocalizationWin32.lib"),
-    (r"CvGameDatabase\lib", "CvGameDatabaseWin32.lib"),
-    (r"FirePlace\lib", "FireWorksWin32.lib"),
-    (r"FirePlace\lib", "FLuaWin32.lib"),
-    (r"ThirdPartyLibs\Lua51\lib", "lua51_Win32.lib"),
 ]
 
 
@@ -146,8 +129,6 @@ def main():
         "/fp:strict",
         "/LD",
         "/DCIV_HOST_API=__declspec(dllimport)",
-        "/D_SECURE_SCL=0",
-        "/D_HAS_ITERATOR_DEBUGGING=0",
         "/DFXS_IS_DLL",
         "/DWIN32",
         "/DNDEBUG",
@@ -157,13 +138,14 @@ def main():
         "/D_CRT_SECURE_NO_WARNINGS",
         "/wd4251",
         "/wd4275",
-        "/I" + MIRROR_ENGINE,
-        "/I" + os.path.join(REPO, "host"),
-        "/I" + os.path.join(CIVGEN, "sdk"),
+        "/I" + PROJECT.mirror_dir,
+        "/I" + common.HOST_DIR,
+        "/I" + os.path.join(PROJECT.build_dir, "sdk"),
     ]
-    flags += ["/I" + os.path.join(SOURCE_ROOT, inc) for inc in SUPPORT_INCLUDE]
+    flags += ["/D" + d for d in common.LAYOUT_DEFINES]
+    flags += ["/I" + os.path.join(common.SOURCE_ROOT, inc) for inc in common.SUPPORT_INCLUDE]
     libs = [os.path.join(HOST_OUT, "CvGameCore_Expansion2.lib")]
-    libs += [os.path.join(SOURCE_ROOT, d, name) for d, name in SUPPORT_LIBS]
+    libs += [os.path.join(common.SOURCE_ROOT, lib) for lib in common.SUPPORT_LIBS]
     for define, dll_name, _, _ in TOYS:
         cmd = flags + [
             "/DTOY_" + define,
