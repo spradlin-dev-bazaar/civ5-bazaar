@@ -237,31 +237,52 @@ def original_line(fn, self_type, types, result):
     return "\t\tstatic %s Original(%s) { %s; }" % (result, ", ".join(params), body)
 
 
+def hooked_lines(is_void, self_type, types, names, call):
+    """The slow path: run every hook around the original. Kept out of the wrapper so the wrapper stays
+    small enough for the compiler to inline when no plugin hooks the function."""
+    params = (["%s civ_self" % self_type] if self_type else []) + [
+        "CivHookArg< %s >::Type %s" % (t, n) for t, n in zip(types, names)
+    ]
+    init = ["{ 0, false }"] + (["civ_self"] if self_type else []) + ["&" + n for n in names]
+    lines = ["\t\tstatic __declspec(noinline) %s Hooked(%s)" % ("void" if is_void else "civ_R", ", ".join(params))]
+    lines += ["\t\t{", "\t\t\tCivHookPoint& civ_hp = g_CivHookPoints[%s];" % ID_PLACEHOLDER]
+    if not is_void:
+        lines.append("\t\t\tciv_Res civ_res;")
+        init.append("&civ_res")
+    lines.append("\t\t\tciv_C civ_c = { %s };" % ", ".join(init))
+    lines.append(
+        "\t\t\tif (!CivHookRunBefore(civ_hp, %(id)s, &civ_C::Before, &civ_c)"
+        " && !CivHookRunReplace(civ_hp, %(id)s, &civ_C::Replace, &civ_c))" % {"id": ID_PLACEHOLDER}
+    )
+    if is_void:
+        lines.append("\t\t\t\t%s;" % call)
+    else:
+        lines += ["\t\t\t\tciv_res.Set(%s);" % call, "\t\t\tif (civ_res.Empty())", "\t\t\t\tciv_res.Set(%s);" % call]
+    lines.append("\t\t\tCivHookRunAfter(civ_hp, %s, &civ_C::After, &civ_c);" % ID_PLACEHOLDER)
+    if not is_void:
+        lines.append("\t\t\treturn civ_res.Get();")
+    lines.append("\t\t}")
+    return lines
+
+
 def wrapper_code(fn, data, src_path, exported):
     """The wrapper that takes the function's name, with ID_PLACEHOLDER standing for its hook id."""
     params = [param_parts(fn, data, i) for i in range(len(fn["params"]))]
     types = [t for t, _ in params]
     names = [n for _, n in params]
     is_void = fn["result"]["kind"] == "void"
-    call = "%s(%s)" % (orig_name(fn), ", ".join(names))
     self_type = None
     if fn["class"] is not None and not fn["static_method"]:
         self_type = ("const %s*" % fn["class"]) if fn["const"] else ("%s*" % fn["class"])
     plugin_params = ([self_type] if self_type else []) + types
     plugin_args = (["c.self"] if self_type else []) + ["*c.a%d" % i for i in range(len(types))]
-    run_hooks = (
-        "\tif (!CivHookRunBefore(civ_hp, %(id)s, &civ_C::Before, &civ_c)"
-        " && !CivHookRunReplace(civ_hp, %(id)s, &civ_C::Replace, &civ_c))" % {"id": ID_PLACEHOLDER}
-    )
+    inner_call = "%s%s(%s)" % ("civ_self->" if self_type else "", orig_name(fn), ", ".join(names))
 
     lines = ["#line %d %s" % (fn["line"], c_string(src_path))]
     lines.append(("CIV_HOST_API " if exported else "") + wrapper_signature(fn, data))
-    lines += ["{", "\tCivHookPoint& civ_hp = g_CivHookPoints[%s];" % ID_PLACEHOLDER]
-    if is_void:
-        lines.append("\tif (!civ_hp.active) { %s; return; }" % call)
-        slot = []
-    else:
-        lines.append("\tif (!civ_hp.active) return %s;" % call)
+    lines.append("{")
+    slot = []
+    if not is_void:
         lines.append("\ttypedef %s civ_R;" % return_text(fn, data))
         lines.append("\ttypedef CivHookResult< civ_R > civ_Res;")
         slot = ["civ_Res::Slot&"]
@@ -279,19 +300,11 @@ def wrapper_code(fn, data, src_path, exported):
         lines.append("\t\tciv_Res* res;")
     lines.append(original_line(fn, self_type, types, result))
     lines += thunk_lines(is_void, plugin_args)
+    lines += hooked_lines(is_void, self_type, types, names, inner_call)
     lines.append("\t};")
-
-    init = ["{ 0, false }"] + (["this"] if self_type else []) + ["&" + n for n in names]
-    if is_void:
-        lines.append("\tciv_C civ_c = { %s };" % ", ".join(init))
-        lines += [run_hooks, "\t\t%s;" % call]
-    else:
-        lines.append("\tciv_Res civ_res;")
-        lines.append("\tciv_C civ_c = { %s };" % ", ".join(init + ["&civ_res"]))
-        lines += [run_hooks, "\t\tciv_res.Set(%s);" % call, "\tif (civ_res.Empty())", "\t\tciv_res.Set(%s);" % call]
-    lines.append("\tCivHookRunAfter(civ_hp, %s, &civ_C::After, &civ_c);" % ID_PLACEHOLDER)
-    if not is_void:
-        lines.append("\treturn civ_res.Get();")
+    lines.append("\tif (!g_CivHookPoints[%s].active)" % ID_PLACEHOLDER)
+    lines.append("\t\treturn %s(%s);" % (orig_name(fn), ", ".join(names)))
+    lines.append("\treturn civ_C::Hooked(%s);" % ", ".join((["this"] if self_type else []) + names))
     lines.append("}")
     return "\n".join(lines) + "\n"
 
