@@ -240,7 +240,7 @@ def wrapper_code(fn, data, src_path, exported):
     plugin_args = (["c.self"] if self_type else []) + ["*c.a%d" % i for i in range(len(types))]
     run_hooks = (
         "\tif (!CivHookRunBefore(civ_hp, %(id)s, &civ_C::Before, &civ_c)"
-        " && CivHookRunReplace(civ_hp, %(id)s, &civ_C::Replace, &civ_c) == 0)" % {"id": ID_PLACEHOLDER}
+        " && !CivHookRunReplace(civ_hp, %(id)s, &civ_C::Replace, &civ_c))" % {"id": ID_PLACEHOLDER}
     )
 
     lines = ["#line %d %s" % (fn["line"], c_string(src_path))]

@@ -30,16 +30,15 @@ extern CivHookPoint g_CivHookPoints[];
 extern const int g_CivHookPointCount;
 
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
-// 1 when a replacement ran, 0 when there is none, -1 when it faulted.
-int CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
+// False when there is no replacement or it faulted; the wrapper then runs the original.
+bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 
 template<class T> struct CivHookArg { typedef T* Ptr; };
 template<class T> struct CivHookArg<T&> { typedef T* Ptr; };
 
-// A vetoed call, or one whose replacement faulted, returns what the hooks left in the slot: the
-// type's default unless a hook set it. A reference result can't be empty, so its wrapper runs the
-// original instead.
+// A vetoed call returns what the hooks left in the slot: the type's default unless a hook set it.
+// A reference result can't be empty, so its wrapper runs the original instead.
 template<class R> struct CivHookResult
 {
 	typedef R Slot;

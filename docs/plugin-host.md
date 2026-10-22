@@ -114,7 +114,7 @@ C++ exceptions are off in the host and in plugins; this uses Windows structured 
 - an in-game notification names the plugin, says it is off until the player returns to the main menu, and points to Mods > Plugins;
 - the game keeps running.
 
-Known limit: a plugin that faulted halfway through a replace has left the original unrun and the state possibly half-changed. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
+Known limit: a plugin that faulted halfway through a replace may already have changed some state, and the original then runs on top of it. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
 
 ### 5. The Plugins screen
 

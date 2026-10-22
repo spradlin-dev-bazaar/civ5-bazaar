@@ -258,6 +258,22 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
+#elif defined(TOY_FAULT_REPLACE)
+
+static int ReplaceLevel(const FakeUnit*)
+{
+	int* volatile nowhere = 0;
+	return *nowhere;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Fault Replace", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_Level::ID, CIV_HOOK_REPLACE, (void*)&ReplaceLevel);
+	return true;
+}
+
 #elif defined(TOY_FAULT_BEFORE)
 
 static bool BeforeAdd(const FakeUnit*, int, int, int&)

@@ -181,6 +181,11 @@ static void TestQuarantine()
 	Check(r1 == 110, "the other plugins' hooks still run on the same call");
 	Check(Find("toy_fault.dll") && Find("toy_fault.dll")->quarantined && !Find("toy_fault.dll")->problems.empty(), "a faulting plugin is quarantined with a reason");
 	Check(unit.add(2, 3) == 110 && s_faults == before + 2, "a quarantined plugin's hooks never run again");
+
+	Load("toy_fault_replace.dll");
+	const int calls = g_levelCalls;
+	Check(unit.Level() == 1007 && s_faults == before + 3 && g_levelCalls == calls + 1, "when a replacement faults, the original runs instead, once");
+	Check(unit.Level() == 1007 && s_faults == before + 3 && g_levelCalls == calls + 2, "and keeps running once the replacement is quarantined");
 }
 
 static void TestStrings()

@@ -23,6 +23,8 @@ public:
 	std::string m_name;
 };
 
+extern int g_levelCalls;
+
 namespace FakeRules
 {
 	int Bonus(int x);

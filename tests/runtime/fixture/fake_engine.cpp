@@ -29,8 +29,11 @@ void FakeUnit::Ignore(int)
 {
 }
 
+int g_levelCalls = 0;
+
 const int FakeUnit::Level() const
 {
+	++g_levelCalls;
 	return 7;
 }
 

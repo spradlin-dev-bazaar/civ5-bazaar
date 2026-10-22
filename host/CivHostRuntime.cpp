@@ -471,12 +471,10 @@ bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* 
 	return false;
 }
 
-int CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
+bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
 {
 	const CivHookEntry* e = hp.replace;
-	if (!e || !Alive(e->plugin))
-		return 0;
-	return CallPlugin(e, id, thunk, ctx) ? 1 : -1;
+	return e && Alive(e->plugin) && CallPlugin(e, id, thunk, ctx);
 }
 
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
