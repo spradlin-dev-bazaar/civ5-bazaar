@@ -37,7 +37,7 @@ VMC already is a hook-provider DLL: about 60 groups of Lua `GameEvents`, Lua API
 
 Terms (whoward69's usage page): parts may be incorporated into a greater work that has its own original additions, with credit; no resale or financial gain; derivatives must use their own GUID. No formal licence exists and nothing requires telling him. A courtesy post in his CivFanatics thread at the first release is optional.
 
-VMC is built from the same 1.0.3.276 SDK source as our DLL, with a VS2015 solution wrapping a vs2010 project. We keep our VS2008 build (`build-dll.cmd`) and add VMC's extra files to our project.
+VMC is built from the same 1.0.3.276 SDK source as the MCP DLL, with a VS2015 solution wrapping a vs2010 project. This repository builds with VS2008 through its own build script, modelled on the MCP mod's `build-dll.cmd`, and adds VMC's extra files to the project.
 
 ## Host design
 
@@ -171,7 +171,7 @@ The documentation ships in the SDK and on a GitHub Pages site for each release.
 
 ## The MCP plugin
 
-`Claude/` (37 files, ~11,800 lines) moves to its own repository folder, `MCPServerPlugin/`, and becomes `MCPServer.dll`. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
+`Claude/` (37 files, ~11,800 lines), today part of the Local MCP Server mod in the civ5-mods repository, moves to a new repository of its own and becomes `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
 
 1. replace each engine edit with a hook registration from the table above;
 2. move the `CvLuaGame.cpp` methods into the plugin and register them through `RegisterLuaMethods`;
@@ -188,7 +188,7 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 
 ## Phases
 
-**P0 — proof of concept (days to two weeks).** Against the *current* DLL, before touching VMC:
+**P0 — proof of concept (days to two weeks).** In this repository, against the plain Firaxis source, before touching VMC. The first step imports the SDK source unchanged and adds a build script. P0's edits to engine files stay on a separate branch, so the main branch holds the Firaxis source unchanged until VMC is copied over it in P1; anything worth keeping, such as the generator and the build script, moves to the main branch. The rest:
 - export every class with the macro; build; read the export count;
 - write the generator and run it over the whole codebase; the exit is a clean build with every wrapper in place, which flushes out the awkward signatures (overloads, templates, default arguments, operators, the variadic random-number functions);
 - time an AI turn on the plain build and on the wrapped build, with Visual C++ 2008 and with Clang against the same 2008 binary interface (the Community Patch builds that way), and record the four numbers;
@@ -201,11 +201,11 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 - enable the toy plugin mod with the host mod disabled and see the Mods browser refuse it; then remove the dependency, start a vanilla game with the plugin mod enabled, and see the plugin do nothing and the database log stay clean.
 Exit: every item above seen working in a real game, and the timing numbers in this document.
 
-**P1 — the host.** Fork VMC v97 into the repo (own GUID, credits), bring our build scripts over, add the loader, the generator to the build (writing the hook wrappers and the generated reference), the exports, the hand-placed hook set above, failure containment, the Plugins screen, and the acquireCity fix as a switch. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
+**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers and the generated reference), the exports, the hand-placed hook set above, failure containment, the Plugins screen, and the acquireCity fix as a switch. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
 
-**P2 — MCP as a plugin.** Move `Claude/` out, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
+**P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
-**P3 — the rest.** Explorer fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. A plugin-writing guide, the task-based guide, the class summaries, and the documentation site. First GitHub release of host + SDK + MCP plugin, and the Workshop pages.
+**P3 — the rest.** Explorer fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. A plugin-writing guide, the task-based guide, the class summaries, and the documentation site. First GitHub release of the host and SDK from this repository and of the MCP plugin from its own, and the Workshop pages.
 
 ## Risks
 
@@ -216,7 +216,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 - **No isolation beyond containment.** A faulting plugin is caught and quarantined, but a plugin that corrupts state without faulting is not detectable.
 - **Wrap order.** Two plugins hooking one function in an order that matters is not detectable. The Plugins screen makes order visible and the player's to set; that is the whole answer.
 - **Export count.** Watch the 65,535 limit; print the count in the build.
-- **Load timing.** Plugins must load after the database is ready and before the first turn; the VMC options-read point is the candidate, to be confirmed in P0.
+- **Load timing.** Plugins must load after the database is ready and before the first turn; the point where VMC reads its options is the candidate. P0 tests the same moment in the plain Firaxis source, and P1 confirms it in VMC.
 - **Lua registration.** The host registers Lua methods per context; the plugin's registration must run for each new context the same way. Verify in P2.
 - **VMC behaviour changes.** VMC's bug fixes and features are switches; the host ships with the same defaults VMC does, and our own settings are a separate decision.
 
