@@ -72,3 +72,5 @@ Testing/
 CvGameCoreSource/BuildOutput/
 CvGameCoreSource/BuildTemp/
 .venv/
+tests/runtime/out/
+__pycache__/

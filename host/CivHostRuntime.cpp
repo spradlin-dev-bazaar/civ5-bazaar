@@ -271,9 +271,15 @@ void CivHostLoadPlugins(const std::vector<std::string>& paths)
 			continue;
 		}
 
-		CivHostInfo host = { CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, index, &RegisterHook, &PluginLog };
+		// Plugins may keep this pointer for the whole session.
+		CivHostInfo* host = new CivHostInfo;
+		host->apiMajor = CIV_HOST_API_MAJOR;
+		host->apiMinor = CIV_HOST_API_MINOR;
+		host->pluginIndex = index;
+		host->RegisterHook = &RegisterHook;
+		host->Log = &PluginLog;
 		CivPluginInfo info = { 0, 0, 0, 0 };
-		EntryCall call = { { 0, false }, entry, &host, &info, false };
+		EntryCall call = { { 0, false }, entry, host, &info, false };
 		s_pending.clear();
 		s_loadingPlugin = index;
 		unsigned int code = 0;
@@ -283,13 +289,10 @@ void CivHostLoadPlugins(const std::vector<std::string>& paths)
 			_resetstkoflw();
 
 		CivPluginRecord& r = s_plugins[index];
-		if (ran)
-		{
-			r.name = Copy(info.name);
-			r.version = Copy(info.version);
-			r.builtApiMajor = info.builtApiMajor;
-			r.builtApiMinor = info.builtApiMinor;
-		}
+		r.name = Copy(info.name);
+		r.version = Copy(info.version);
+		r.builtApiMajor = info.builtApiMajor;
+		r.builtApiMinor = info.builtApiMinor;
 		if (r.name.empty())
 			r.name = r.path;
 
