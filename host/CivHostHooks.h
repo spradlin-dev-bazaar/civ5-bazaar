@@ -34,8 +34,8 @@ bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* 
 bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 
-template<class T> struct CivHookArg { typedef T* Ptr; };
-template<class T> struct CivHookArg<T&> { typedef T* Ptr; };
+template<class T> struct CivHookArg { typedef T* Ptr; typedef T Type; };
+template<class T> struct CivHookArg<T&> { typedef T* Ptr; typedef T& Type; };
 
 // A vetoed call returns what the hooks left in the slot: the type's default unless a hook set it.
 // A reference result can't be empty, so its wrapper runs the original instead.

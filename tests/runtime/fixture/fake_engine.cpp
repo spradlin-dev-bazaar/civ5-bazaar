@@ -5,6 +5,11 @@ int FakeUnit::add(int a, int b) const
 	return a + b;
 }
 
+int FakeUnit::Subtract(int a, int b) const
+{
+	return a - b;
+}
+
 void FakeUnit::notify(int amount)
 {
 	m_notified += amount;

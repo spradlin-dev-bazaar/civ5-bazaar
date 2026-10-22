@@ -9,6 +9,7 @@ enum CivHookKind
 {
 	CIV_HOOK_BEFORE = 0,
 	CIV_HOOK_AFTER = 1,
+	// A replacement gets the original function as its first argument; calling it runs the engine's own version.
 	CIV_HOOK_REPLACE = 2,
 };
 

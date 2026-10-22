@@ -144,7 +144,8 @@ static void TestHooks()
 	Check(unit.add(13, 1) == 98, "a veto skips the function; its result still passes through the after-hooks");
 	Check(CallInt("toy_second.dll", "ToyBeforeCalls", -2) == secondBefore, "a veto skips the remaining before-hooks");
 	unit.notify(5);
-	Check(unit.m_notified == 10, "a replacement runs instead of the original");
+	Check(unit.m_notified == 10, "a replacement runs instead of the original, and can call the original itself");
+	Check(unit.Subtract(7, 2) == 50, "the original gets the replacement's arguments in order and returns its result");
 	Check(unit.name() == "Hooked Warrior", "an after-hook can change a function's returned reference");
 	Check(unit.add(1, 1) == 104, "hooks from refused plugins never run");
 

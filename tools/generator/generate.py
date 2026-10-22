@@ -212,18 +212,29 @@ def free_function_declarations(fn, data, exported):
 def thunk_lines(is_void, plugin_args):
     pa = ", ".join(plugin_args)
     pa_slot = ", ".join(plugin_args + ["c.res->value"])
+    pa_orig = ", ".join(["&civ_C::Original"] + plugin_args)
     head = "\t\tstatic void %s(void* p) { civ_C& c = *static_cast<civ_C*>(p); "
     if is_void:
         return [
             head % "Before" + "c.civ_h.veto = reinterpret_cast<BeforeFn>(c.civ_h.fn)(%s); }" % pa,
-            head % "Replace" + "reinterpret_cast<ReplaceFn>(c.civ_h.fn)(%s); }" % pa,
+            head % "Replace" + "reinterpret_cast<ReplaceFn>(c.civ_h.fn)(%s); }" % pa_orig,
             head % "After" + "reinterpret_cast<AfterFn>(c.civ_h.fn)(%s); }" % pa,
         ]
     return [
         head % "Before" + "c.civ_h.veto = reinterpret_cast<BeforeFn>(c.civ_h.fn)(%s); }" % pa_slot,
-        head % "Replace" + "c.res->Set(reinterpret_cast<ReplaceFn>(c.civ_h.fn)(%s)); }" % pa,
+        head % "Replace" + "c.res->Set(reinterpret_cast<ReplaceFn>(c.civ_h.fn)(%s)); }" % pa_orig,
         head % "After" + "reinterpret_cast<AfterFn>(c.civ_h.fn)(%s); }" % pa_slot,
     ]
+
+
+def original_line(fn, self_type, types, result):
+    """The helper a replacement receives first, so it can run the unhooked original."""
+    params = (["%s s" % self_type] if self_type else []) + [
+        "CivHookArg< %s >::Type o%d" % (t, i) for i, t in enumerate(types)
+    ]
+    call = "%s%s(%s)" % ("s->" if self_type else "", orig_name(fn), ", ".join("o%d" % i for i in range(len(types))))
+    body = call if result == "void" else "return " + call
+    return "\t\tstatic %s Original(%s) { %s; }" % (result, ", ".join(params), body)
 
 
 def wrapper_code(fn, data, src_path, exported):
@@ -254,9 +265,11 @@ def wrapper_code(fn, data, src_path, exported):
         lines.append("\ttypedef %s civ_R;" % return_text(fn, data))
         lines.append("\ttypedef CivHookResult< civ_R > civ_Res;")
         slot = ["civ_Res::Slot&"]
+    result = "void" if is_void else "civ_R"
     lines += ["\tstruct civ_C", "\t{"]
     lines.append("\t\ttypedef bool (*BeforeFn)(%s);" % ", ".join(plugin_params + slot))
-    lines.append("\t\ttypedef %s (*ReplaceFn)(%s);" % ("void" if is_void else "civ_R", ", ".join(plugin_params)))
+    lines.append("\t\ttypedef %s (*OriginalFn)(%s);" % (result, ", ".join(plugin_params)))
+    lines.append("\t\ttypedef %s (*ReplaceFn)(%s);" % (result, ", ".join(["OriginalFn"] + plugin_params)))
     lines.append("\t\ttypedef void (*AfterFn)(%s);" % ", ".join(plugin_params + slot))
     lines.append("\t\tCivHookCtx civ_h;")
     if self_type:
@@ -264,6 +277,7 @@ def wrapper_code(fn, data, src_path, exported):
     lines += ["\t\tCivHookArg< %s >::Ptr a%d;" % (t, i) for i, t in enumerate(types)]
     if not is_void:
         lines.append("\t\tciv_Res* res;")
+    lines.append(original_line(fn, self_type, types, result))
     lines += thunk_lines(is_void, plugin_args)
     lines.append("\t};")
 

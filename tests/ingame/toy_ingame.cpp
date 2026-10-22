@@ -29,6 +29,8 @@ static void Describe(CivPluginInfo* info, const char* name, int major, int minor
 	info->builtApiMinor = minor;
 }
 
+typedef int (*ScoreFn)(const CvPlayer*, bool, bool);
+
 static void Register(int hookId, int kind, void* fn, const char* what)
 {
 	const int result = s_host->RegisterHook(s_host->pluginIndex, hookId, kind, fn);
@@ -50,9 +52,9 @@ static void AfterDoTurn(CvPlayer* self)
 		Log("turn finished for %s with %d gold", self->getCivilizationShortDescription(), self->GetTreasury()->GetGold());
 }
 
-static int ReplaceScore(const CvPlayer* self, bool, bool)
+static int ReplaceScore(ScoreFn original, const CvPlayer* self, bool bFinal, bool bVictory)
 {
-	return self->isHuman() ? 4242 : 0;
+	return self->isHuman() ? 4242 : original(self, bFinal, bVictory);
 }
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
@@ -72,7 +74,7 @@ TOY_EXPORT void CivPluginShutdown()
 
 #elif defined(TOY_RIVAL)
 
-static int ReplaceScore(const CvPlayer*, bool, bool)
+static int ReplaceScore(ScoreFn, const CvPlayer*, bool, bool)
 {
 	return 1;
 }

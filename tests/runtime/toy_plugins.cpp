@@ -36,7 +36,9 @@ TOY_EXPORT int ToyLastRegisterResult()
 	return s_lastRegisterResult;
 }
 
-static void ReplaceNothing(FakeUnit*, int)
+typedef void (*NotifyFn)(FakeUnit*, int);
+
+static void ReplaceNothing(NotifyFn, FakeUnit*, int)
 {
 }
 
@@ -90,9 +92,10 @@ static void AfterAdd(const FakeUnit*, int, int, int& result)
 	result += 100;
 }
 
-static void ReplaceNotify(FakeUnit* self, int amount)
+static void ReplaceNotify(NotifyFn original, FakeUnit* self, int amount)
 {
-	self->m_notified += amount * 2;
+	original(self, amount);
+	original(self, amount);
 }
 
 static void AfterName(const FakeUnit*, const std::string*& result)
@@ -140,12 +143,18 @@ static void AfterAdd(const FakeUnit*, int, int, int& result)
 	result *= 2;
 }
 
+static int ReplaceSubtract(int (*original)(const FakeUnit*, int, int), const FakeUnit* self, int a, int b)
+{
+	return original(self, a, b) * 10;
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Second", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_REPLACE, (void*)&ReplaceSubtract);
 	return true;
 }
 
@@ -210,7 +219,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_CONFLICT)
 
-static void ReplaceNotify(FakeUnit* self, int amount)
+static void ReplaceNotify(NotifyFn, FakeUnit* self, int amount)
 {
 	self->m_notified -= amount;
 }
@@ -260,7 +269,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_FAULT_REPLACE)
 
-static int ReplaceLevel(const FakeUnit*)
+static int ReplaceLevel(int (*)(const FakeUnit*), const FakeUnit*)
 {
 	int* volatile nowhere = 0;
 	return *nowhere;

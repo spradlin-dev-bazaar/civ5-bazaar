@@ -75,7 +75,7 @@ A hook is a list the host owns. At a hook point the host calls every plugin that
 2. runs the function, or the one plugin registered to **replace** it;
 3. runs every plugin registered **after** the function, in reverse load order, handing each the result and letting it change it.
 
-Replace is exclusive: a second replace on a function that already has one is refused at load, logged with both plugin names, and shown on the Plugins screen. Before and after stack without limit.
+Replace is exclusive: a second replace on a function that already has one is refused at load, logged with both plugin names, and shown on the Plugins screen. Before and after stack without limit. A replacement receives the original function as its first argument, so it can run the engine's own version and adjust around it, or ignore it and do the whole job itself.
 
 The generator reads the headers and writes one wrapper per function with that function's real signature. It runs as part of every host build. Functions written in headers stay inline and are not hook points; the SDK lists them.
 
