@@ -1,7 +1,9 @@
 """Build the in-game toy plugins and lay out mod folders for the host and each toy.
 
-Output goes to tests/ingame/out/MODS. Nothing is installed: copy the folders into the game's MODS
-folder by hand.
+With "bench plain" or "bench host", lay out the benchmark mod instead, holding the build made by
+build-dll.cmd bench or build-hooked.cmd bench. Both share one mod id, so a save made with either
+loads with either. Output goes to tests/ingame/out/MODS. Nothing is installed: copy the folders into
+the game's MODS folder by hand.
 """
 
 import hashlib
@@ -21,7 +23,14 @@ OUT = os.path.join(HERE, "out")
 VSVARS = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsvars32.bat"
 CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
 
+PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
+
 HOST_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
+BENCH_ID = "d9b32c9d-2f72-42f0-b53e-50b86d1ed3c7"
+BENCH_DLLS = {
+    "plain": os.path.join(PLAIN_OUT, "CvGameCoreDLL_Expansion2Win32Mod.dll"),
+    "host": os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"),
+}
 BNW_DLC = "6DA07636-4123-4018-B643-6575B4EC336B"
 TOYS = [
     ("GOLD", "ToyGold", "Toy Gold Plugin", "c411a905-2f0d-471c-848b-357ccf98ab4b"),
@@ -67,15 +76,13 @@ PROPERTIES = """  <Properties>
 """
 
 
-def write_host_mod():
-    folder = os.path.join(OUT, "MODS", "Civ Plugin Host (v 1)")
+def write_dll_mod(name, mod_id, teaser, dll):
+    folder = os.path.join(OUT, "MODS", "%s (v 1)" % name)
     os.makedirs(folder)
-    shutil.copyfile(
-        os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"), os.path.join(folder, "CvGameCore_Expansion2.dll")
-    )
-    with open(os.path.join(folder, "Civ Plugin Host (v 1).modinfo"), "w", encoding="utf-8") as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % HOST_ID)
-        f.write(PROPERTIES.format(name="Civ Plugin Host", teaser="P0 test build of the plugin host.", affects=1))
+    shutil.copyfile(dll, os.path.join(folder, "CvGameCore_Expansion2.dll"))
+    with open(os.path.join(folder, "%s (v 1).modinfo" % name), "w", encoding="utf-8") as f:
+        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % mod_id)
+        f.write(PROPERTIES.format(name=name, teaser=teaser, affects=1))
         f.write('  <Dependencies>\n    <Dlc id="%s" minversion="0" maxversion="999" />\n  </Dependencies>\n' % BNW_DLC)
         f.write("  <References />\n  <Blocks />\n  <Files>\n")
         f.write(
@@ -110,9 +117,21 @@ def write_toy_mod(dll_name, mod_name, mod_id):
         f.write("    </OnModActivated>\n  </Actions>\n</Mod>\n")
 
 
-def main():
+def write_bench_mod(build):
+    teaser = "Benchmark build (%s): the computer plays by itself and logs how long each turn takes." % build
+    write_dll_mod("Civ Bench", BENCH_ID, teaser, BENCH_DLLS[build])
+    print("mod folder in", os.path.join(OUT, "MODS"))
+    return 0
+
+
+def main(args):
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
+    if args[:1] == ["bench"]:
+        if args[1:] not in (["plain"], ["host"]):
+            print("usage: package.py [bench plain|bench host]")
+            return 1
+        return write_bench_mod(args[1])
     build = os.path.join(OUT, "build")
     os.makedirs(build)
     env = vs_env()
@@ -159,7 +178,12 @@ def main():
             print(p.stdout[-4000:], p.stderr[-2000:])
             return 1
         print("built", dll_name + ".dll")
-    write_host_mod()
+    write_dll_mod(
+        "Civ Plugin Host",
+        HOST_ID,
+        "P0 test build of the plugin host.",
+        os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"),
+    )
     for _, dll_name, mod_name, mod_id in TOYS:
         write_toy_mod(dll_name, mod_name, mod_id)
     print("mod folders in", os.path.join(OUT, "MODS"))
@@ -167,4 +191,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
