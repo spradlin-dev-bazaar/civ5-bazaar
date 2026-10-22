@@ -63,6 +63,8 @@ extern "C" bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin);
 
 The plugin fills in its name, version and the API version it was built against. A plugin built for a newer host, or for an older major, is not loaded. The refusal is logged, shown on the Plugins screen beside the plugin, and shown as an in-game notification naming the plugin and the two versions. Never a silent skip.
 
+Data shared between host and plugin can grow without breaking older plugins: the host creates the handshake structures itself, so new fields go at the end and an older plugin leaves them at zero. Anything a plugin creates and hands to the host starts with its own size.
+
 ### 3. Hooks: every function is a hook point
 
 A hook is a list the host owns. At a hook point the host calls every plugin that registered there, in load order. Plugins never see each other: one failing, forgetting something or being removed cannot stop the others. The host can do this because it knows each hook's signature and wrote the loop.
@@ -221,5 +223,5 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 ## Not in scope
 
 - Stacking with other replacement DLLs (Community Patch etc.). Nothing can do that. If the Community Patch ever adopts the loader, that is their build of it.
-- Multiplayer. VMC's Lua events are not MP-safe and neither is the MCP server.
+- Multiplayer. Every machine in a multiplayer game must run identical code in the same order, which the host cannot guarantee for plugins: each player's plugin order and crash quarantine are local to their machine. The MCP server also controls seats from one machine. VMC itself is untested in multiplayer: its author does not play it, and known multiplayer bugs were left to community forks.
 - A plugin registry or version-matching service. The API version and the handshake are enough.
