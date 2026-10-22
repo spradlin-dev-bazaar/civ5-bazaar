@@ -68,6 +68,7 @@ void CvWonderProductionAI::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	int iWeight;
 
@@ -126,6 +127,7 @@ void CvWonderProductionAI::Write(FDataStream& kStream) const
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	CvAssertMsg(m_piLatestFlavorValues != NULL && GC.getNumFlavorTypes() > 0, "Number of flavor values to serialize is expected to greater than 0");
 	kStream << GC.getNumFlavorTypes();
@@ -246,7 +248,12 @@ BuildingTypes CvWonderProductionAI::ChooseWonder(bool bUseAsyncRandom, bool bAdj
 			const CvBuildingClassInfo& kBuildingClassInfo = kBuilding.GetBuildingClassInfo();
 
 			// Make sure this wonder can be built now
+#if defined(MOD_AI_SMART_V3)
+			bool bWonder = MOD_AI_SMART_V3 ? IsWonderNotNationalUnique(kBuilding) : IsWonder(kBuilding);
+			if(bWonder && HaveCityToBuild((BuildingTypes)iBldgLoop))
+#else
 			if(IsWonder(kBuilding) && HaveCityToBuild((BuildingTypes)iBldgLoop))
+#endif
 			{
 				iTurnsRequired = std::max(1, kBuilding.GetProductionCost() / iEstimatedProductionPerTurn);
 
@@ -554,6 +561,22 @@ bool CvWonderProductionAI::IsWonder(const CvBuildingEntry& kBuilding) const
 	}
 	return false;
 }
+
+#if defined(MOD_AI_SMART_V3)
+/// Check wonders excluding national wonders you can only have one of.
+bool CvWonderProductionAI::IsWonderNotNationalUnique(const CvBuildingEntry& kBuilding) const
+{
+	const CvBuildingClassInfo& kBuildingClass = kBuilding.GetBuildingClassInfo();
+
+	bool isNationalUnique = kBuildingClass.getMaxPlayerInstances() == 1;
+
+	if((::isWorldWonderClass(kBuildingClass) || ::isTeamWonderClass(kBuildingClass) || ::isNationalWonderClass(kBuildingClass)) && !isNationalUnique)
+	{
+		return true;
+	}
+	return false;
+}
+#endif
 
 // PRIVATE METHODS
 

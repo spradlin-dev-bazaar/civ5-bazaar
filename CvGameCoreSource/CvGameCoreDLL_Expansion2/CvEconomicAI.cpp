@@ -347,6 +347,7 @@ void CvEconomicAI::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	int iEntriesToRead;
 
@@ -441,6 +442,7 @@ void CvEconomicAI::Write(FDataStream& kStream)
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	FAssertMsg(GC.getNumEconomicAIStrategyInfos() > 0, "Number of AIStrategies to serialize is expected to greater than 0");
 	kStream << m_pAIStrategies->GetNumEconomicAIStrategies();
@@ -771,11 +773,16 @@ void CvEconomicAI::DoTurn()
 			// Flavor propagation
 			if(bAdoptOrEndStrategy)
 			{
+#if !defined(MOD_API_EXTENSIONS)
 				int iFlavorLoop;
+#endif
 
 				// We should adopt this Strategy
 				if(bTestStrategyStart)
 				{
+#if defined(MOD_API_EXTENSIONS)
+					UseStrategy(eStrategy, true);
+#else
 					SetUsingStrategy(eStrategy, true);
 
 					for(iFlavorLoop = 0; iFlavorLoop < GC.getNumFlavorTypes(); iFlavorLoop++)
@@ -791,10 +798,14 @@ void CvEconomicAI::DoTurn()
 					}
 
 					GetPlayer()->GetFlavorManager()->ChangeFlavors(m_aiTempFlavors, false);
+#endif
 				}
 				// End the Strategy
 				else if(bTestStrategyEnd)
 				{
+#if defined(MOD_API_EXTENSIONS)
+					UseStrategy(eStrategy, false);
+#else
 					SetUsingStrategy(eStrategy, false);
 
 					for(iFlavorLoop = 0; iFlavorLoop < GC.getNumFlavorTypes(); iFlavorLoop++)
@@ -810,6 +821,7 @@ void CvEconomicAI::DoTurn()
 					}
 
 					GetPlayer()->GetFlavorManager()->ChangeFlavors(m_aiTempFlavors, false);
+#endif
 				}
 			}
 		}
@@ -821,9 +833,55 @@ void CvEconomicAI::DoTurn()
 		DoPlotPurchases();
 		DisbandExtraWorkers();
 		DisbandExtraArchaeologists();
+#if defined(MOD_AI_SMART_V3)
+		if (MOD_AI_SMART_V3)
+		{
+			DisbandLongObsoleteUnits();
+		}
+#endif
+
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+		YieldTypes eFocusYield = NO_YIELD;
+		if (EconomicAIHelpers::IsTestStrategy_GS_Spaceship(m_pPlayer)) {
+			eFocusYield = YIELD_SCIENCE;
+		} else if (EconomicAIHelpers::IsTestStrategy_DevelopingReligion(m_pPlayer)) {
+			eFocusYield = YIELD_FAITH;
+		} else if (EconomicAIHelpers::IsTestStrategy_LosingMoney((EconomicAIStrategyTypes) GC.getInfoTypeForString("ECONOMICAISTRATEGY_LOSING_MONEY", true), m_pPlayer)) {
+			eFocusYield = YIELD_GOLD;
+		} else {
+			eFocusYield = YIELD_CULTURE;
+		}
+		
+		m_pPlayer->GetCulture()->DoSwapGreatWorks(eFocusYield);
+#else
 		m_pPlayer->GetCulture()->DoSwapGreatWorks();
+#endif
 	}
 }
+
+#if defined(MOD_API_EXTENSIONS)
+void CvEconomicAI::UseStrategy(EconomicAIStrategyTypes eStrategy, bool bUsingStrategy)
+{
+	CvEconomicAIStrategyXMLEntry* pStrategy = GetEconomicAIStrategies()->GetEntry(eStrategy);
+	int iChange = bUsingStrategy ? 1 : -1;
+
+	SetUsingStrategy(eStrategy, bUsingStrategy);
+
+	for(int iFlavorLoop = 0; iFlavorLoop < GC.getNumFlavorTypes(); iFlavorLoop++)
+	{
+		m_aiTempFlavors[iFlavorLoop] = pStrategy->GetPlayerFlavorValue(iFlavorLoop) * iChange;
+	}
+
+	GetPlayer()->GetFlavorManager()->ChangeFlavors(m_aiTempFlavors, true);
+
+	for(int iFlavorLoop = 0; iFlavorLoop < GC.getNumFlavorTypes(); iFlavorLoop++)
+	{
+		m_aiTempFlavors[iFlavorLoop] = pStrategy->GetCityFlavorValue(iFlavorLoop) * iChange;
+	}
+
+	GetPlayer()->GetFlavorManager()->ChangeFlavors(m_aiTempFlavors, false);
+}
+#endif
 
 /// Find the best city to create a Great Work in
 CvCity* CvEconomicAI::GetBestGreatWorkCity(CvPlot *pStartPlot, GreatWorkType eGreatWork) const
@@ -1321,6 +1379,16 @@ void CvEconomicAI::LogMonitor(void)
 		case YIELD_FAITH:
 			AppendToLog(strHeader, strLog, "Faith", m_pPlayer->GetTotalFaithPerTurn());
 			break;
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+		case YIELD_TOURISM:
+			AppendToLog(strHeader, strLog, "Tourism", m_pPlayer->calculateTotalYield((YieldTypes)ui));
+			break;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+		case YIELD_GOLDEN_AGE_POINTS:
+			AppendToLog(strHeader, strLog, "Golden Age", m_pPlayer->calculateTotalYield((YieldTypes)ui));
+			break;
+#endif
 		}
 	}
 
@@ -1328,7 +1396,11 @@ void CvEconomicAI::LogMonitor(void)
 	AppendToLog(strHeader, strLog, "Num Techs", GET_TEAM(GetPlayer()->getTeam()).GetTeamTechs()->GetNumTechsKnown());
 
 	// Culture
+#if defined(MOD_BUGFIX_DUMMY_POLICIES)
+	AppendToLog(strHeader, strLog, "Policies", GetPlayer()->GetPlayerPolicies()->GetNumPoliciesOwned(false));
+#else
 	AppendToLog(strHeader, strLog, "Policies", GetPlayer()->GetPlayerPolicies()->GetNumPoliciesOwned());
+#endif
 	AppendToLog(strHeader, strLog, "Culture (lifetime)", GetPlayer()->GetJONSCultureEverGenerated());
 
 	// Faith
@@ -1547,6 +1619,16 @@ void CvEconomicAI::LogCityMonitor()
 			case YIELD_FAITH:
 				AppendToLog(strHeader, strLog, "faith", aiCityYields[ui]);
 				break;
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+			case YIELD_TOURISM:
+				AppendToLog(strHeader, strLog, "tourism", aiCityYields[ui]);
+				break;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+			case YIELD_GOLDEN_AGE_POINTS:
+				AppendToLog(strHeader, strLog, "goldenage", aiCityYields[ui]);
+				break;
+#endif
 			}
 		}
 
@@ -1579,6 +1661,16 @@ void CvEconomicAI::LogCityMonitor()
 			case YIELD_FAITH:
 				AppendToLog(strHeader, strLog, "faith / pop", fRatio);
 				break;
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+			case YIELD_TOURISM:
+				AppendToLog(strHeader, strLog, "tourism / pop", fRatio);
+				break;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+			case YIELD_GOLDEN_AGE_POINTS:
+				AppendToLog(strHeader, strLog, "goldenage / pop", fRatio);
+				break;
+#endif
 			}
 		}
 
@@ -1606,6 +1698,16 @@ void CvEconomicAI::LogCityMonitor()
 			case YIELD_FAITH:
 				AppendToLog(strHeader, strLog, "faith specialist", aiSpecialistsYields[ui]);
 				break;
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+			case YIELD_TOURISM:
+				AppendToLog(strHeader, strLog, "tourism specialist", aiSpecialistsYields[ui]);
+				break;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+			case YIELD_GOLDEN_AGE_POINTS:
+				AppendToLog(strHeader, strLog, "goldenage specialist", aiSpecialistsYields[ui]);
+				break;
+#endif
 			}
 		}
 
@@ -1637,6 +1739,16 @@ void CvEconomicAI::LogCityMonitor()
 			case YIELD_FAITH:
 				AppendToLog(strHeader, strLog, "faith specialist / faith", fRatio);
 				break;
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+			case YIELD_TOURISM:
+				AppendToLog(strHeader, strLog, "tourism specialist / tourism", fRatio);
+				break;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+			case YIELD_GOLDEN_AGE_POINTS:
+				AppendToLog(strHeader, strLog, "goldenage specialist / tourism", fRatio);
+				break;
+#endif
 			}
 		}
 
@@ -1711,10 +1823,12 @@ void CvEconomicAI::LogCityMonitor()
 void CvEconomicAI::DoHurry()
 {
 	int iLoop = 0;
+
 	OrderData* pOrder = 0;
 
 	CvCity* pLoopCity = 0;
 	int iTurnsSaved = 0;
+
 	int iHurryAmount = 0;
 	int iHurryAmountAvailable = 0;
 	int iI = 0;
@@ -1724,6 +1838,19 @@ void CvEconomicAI::DoHurry()
 	int iBestHurryAmount = 0;
 	int iBestHurryAmountAvailable = 0;
 	HurryTypes eBestHurryType = NO_HURRY;
+#if defined(MOD_AI_SMART_V3)
+	if (MOD_AI_SMART_V3)
+	{
+		//Exit if we don't have a set amount of gold, to avoid purchase overuse.
+		int comfortableGoldToHurry = 50 + (150 * m_pPlayer->GetCurrentEra());
+		int playerGold = m_pPlayer->GetTreasury()->GetGold();
+
+		if (playerGold < comfortableGoldToHurry)
+		{
+			return;
+		}
+	}
+#endif
 
 	// Look at each of our cities
 	for(pLoopCity = m_pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoop))
@@ -1731,6 +1858,47 @@ void CvEconomicAI::DoHurry()
 		// What are we currently working on?
 		pOrder = pLoopCity->getOrderFromQueue(0);
 
+#if defined(MOD_AI_SMART_V3)
+		if (MOD_AI_SMART_V3)
+		{
+			if(pOrder != NULL)
+			{
+				bool isPurchasable = pLoopCity->IsCanGoldPurchase(pOrder);
+				int prodPercentRemaining = ((pLoopCity->getProductionNeeded() - pLoopCity->getProduction()) * 100) / pLoopCity->getProductionNeeded();
+
+				//We skip if the build order is more than 60% done.
+				if (prodPercentRemaining < 60)
+				{
+					continue;
+				}
+
+				if (isPurchasable)
+				{
+					iTurnsSaved = pLoopCity->getProductionTurnsLeft() - 1;
+					//Also skip if we don't save any turns
+					if (iTurnsSaved < 2)
+					{
+						continue;
+					}
+					if (iBestHurryTurnsSaved < iTurnsSaved)
+					{
+						if(GC.getLogging() && GC.getAILogging() && isPurchasable)
+						{
+							static const char* orderTypeStrings[] = { "ORDER_TRAIN", "ORDER_CONSTRUCT", "ORDER_CREATE", "ORDER_PREPARE", "ORDER_MAINTAIN", "NO_ORDER" };
+							int orderIndex = ((pOrder->eOrderType < 0) || (pOrder->eOrderType > 4)) ? 5 : pOrder->eOrderType;
+							CvString strLogString;
+							strLogString.Format("DoHurry Option: order type %s, Turns Saved: %d,remaining percent = %d", orderTypeStrings[orderIndex], iTurnsSaved, prodPercentRemaining);
+							m_pPlayer->GetHomelandAI()->LogHomelandMessage(strLogString);
+						}
+						iBestHurryTurnsSaved = iTurnsSaved;
+						pBestHurryCity = pLoopCity;
+					}
+				}
+			}
+		}
+		else
+		{
+#endif
 		// Did we want to rush it?
 		if(pOrder != NULL && pOrder->bRush)
 		{
@@ -1774,13 +1942,28 @@ void CvEconomicAI::DoHurry()
 				}
 			}
 		}
+#if defined(MOD_AI_SMART_V3)
+		}
+#endif
 	}
 
 	// Now enact the best hurry we've found (only hurry one item per turn for now)
 	if(pBestHurryCity != NULL)
 	{
-		pBestHurryCity->hurry(eBestHurryType);
-		pBestHurryCity->GetCityStrategyAI()->LogHurry(eBestHurryType, iBestHurryAmount, iBestHurryAmountAvailable, iBestHurryTurnsSaved);
+#if defined(MOD_AI_SMART_V3)
+		if (MOD_AI_SMART_V3)
+		{
+			pBestHurryCity->PurchaseCurrentOrder();
+			pBestHurryCity->AI_chooseProduction(false);
+		}
+		else
+		{
+#endif
+			pBestHurryCity->hurry(eBestHurryType);
+			pBestHurryCity->GetCityStrategyAI()->LogHurry(eBestHurryType, iBestHurryAmount, iBestHurryAmountAvailable, iBestHurryTurnsSaved);
+#if defined(MOD_AI_SMART_V3)
+		}
+#endif
 	}
 }
 
@@ -2120,7 +2303,13 @@ void CvEconomicAI::DisbandExtraWorkers()
 	int iGoldSpentOnUnits = m_pPlayer->GetTreasury()->GetExpensePerTurnUnitMaintenance();
 	int iAverageGoldPerUnit = iGoldSpentOnUnits / (max(1,m_pPlayer->getNumUnits()));
 
+#if defined(MOD_AI_SMART_V3)
+	// Disband more aggressively if at deficit.
+	int iDisbandLimit = MOD_AI_SMART_V3 ? 3 : 4;
+	if(!bInDeficit && iAverageGoldPerUnit <= iDisbandLimit)	
+#else
 	if(!bInDeficit && iAverageGoldPerUnit <= 4)
+#endif
 	{
 		return;
 	}
@@ -2226,6 +2415,85 @@ void CvEconomicAI::DisbandExtraWorkers()
 	pUnit->scrap();
 	LogScrapUnit(pUnit, iNumWorkers, iNumCities, iNumImprovedPlots, iNumValidPlots);
 }
+
+#if defined(MOD_AI_SMART_V3)
+// Check for very long obsolete units that didn't get an upgrade (usual suspects are wandering triremes and warriors)
+void CvEconomicAI::DisbandLongObsoleteUnits()
+{
+	CvUnit* pUnit;
+	int iLoop;
+	int unitEra;
+	int ArmyId;
+	int playerCurrentEra;
+	bool movingArmy;
+	CvTechEntry* pkTechInfo;
+	CvArmyAI* pThisArmy;
+	playerCurrentEra = m_pPlayer->GetCurrentEra();
+	// Treat information era as atomic for this checking.
+	playerCurrentEra = min(6, playerCurrentEra);
+
+	// Loop through our units
+	for(pUnit = m_pPlayer->firstUnit(&iLoop); pUnit != NULL; pUnit = m_pPlayer->nextUnit(&iLoop))
+	{
+		if (pUnit)
+		{
+			movingArmy = false;
+			ArmyId = pUnit->getArmyID();
+
+			if (ArmyId != -1)
+			{
+				pThisArmy = m_pPlayer->getArmyAI(ArmyId);
+
+				if (pThisArmy)
+				{
+					movingArmy = ((pThisArmy->GetArmyAIState() == ARMYAISTATE_MOVING_TO_DESTINATION) || (pThisArmy->GetArmyAIState() == ARMYAISTATE_AT_DESTINATION));
+				}
+			}
+
+			if(!movingArmy)
+			{
+				// The unit must have an upgrade option, if not, then we don't care about this (includes workers, settlers, explorers)
+				UnitTypes eUpgradeUnitType = pUnit->GetUpgradeUnitType();
+
+				// Exclude settlers for this disband method, just in case
+				if(eUpgradeUnitType != NO_UNIT && !pUnit->isFound())
+				{
+					// Check out unit era based on the prerequirement tech, defaults at ancient era.
+					unitEra = 0;
+					UnitTypes currentUnitType = pUnit->getUnitType();
+					TechTypes ePrereqTech = (TechTypes)GC.getUnitInfo(currentUnitType)->GetPrereqAndTech();
+
+					if (ePrereqTech != NO_TECH)
+					{
+						pkTechInfo = GC.getTechInfo(ePrereqTech);
+
+						if (pkTechInfo)
+						{
+							unitEra = pkTechInfo->GetEra();
+						}
+					}
+
+					// Too much era difference for that unit, lets scrap it.
+					if ((playerCurrentEra - unitEra) > 3)
+					{
+						if(GC.getLogging() && GC.getAILogging())
+						{
+							CvString strLogString;
+							strLogString.Format("Disbanding long obsolete unit. %s, X: %d, Y: %d", pUnit->getName().GetCString(), pUnit->getX(), pUnit->getY());
+							m_pPlayer->GetHomelandAI()->LogHomelandMessage(strLogString);
+						}
+
+						pUnit->scrap();
+						// Only one unit scrap per turn.
+						return;
+					}
+				}
+			}
+		}
+	}
+}
+#endif
+
 void CvEconomicAI::DisbandExtraArchaeologists(){
 	int iNumSites = GC.getGame().GetNumArchaeologySites();
 	double dMaxRatio = .5; //Ratio of archaeologists to sites
@@ -2240,7 +2508,11 @@ void CvEconomicAI::DisbandExtraArchaeologists(){
 	}
 	
 	CvUnit* pUnit;
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+	UnitTypes eArch = m_pPlayer->GetSpecificUnitType("UNITCLASS_ARCHAEOLOGIST", true);
+#else
 	UnitTypes eArch = (UnitTypes) GC.getInfoTypeForString("UNIT_ARCHAEOLOGIST", true /*bHideAssert*/);
+#endif
 	if(eArch == NO_UNIT){
 		return;
 	}
@@ -2581,7 +2853,11 @@ CvUnit* CvEconomicAI::FindWorkerToScrap()
 		{
 			continue;
 		}
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+		UnitTypes eWorker = m_pPlayer->GetSpecificUnitType("UNITCLASS_WORKER");
+#else
 		UnitTypes eWorker = (UnitTypes) GC.getInfoTypeForString("UNIT_WORKER");
+#endif
 		if(pLoopUnit->getDomainType() == DOMAIN_LAND && pLoopUnit->getUnitType() == eWorker && !pLoopUnit->IsCombatUnit() && pLoopUnit->getSpecialUnitType() == NO_SPECIALUNIT)
 		{
 			return pLoopUnit;
@@ -2603,7 +2879,11 @@ CvUnit* CvEconomicAI::FindArchaeologistToScrap()
 		{
 			continue;
 		}
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+		UnitTypes eArch = m_pPlayer->GetSpecificUnitType("UNITCLASS_ARCHAEOLOGIST");
+#else
 		UnitTypes eArch = (UnitTypes) GC.getInfoTypeForString("UNIT_ARCHAEOLOGIST", true);
+#endif
 		if(pLoopUnit->getUnitType() == eArch)
 		{
 			return pLoopUnit;
@@ -3892,6 +4172,10 @@ bool EconomicAIHelpers::IsTestStrategy_ExpandLikeCrazy(EconomicAIStrategyTypes e
 		return false;
 	}
 
+#if defined(MOD_AI_SMART_V3)
+	if (!MOD_AI_SMART_V3)
+	{
+#endif
 	// Never run this if we are going for a cultural victory since it will derail that
 	AIGrandStrategyTypes eGrandStrategy = (AIGrandStrategyTypes) GC.getInfoTypeForString("AIGRANDSTRATEGY_CULTURE");
 	if(eGrandStrategy != NO_AIGRANDSTRATEGY)
@@ -3905,6 +4189,9 @@ bool EconomicAIHelpers::IsTestStrategy_ExpandLikeCrazy(EconomicAIStrategyTypes e
 			}
 		}
 	}
+#if defined(MOD_AI_SMART_V3)
+	}
+#endif
 
 	int iFlavorExpansion = pPlayer->GetGrandStrategyAI()->GetPersonalityAndGrandStrategy((FlavorTypes)GC.getInfoTypeForString("FLAVOR_EXPANSION"));
 	CvEconomicAIStrategyXMLEntry* pStrategy = pPlayer->GetEconomicAI()->GetEconomicAIStrategies()->GetEntry(eStrategy);
@@ -4030,6 +4317,9 @@ bool EconomicAIHelpers::IsTestStrategy_EnoughArchaeologists(CvPlayer* pPlayer)
 {
 	int iNumSites = GC.getGame().GetNumArchaeologySites();
 	double iMaxRatio = .5; //Ratio of archaeologists to sites
+#if defined(MOD_AI_SMART_V3)
+	if (MOD_AI_SMART_V3) iMaxRatio = .25;
+#endif
 	int iNumArchaeologists = pPlayer->GetNumUnitsWithUnitAI(UNITAI_ARCHAEOLOGIST, true);
 	PolicyTypes eExpFinisher = (PolicyTypes) GC.getInfoTypeForString("POLICY_EXPLORATION_FINISHER", true /*bHideAssert*/);
 	
@@ -4069,9 +4359,16 @@ bool EconomicAIHelpers::IsTestStrategy_NeedGuilds(CvPlayer* pPlayer)
 {
 	CvTeam &kTeam = GET_TEAM(pPlayer->getTeam());
 
+#if defined(MOD_BUGFIX_BUILDINGCLASS_NOT_BUILDING)
+	CvCivilizationInfo& playerCivilizationInfo = pPlayer->getCivilizationInfo();
+	BuildingTypes eWritersGuild = (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)GC.getInfoTypeForString("BUILDINGCLASS_WRITERS_GUILD"));
+	BuildingTypes eArtistsGuild = (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)GC.getInfoTypeForString("BUILDINGCLASS_ARTISTS_GUILD"));
+	BuildingTypes eMusiciansGuild = (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)GC.getInfoTypeForString("BUILDINGCLASS_MUSICIANS_GUILD"));
+#else
 	BuildingTypes eWritersGuild = (BuildingTypes)GC.getInfoTypeForString("BUILDING_WRITERS_GUILD", true);
 	BuildingTypes eArtistsGuild = (BuildingTypes)GC.getInfoTypeForString("BUILDING_ARTISTS_GUILD", true);
 	BuildingTypes eMusiciansGuild = (BuildingTypes)GC.getInfoTypeForString("BUILDING_MUSICIANS_GUILD", true);
+#endif
 
 	CvBuildingEntry *pkBuilding;
 	pkBuilding = GC.getBuildingInfo(eWritersGuild);

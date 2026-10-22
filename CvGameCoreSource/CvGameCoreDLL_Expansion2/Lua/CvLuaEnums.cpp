@@ -205,6 +205,12 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(YIELD_SCIENCE);
 	RegisterEnum(YIELD_CULTURE);
 	RegisterEnum(YIELD_FAITH);
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+	RegisterEnum(YIELD_TOURISM);
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+	RegisterEnum(YIELD_GOLDEN_AGE_POINTS);
+#endif
 	RegisterEnum(NUM_YIELD_TYPES);
 	EnumEnd(L);
 
@@ -773,6 +779,9 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(ENDTURN_BLOCKING_CHOOSE_ARCHAEOLOGY);
 	RegisterEnum(ENDTURN_BLOCKING_LEAGUE_CALL_FOR_VOTES);
 	RegisterEnum(ENDTURN_BLOCKING_CHOOSE_IDEOLOGY);
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_UI_CITY_EXPANSION)
+	RegisterEnum(ENDTURN_BLOCKING_CITY_TILE);
+#endif
 	RegisterEnum(NUM_ENDTURN_BLOCKING_TYPES);
 	EnumEnd(L);
 
@@ -1021,6 +1030,36 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(CONTROL_RELIGION_OVERVIEW);
 	RegisterEnum(CONTROL_RESTART_GAME);
 	EnumEnd(L);
+
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_API_TRADEROUTES)
+	// TradeConnectionTypes
+	EnumStart(L, "TradeConnectionTypes");
+	RegisterEnum(TRADE_CONNECTION_INTERNATIONAL);
+	RegisterEnum(TRADE_CONNECTION_FOOD);
+	RegisterEnum(TRADE_CONNECTION_PRODUCTION);
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TRADE_WONDER_RESOURCE_ROUTES)
+	RegisterEnum(TRADE_CONNECTION_WONDER_RESOURCE);
+#endif
+	RegisterEnum(NUM_TRADE_CONNECTION_TYPES);
+	EnumEnd(L);
+#endif
+
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_EVENTS_TERRAFORMING)	
+	// TerraformingEventTypes
+	EnumStart(L, "TerraformingEventTypes");
+	RegisterEnum(NO_TERRAFORMINGEVENT);
+	RegisterEnum(TERRAFORMINGEVENT_LOAD);
+	RegisterEnum(TERRAFORMINGEVENT_AREA);
+	RegisterEnum(TERRAFORMINGEVENT_LANDMASS);
+	RegisterEnum(TERRAFORMINGEVENT_CONTINENT);
+	RegisterEnum(TERRAFORMINGEVENT_PLOT);
+	RegisterEnum(TERRAFORMINGEVENT_TERRAIN);
+	RegisterEnum(TERRAFORMINGEVENT_FEATURE);
+	RegisterEnum(TERRAFORMINGEVENT_RIVER);
+	RegisterEnum(TERRAFORMINGEVENT_CITY);
+	RegisterEnum(NUM_TERRAFORMINGEVENT_TYPES);
+	EnumEnd(L);
+#endif
 
 	return 0;
 }

@@ -751,7 +751,11 @@ void SetupUnit(const CvWorldBuilderMap::Unit& kSavedUnit, int iPlotX, int iPlotY
 				pkGameplayUnit->setDamage(iMaxHitPoints - iHitPoints);
 			}
 
+#if defined(MOD_UNITS_XP_TIMES_100)
+			pkGameplayUnit->setExperienceTimes100(((int)kSavedUnit.m_uiExperience) * 100);
+#else
 			pkGameplayUnit->setExperience((int)kSavedUnit.m_uiExperience);
+#endif
 
 			const int iPromotionTypeCount = GC.getNumPromotionInfos();
 			for(int iPromotion = 0; iPromotion < iPromotionTypeCount; ++iPromotion)
@@ -1135,8 +1139,13 @@ bool CvWorldBuilderMapLoader::InitMap()
 
 			if(sg_kSave.m_kTeamsAtWar.Get(uiTeam1, uiTeam2))
 			{
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+				kTeam1.setAtWar(eTeam2, true, true);
+				kTeam2.setAtWar(eTeam1, true, true);
+#else
 				kTeam1.setAtWar(eTeam2, true);
 				kTeam2.setAtWar(eTeam1, true);
+#endif
 			}
 
 			if(sg_kSave.m_kTeamsAtPermanentWarOrPeace.Get(uiTeam1, uiTeam2))

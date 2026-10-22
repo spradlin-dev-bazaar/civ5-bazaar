@@ -57,6 +57,7 @@ void CvDealAI::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 }
 
 /// Serialization write
@@ -65,6 +66,7 @@ void CvDealAI::Write(FDataStream& kStream) const
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 }
 
 /// Returns the Player object this DealAI is associated with
@@ -99,6 +101,9 @@ DealOfferResponseTypes CvDealAI::DoHumanOfferDealToThisAI(CvDeal* pDeal)
 
 	const char* szText = "";
 	LeaderheadAnimationTypes eAnimation = NO_LEADERHEAD_ANIM;
+#if defined(MOD_DIPLOMACY_STFU)
+	DiploMessageTypes eDiploMessage = NO_DIPLO_MESSAGE_TYPE;
+#endif
 
 	PlayerTypes eFromPlayer = GC.getGame().getActivePlayer();
 
@@ -143,6 +148,9 @@ DealOfferResponseTypes CvDealAI::DoHumanOfferDealToThisAI(CvDeal* pDeal)
 
 		if(bFromIsActivePlayer)
 		{
+#if defined(MOD_DIPLOMACY_STFU)
+			eDiploMessage = DIPLO_MESSAGE_TRADE_REJECT_UNACCEPTABLE;
+#endif
 			szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_TRADE_REJECT_UNACCEPTABLE);
 			eAnimation = LEADERHEAD_ANIM_NO;
 		}
@@ -155,6 +163,9 @@ DealOfferResponseTypes CvDealAI::DoHumanOfferDealToThisAI(CvDeal* pDeal)
 
 		if(bFromIsActivePlayer)
 		{
+#if defined(MOD_DIPLOMACY_STFU)
+			eDiploMessage = DIPLO_MESSAGE_TRADE_REJECT_INSULTING;
+#endif
 			szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_TRADE_REJECT_INSULTING);
 			eAnimation = LEADERHEAD_ANIM_NO;
 		}
@@ -166,17 +177,28 @@ DealOfferResponseTypes CvDealAI::DoHumanOfferDealToThisAI(CvDeal* pDeal)
 		if(eResponse >= DEAL_RESPONSE_UNACCEPTABLE)
 		{
 			int iTimesDealOffered = GC.GetEngineUserInterface()->GetOfferTradeRepeatCount();
+
 			if(iTimesDealOffered > 4)
 			{
+#if defined(MOD_DIPLOMACY_STFU)
+				eDiploMessage = DIPLO_MESSAGE_REPEAT_TRADE_TOO_MUCH;
+#endif
 				szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_REPEAT_TRADE_TOO_MUCH);
 			}
 			else if(iTimesDealOffered > 1)
 			{
+#if defined(MOD_DIPLOMACY_STFU)
+				eDiploMessage = DIPLO_MESSAGE_REPEAT_TRADE;
+#endif
 				szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_REPEAT_TRADE);
 			}
 
 			GC.GetEngineUserInterface()->ChangeOfferTradeRepeatCount(1);
+#if defined(MOD_DIPLOMACY_STFU)
+			GET_PLAYER(eFromPlayer).GetDiplomacyAI()->DisplayAILeaderMessage(GetPlayer()->GetID(), eUIState, eDiploMessage, eAnimation);
+#else
 			gDLL->GameplayDiplomacyAILeaderMessage(GetPlayer()->GetID(), eUIState, szText, eAnimation);
+#endif
 		}
 	}
 
@@ -197,8 +219,16 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 		m_pPlayer->GetDiplomacyAI()->ClearDealToRenew();
 	}
 
+#if defined(MOD_AI_MP_DIPLOMACY)
+	if (MOD_AI_MP_DIPLOMACY) {
+		GC.getGame().GetGameDeals()->FinalizeDeal(kDeal, true);
+	} else {
+#endif
 	GC.getGame().GetGameDeals()->AddProposedDeal(kDeal);
 	GC.getGame().GetGameDeals()->FinalizeDeal(eFromPlayer, GetPlayer()->GetID(), true);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	}
+#endif
 
 	if(GET_PLAYER(eFromPlayer).isHuman())
 	{
@@ -221,8 +251,12 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 		{
 			if(GC.getGame().getActivePlayer() == eFromPlayer)
 			{
+#if defined(MOD_DIPLOMACY_STFU)
+				GET_PLAYER(eFromPlayer).GetDiplomacyAI()->DisplayAILeaderMessage(GetPlayer()->GetID(), DIPLO_UI_STATE_BLANK_DISCUSSION_MEAN_AI, DIPLO_MESSAGE_TRADE_ACCEPT_AI_DEMAND, LEADERHEAD_ANIM_POSITIVE);
+#else
 				szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_TRADE_ACCEPT_AI_DEMAND);
 				gDLL->GameplayDiplomacyAILeaderMessage(GetPlayer()->GetID(), DIPLO_UI_STATE_BLANK_DISCUSSION_MEAN_AI, szText, LEADERHEAD_ANIM_POSITIVE);
+#endif
 			}
 
 			return;
@@ -233,19 +267,29 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 		{
 			if(GC.getGame().getActivePlayer() == eFromPlayer)
 			{
+#if defined(MOD_DIPLOMACY_STFU)
+				GET_PLAYER(eFromPlayer).GetDiplomacyAI()->DisplayAILeaderMessage(GetPlayer()->GetID(), DIPLO_UI_STATE_BLANK_DISCUSSION, DIPLO_MESSAGE_THANKFUL, LEADERHEAD_ANIM_POSITIVE);
+#else
 				szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_THANKFUL);
 				gDLL->GameplayDiplomacyAILeaderMessage(GetPlayer()->GetID(), DIPLO_UI_STATE_BLANK_DISCUSSION, szText, LEADERHEAD_ANIM_POSITIVE);
+#endif
 			}
 			GetPlayer()->GetDiplomacyAI()->ChangeRecentAssistValue(eFromPlayer, -iDealValueToMe);
 			return;
 		}
 
 		eUIState = DIPLO_UI_STATE_BLANK_DISCUSSION;
+#if defined(MOD_DIPLOMACY_STFU)
+		DiploMessageTypes eDiploMessage;
+#endif
 
 		// Good deal for us
 		if(iDealValueToMe >= 100 ||
 		        iValueTheyreOffering > (iValueImOffering * 5))	// A deal can be generous if we're getting a lot overall, OR a lot more than we're giving up
 		{
+#if defined(MOD_DIPLOMACY_STFU)
+			eDiploMessage = DIPLO_MESSAGE_TRADE_ACCEPT_GENEROUS;
+#endif
 			szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_TRADE_ACCEPT_GENEROUS);
 			eAnimation = LEADERHEAD_ANIM_YES;
 			GetPlayer()->GetDiplomacyAI()->ChangeRecentTradeValue(eFromPlayer, iDealValueToMe);
@@ -253,6 +297,9 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 		// Acceptable deal for us
 		else
 		{
+#if defined(MOD_DIPLOMACY_STFU)
+			eDiploMessage = DIPLO_MESSAGE_TRADE_ACCEPT_ACCEPTABLE;
+#endif
 			szText = GetPlayer()->GetDiplomacyAI()->GetDiploStringForMessage(DIPLO_MESSAGE_TRADE_ACCEPT_ACCEPTABLE);
 			eAnimation = LEADERHEAD_ANIM_YES;
 			GetPlayer()->GetDiplomacyAI()->ChangeRecentTradeValue(eFromPlayer, (iDealValueToMe / 2));
@@ -269,7 +316,11 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 
 		// Send message back to diplo UI
 		if(GC.getGame().getActivePlayer() == eFromPlayer)
+#if defined(MOD_DIPLOMACY_STFU)
+			GET_PLAYER(eFromPlayer).GetDiplomacyAI()->DisplayAILeaderMessage(GetPlayer()->GetID(), eUIState, eDiploMessage, eAnimation);
+#else
 			gDLL->GameplayDiplomacyAILeaderMessage(GetPlayer()->GetID(), eUIState, szText, eAnimation);
+#endif
 	}
 
 	if(GC.getGame().getActivePlayer() == eFromPlayer || GC.getGame().getActivePlayer() == GetPlayer()->GetID())
@@ -289,95 +340,95 @@ DemandResponseTypes CvDealAI::DoHumanDemand(CvDeal* pDeal)
 	int iValueWillingToGiveUp = 0;
 
 	CvDiplomacyAI* pDiploAI = GET_PLAYER(eMyPlayer).GetDiplomacyAI();
-	// Too soon for another demand?
-	if(pDiploAI->IsDemandTooSoon(eFromPlayer))
-		eResponse = DEMAND_RESPONSE_REFUSE_TOO_SOON;
+	
+		// Too soon for another demand?
+		if(pDiploAI->IsDemandTooSoon(eFromPlayer))
+			eResponse = DEMAND_RESPONSE_REFUSE_TOO_SOON;
 
-	// Not too soon for a demand
-	else
-	{
-		MajorCivApproachTypes eApproach = pDiploAI->GetMajorCivApproach(eFromPlayer, /*bHideTrueFeelings*/ true);
-		StrengthTypes eMilitaryStrength = pDiploAI->GetPlayerMilitaryStrengthComparedToUs(eFromPlayer);
-		AggressivePostureTypes eMilitaryPosture = pDiploAI->GetMilitaryAggressivePosture(eFromPlayer);
-		PlayerProximityTypes eProximity = GET_PLAYER(eMyPlayer).GetProximityToPlayer(eFromPlayer);
-
-		// Unforgivable: AI will never give in
-		if(pDiploAI->GetMajorCivOpinion(eFromPlayer) == MAJOR_CIV_OPINION_UNFORGIVABLE)
-			eResponse = DEMAND_RESPONSE_REFUSE_HOSTILE;
-
-		// Hostile: AI will never give in
-		else if(eApproach == MAJOR_CIV_APPROACH_HOSTILE)
-			eResponse = DEMAND_RESPONSE_REFUSE_HOSTILE;
-
-		// Our military is stronger: AI will never give in
-		else if(eMilitaryStrength < STRENGTH_AVERAGE)
-			eResponse = DEMAND_RESPONSE_REFUSE_WEAK;
-
-		// They are very far away and have no units near us (from what we can tell): AI will never give in
-		else if(eProximity <= PLAYER_PROXIMITY_FAR && eMilitaryPosture == AGGRESSIVE_POSTURE_NONE)
-			eResponse = DEMAND_RESPONSE_REFUSE_WEAK;
-
-		// Willing to give in to demand
+		// Not too soon for a demand
 		else
 		{
-			// Initial odds of giving in to ANY demand are based on the player's boldness (which is also tied to the player's likelihood of going for world conquest)
-			int iOddsOfGivingIn = (10 - pDiploAI->GetBoldness()) * 10;
+			MajorCivApproachTypes eApproach = pDiploAI->GetMajorCivApproach(eFromPlayer, /*bHideTrueFeelings*/ true);
+			StrengthTypes eMilitaryStrength = pDiploAI->GetPlayerMilitaryStrengthComparedToUs(eFromPlayer);
+			AggressivePostureTypes eMilitaryPosture = pDiploAI->GetMilitaryAggressivePosture(eFromPlayer);
+			PlayerProximityTypes eProximity = GET_PLAYER(eMyPlayer).GetProximityToPlayer(eFromPlayer);
 
-			iValueWillingToGiveUp = 0;
+			// Unforgivable: AI will never give in
+			if(pDiploAI->GetMajorCivOpinion(eFromPlayer) == MAJOR_CIV_OPINION_UNFORGIVABLE)
+				eResponse = DEMAND_RESPONSE_REFUSE_HOSTILE;
 
-			// If we're afraid we're more likely to give in
-			if(eApproach == MAJOR_CIV_APPROACH_AFRAID)
-			{
-				iOddsOfGivingIn += 50;
-				iValueWillingToGiveUp += 200;
-			}
-			// Not afraid
+			// Hostile: AI will never give in
+			else if(eApproach == MAJOR_CIV_APPROACH_HOSTILE)
+				eResponse = DEMAND_RESPONSE_REFUSE_HOSTILE;
+
+			// Our military is stronger: AI will never give in
+			else if(eMilitaryStrength < STRENGTH_AVERAGE)
+				eResponse = DEMAND_RESPONSE_REFUSE_WEAK;
+
+			// They are very far away and have no units near us (from what we can tell): AI will never give in
+			else if(eProximity <= PLAYER_PROXIMITY_FAR && eMilitaryPosture == AGGRESSIVE_POSTURE_NONE)
+				eResponse = DEMAND_RESPONSE_REFUSE_WEAK;
+
+			// Willing to give in to demand
 			else
 			{
-				// How strong are they compared to us?
-				switch(eMilitaryStrength)
+				// Initial odds of giving in to ANY demand are based on the player's boldness (which is also tied to the player's likelihood of going for world conquest)
+				int iOddsOfGivingIn = (10 - pDiploAI->GetBoldness()) * 10;
+
+				iValueWillingToGiveUp = 0;
+				// If we're afraid we're more likely to give in
+				if(eApproach == MAJOR_CIV_APPROACH_AFRAID)
 				{
-				case STRENGTH_PATHETIC:
-					iOddsOfGivingIn += -100;
-					iValueWillingToGiveUp += 10;
-					break;
-				case STRENGTH_WEAK:
-					iOddsOfGivingIn += -100;
-					iValueWillingToGiveUp += 10;
-					break;
-				case STRENGTH_POOR:
-					iOddsOfGivingIn += -100;
-					iValueWillingToGiveUp += 20;
-					break;
-				case STRENGTH_AVERAGE:
-					iOddsOfGivingIn += -10;
-					iValueWillingToGiveUp += 50;
-					break;
-				case STRENGTH_STRONG:
-					iOddsOfGivingIn += 10;
-					iValueWillingToGiveUp += 120;
-					break;
-				case STRENGTH_POWERFUL:
-					iOddsOfGivingIn += 20;
+					iOddsOfGivingIn += 50;
 					iValueWillingToGiveUp += 200;
-					break;
-				case STRENGTH_IMMENSE:
-					iOddsOfGivingIn += 35;
-					iValueWillingToGiveUp += 200;
-					break;
-				default:
-					break;
 				}
-			}
+				// Not afraid
+				else
+				{
+					// How strong are they compared to us?
+					switch(eMilitaryStrength)
+					{
+					case STRENGTH_PATHETIC:
+						iOddsOfGivingIn += -100;
+						iValueWillingToGiveUp += 10;
+						break;
+					case STRENGTH_WEAK:
+						iOddsOfGivingIn += -100;
+						iValueWillingToGiveUp += 10;
+						break;
+					case STRENGTH_POOR:
+						iOddsOfGivingIn += -100;
+						iValueWillingToGiveUp += 20;
+						break;
+					case STRENGTH_AVERAGE:
+						iOddsOfGivingIn += -10;
+						iValueWillingToGiveUp += 50;
+						break;
+					case STRENGTH_STRONG:
+						iOddsOfGivingIn += 10;
+						iValueWillingToGiveUp += 120;
+						break;
+					case STRENGTH_POWERFUL:
+						iOddsOfGivingIn += 20;
+						iValueWillingToGiveUp += 200;
+						break;
+					case STRENGTH_IMMENSE:
+						iOddsOfGivingIn += 35;
+						iValueWillingToGiveUp += 200;
+						break;
+					default:
+						break;
+					}
+				}
 
-			// IMPORTANT NOTE: This APPEARS to be very bad for multiplayer, but the only changes made to the game state are the fact that the human
-			// made a demand, and if the deal went through. These are both sent over the network later in this function.
+				// IMPORTANT NOTE: This APPEARS to be very bad for multiplayer, but the only changes made to the game state are the fact that the human
+				// made a demand, and if the deal went through. These are both sent over the network later in this function.
 
-			int iAsyncRand = GC.getGame().getAsyncRandNum(100, "Deal AI: ASYNC RAND call to determine if AI will give into a human demand.");
+				int iAsyncRand = GC.getGame().getAsyncRandNum(100, "Deal AI: ASYNC RAND call to determine if AI will give into a human demand.");
 
-			// Are they going to say no matter what?
-			if(iAsyncRand > iOddsOfGivingIn)
-				eResponse = DEMAND_RESPONSE_REFUSE_HOSTILE;
+				// Are they going to say no matter what?
+				if(iAsyncRand > iOddsOfGivingIn)
+					eResponse = DEMAND_RESPONSE_REFUSE_HOSTILE;
 		}
 	}
 
@@ -489,8 +540,17 @@ void CvDealAI::DoAcceptedDemand(PlayerTypes eFromPlayer, const CvDeal& kDeal)
 	const PlayerTypes eActivePlayer = kGame.getActivePlayer();
 	const PlayerTypes ePlayer = GetPlayer()->GetID();
 
+#if defined(MOD_AI_MP_DIPLOMACY)
+	if (MOD_AI_MP_DIPLOMACY) {
+		pGameDeals->FinalizeDeal(kDeal, true);
+	} else {
+#endif
 	pGameDeals->AddProposedDeal(kDeal);
 	pGameDeals->FinalizeDeal(eFromPlayer, ePlayer, true);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	}
+#endif
+
 	if(eActivePlayer == eFromPlayer || eActivePlayer == ePlayer)
 	{
 		GC.GetEngineUserInterface()->makeInterfaceDirty();
@@ -1311,7 +1371,11 @@ int CvDealAI::GetCityValue(int iX, int iY, bool bFromMe, PlayerTypes eOtherPlaye
 		int iGoldValueOfPlots = 0;
 		int iGoldValueOfImprovedPlots = 0;
 		int iGoldValueOfResourcePlots = 0;
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		for(int iI = 0; iI < pCity->GetNumWorkablePlots(); iI++)
+#else
 		for(int iI = 0; iI < NUM_CITY_PLOTS; iI++)
+#endif
 		{
 			CvPlot* pLoopPlot = pCity->GetCityCitizens()->GetCityPlotFromIndex(iI);
 			if(NULL != pLoopPlot && pCity->GetID() == pLoopPlot->GetCityPurchaseID())
@@ -1777,7 +1841,6 @@ int CvDealAI::GetDefensivePactValue(bool bFromMe, PlayerTypes eOtherPlayer, bool
 		//}
 		//iItemValue /= 100;
 	}
-
 	// Are we trying to find the middle point between what we think this item is worth and what another player thinks it's worth?
 	if(bUseEvenValue)
 	{
@@ -2374,7 +2437,11 @@ void CvDealAI::DoAddVoteCommitmentToThem(CvDeal* pDeal, PlayerTypes eThem, bool 
 						int iItemValue = GetTradeItemValue(TRADE_ITEM_VOTE_COMMITMENT, /*bFromMe*/ false, eThem, iProposalID, iVoteChoice, iNumVotes, bRepeal, -1, bUseEvenValue);
 
 						// If adding this to the deal doesn't take it over the limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+						if((iItemValue > 0) && (iItemValue + iTotalValue <= iAmountOverWeWillRequest))
+#else
 						if(iItemValue + iTotalValue <= iAmountOverWeWillRequest)
+#endif
 						{
 							pDeal->AddVoteCommitment(eThem, iProposalID, iVoteChoice, iNumVotes, bRepeal);
 							iTotalValue = GetDealValue(pDeal, iValueImOffering, iValueTheyreOffering, bUseEvenValue);
@@ -2415,7 +2482,11 @@ void CvDealAI::DoAddVoteCommitmentToUs(CvDeal* pDeal, PlayerTypes eThem, bool bD
 						int iItemValue = GetTradeItemValue(TRADE_ITEM_VOTE_COMMITMENT, /*bFromMe*/ true, eThem, iProposalID, iVoteChoice, iNumVotes, bRepeal, -1, bUseEvenValue);
 
 						// If adding this to the deal doesn't take it under the min limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+						if((iItemValue > 0) && (-iItemValue + iTotalValue >= iAmountUnderWeWillOffer))
+#else
 						if(-iItemValue + iTotalValue >= iAmountUnderWeWillOffer)
+#endif
 						{
 							pDeal->AddVoteCommitment(eMyPlayer, iProposalID, iVoteChoice, iNumVotes, bRepeal);
 							iTotalValue = GetDealValue(pDeal, iValueImOffering, iValueTheyreOffering, bUseEvenValue);
@@ -2474,7 +2545,11 @@ void CvDealAI::DoAddResourceToThem(CvDeal* pDeal, PlayerTypes eThem, bool bDontC
 					iItemValue = GetTradeItemValue(TRADE_ITEM_RESOURCES, /*bFromMe*/ false, eThem, eResource, iResourceQuantity, -1, /*bFlag1*/false, iDealDuration, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it over the limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (iItemValue + iTotalValue <= iAmountOverWeWillRequest))
+#else
 					if(iItemValue + iTotalValue <= iAmountOverWeWillRequest)
+#endif
 					{
 						// Try to change the current item if it already exists, otherwise add it
 						if(!pDeal->ChangeResourceTrade(eThem, eResource, iResourceQuantity, iDealDuration))
@@ -2510,7 +2585,11 @@ void CvDealAI::DoAddResourceToThem(CvDeal* pDeal, PlayerTypes eThem, bool bDontC
 					iItemValue = GetTradeItemValue(TRADE_ITEM_RESOURCES, /*bFromMe*/ false, eThem, eResource, iResourceQuantity, -1, /*bFlag1*/false, iDealDuration, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it over the limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (iItemValue + iTotalValue <= iAmountOverWeWillRequest))
+#else
 					if(iItemValue + iTotalValue <= iAmountOverWeWillRequest)
+#endif
 					{
 						// Try to change the current item if it already exists, otherwise add it
 						if(!pDeal->ChangeResourceTrade(eThem, eResource, iResourceQuantity, iDealDuration))
@@ -2577,7 +2656,11 @@ void CvDealAI::DoAddResourceToUs(CvDeal* pDeal, PlayerTypes eThem, bool bDontCha
 					iItemValue = GetTradeItemValue(TRADE_ITEM_RESOURCES, /*bFromMe*/ true, eThem, eResource, iResourceQuantity, -1, /*bFlag1*/false, iDealDuration, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it under the min limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (-iItemValue + iTotalValue >= iAmountUnderWeWillOffer))
+#else
 					if(-iItemValue + iTotalValue >= iAmountUnderWeWillOffer)
+#endif
 					{
 						// Try to change the current item if it already exists, otherwise add it
 						if(!pDeal->ChangeResourceTrade(eMyPlayer, eResource, iResourceQuantity, iDealDuration))
@@ -2614,7 +2697,11 @@ void CvDealAI::DoAddEmbassyToThem(CvDeal* pDeal, PlayerTypes eThem, bool bDontCh
 					int iItemValue = GetTradeItemValue(TRADE_ITEM_ALLOW_EMBASSY, /*bFromMe*/ false, eThem, -1, -1, -1, /*bFlag1*/false, -1, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it over the limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (iItemValue + iTotalValue <= iAmountOverWeWillRequest))
+#else
 					if(iItemValue + iTotalValue <= iAmountOverWeWillRequest)
+#endif					
 					{
 						pDeal->AddAllowEmbassy(eThem);
 						iTotalValue = GetDealValue(pDeal, iValueImOffering, iValueTheyreOffering, bUseEvenValue);
@@ -2646,7 +2733,11 @@ void CvDealAI::DoAddEmbassyToUs(CvDeal* pDeal, PlayerTypes eThem, bool bDontChan
 					int iItemValue = GetTradeItemValue(TRADE_ITEM_ALLOW_EMBASSY, /*bFromMe*/ true, eThem, -1, -1, -1, /*bFlag1*/false, -1, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it under the min limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (-iItemValue + iTotalValue >= iAmountUnderWeWillOffer))
+#else
 					if(-iItemValue + iTotalValue >= iAmountUnderWeWillOffer)
+#endif	
 					{
 						pDeal->AddAllowEmbassy(eMyPlayer);
 						iTotalValue = GetDealValue(pDeal, iValueImOffering, iValueTheyreOffering, bUseEvenValue);
@@ -2678,7 +2769,11 @@ void CvDealAI::DoAddOpenBordersToThem(CvDeal* pDeal, PlayerTypes eThem, bool bDo
 					int iItemValue = GetTradeItemValue(TRADE_ITEM_OPEN_BORDERS, /*bFromMe*/ false, eThem, -1, -1, -1, /*bFlag1*/false, iDealDuration, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it over the limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (iItemValue + iTotalValue <= iAmountOverWeWillRequest))
+#else
 					if(iItemValue + iTotalValue <= iAmountOverWeWillRequest)
+#endif
 					{
 						pDeal->AddOpenBorders(eThem, iDealDuration);
 						iTotalValue = GetDealValue(pDeal, iValueImOffering, iValueTheyreOffering, bUseEvenValue);
@@ -2710,7 +2805,11 @@ void CvDealAI::DoAddOpenBordersToUs(CvDeal* pDeal, PlayerTypes eThem, bool bDont
 					int iItemValue = GetTradeItemValue(TRADE_ITEM_OPEN_BORDERS, /*bFromMe*/ true, eThem, -1, -1, -1, /*bFlag1*/false, iDealDuration, bUseEvenValue);
 
 					// If adding this to the deal doesn't take it under the min limit, do it
+#if defined(MOD_AI_NO_ZERO_VALUE_TRADE_ITEMS)
+					if((iItemValue > 0) && (-iItemValue + iTotalValue >= iAmountUnderWeWillOffer))
+#else
 					if(-iItemValue + iTotalValue >= iAmountUnderWeWillOffer)
+#endif
 					{
 						pDeal->AddOpenBorders(eMyPlayer, iDealDuration);
 						iTotalValue = GetDealValue(pDeal, iValueImOffering, iValueTheyreOffering, bUseEvenValue);

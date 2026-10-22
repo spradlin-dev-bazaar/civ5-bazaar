@@ -81,6 +81,9 @@ protected:
 	static int lIsHuman(lua_State* L);
 	static int lIsBarbarian(lua_State* L);
 
+#if defined(MOD_API_LUA_EXTENSIONS)
+	LUAAPIEXTN(IsMajorCiv, bool);
+#endif
 	static int lIsMinorCiv(lua_State* L);
 	static int lIsMinorCivWarmonger(lua_State* L);
 
@@ -132,6 +135,16 @@ protected:
 	static int lGetPermanentAllianceTradingCount(lua_State* L);
 	static int lIsPermanentAllianceTrading(lua_State* L);
 	static int lChangePermanentAllianceTradingCount(lua_State* L);
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TECHS_CITY_WORKING)
+	LUAAPIEXTN(GetCityWorkingChange, int);
+	LUAAPIEXTN(IsCityWorkingChange, bool);
+	LUAAPIEXTN(ChangeCityWorkingChange, void, iChange);
+#endif
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	LUAAPIEXTN(GetCityAutomatonWorkersChange, int);
+	LUAAPIEXTN(IsCityAutomatonWorkersChange, bool);
+	LUAAPIEXTN(ChangeCityAutomatonWorkersChange, void, iChange);
+#endif
 	static int lGetBridgeBuildingCount(lua_State* L);
 	static int lIsBridgeBuilding(lua_State* L);
 	static int lChangeBridgeBuildingCount(lua_State* L);
@@ -167,6 +180,9 @@ protected:
 	static int lGetKilledByTeam(lua_State* L);
 
 	static int lHasEmbassyAtTeam(lua_State* L);
+#if defined(MOD_API_LUA_EXTENSIONS)
+	LUAAPIEXTN(HasSpyAtTeam, bool, iTeam);
+#endif
 	static int lIsAllowsOpenBordersToTeam(lua_State* L);
 	static int lIsForcePeace(lua_State* L);
 	static int lIsDefensivePact(lua_State* L);

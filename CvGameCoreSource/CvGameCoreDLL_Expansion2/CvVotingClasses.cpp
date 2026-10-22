@@ -167,7 +167,6 @@ EraTypes LeagueHelpers::GetNextGameEraForTrigger(EraTypes eThisEra)
 	return eNextEra;
 }
 
-
 // ================================================================================
 //			CvResolutionEffects
 // ================================================================================
@@ -335,6 +334,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvResolutionEffects& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.bDiplomaticVictory;
 	if (uiVersion >= 2)
 	{
@@ -428,7 +428,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvResolutionEffects& writeTo)
 		writeTo.iGreatPersonTileImprovementCulture = 0;
 		writeTo.iLandmarkCulture = 0;
 	}
-	
+
 	return loadFrom;
 }
 
@@ -438,6 +438,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvResolutionEffects& readFrom
 	uint uiVersion = 9;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.bDiplomaticVictory;
 	saveTo << readFrom.bChangeLeagueHost;
 	saveTo << readFrom.iOneTimeGold;
@@ -507,6 +508,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvResolutionDecision::PlayerVote&
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.ePlayer;
 	loadFrom >> writeTo.iNumVotes;
 	loadFrom >> writeTo.iChoice;
@@ -520,6 +522,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvResolutionDecision::PlayerV
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.ePlayer;
 	saveTo << readFrom.iNumVotes;
 	saveTo << readFrom.iChoice;
@@ -533,6 +536,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvResolutionDecision& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.m_eType;
 
 	return loadFrom;
@@ -544,6 +548,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvResolutionDecision& readFro
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_eType;
 
 	return saveTo;
@@ -587,6 +592,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvProposerDecision& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.m_sVote;
 
 	return loadFrom;
@@ -600,6 +606,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvProposerDecision& readFrom)
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_sVote;
 
 	return saveTo;
@@ -889,6 +896,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvVoterDecision& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	
 	int iNumVotes;
 	loadFrom >> iNumVotes;
@@ -910,6 +918,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvVoterDecision& readFrom)
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_vVotes.size();
 	for (CvResolutionDecision::PlayerVoteList::const_iterator it = readFrom.m_vVotes.begin(); it != readFrom.m_vVotes.end(); it++)
 	{
@@ -998,6 +1007,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvResolution& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	if (uiVersion >= 2)
 	{
 		loadFrom >> writeTo.m_iID;
@@ -1021,6 +1031,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvResolution& readFrom)
 	uint uiVersion = 2;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_iID;
 	saveTo << readFrom.m_eType;
 	saveTo << readFrom.m_eLeague;
@@ -1062,6 +1073,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvProposal& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.m_eProposalPlayer;
 
 	return loadFrom;
@@ -1075,6 +1087,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvProposal& readFrom)
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_eProposalPlayer;
 
 	return saveTo;
@@ -1179,6 +1192,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvEnactProposal& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 
 	return loadFrom;
 }
@@ -1191,6 +1205,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvEnactProposal& readFrom)
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 
 	return saveTo;
 }
@@ -1427,7 +1442,7 @@ void CvActiveResolution::DoEffects(PlayerTypes ePlayer)
 			CvImprovementEntry* pInfo = GC.getImprovementInfo((ImprovementTypes)i);
 			if (pInfo != NULL && pInfo->IsCreatedByGreatPerson())
 			{
-				GET_PLAYER(ePlayer).changeImprovementYieldChange((ImprovementTypes)pInfo->GetID(), YIELD_CULTURE, GetEffects()->iGreatPersonTileImprovementCulture);
+					GET_PLAYER(ePlayer).changeImprovementYieldChange((ImprovementTypes)pInfo->GetID(), YIELD_CULTURE, GetEffects()->iGreatPersonTileImprovementCulture);
 			}
 		}
 		// Refresh yield
@@ -1441,7 +1456,7 @@ void CvActiveResolution::DoEffects(PlayerTypes ePlayer)
 		}
 		// Refresh yield
 	}
-
+	
 	m_iTurnEnacted = GC.getGame().getGameTurn();
 }
 
@@ -1603,7 +1618,7 @@ void CvActiveResolution::RemoveEffects(PlayerTypes ePlayer)
 			CvImprovementEntry* pInfo = GC.getImprovementInfo((ImprovementTypes)i);
 			if (pInfo != NULL && pInfo->IsCreatedByGreatPerson())
 			{
-				GET_PLAYER(ePlayer).changeImprovementYieldChange((ImprovementTypes)pInfo->GetID(), YIELD_CULTURE, -1 * GetEffects()->iGreatPersonTileImprovementCulture);
+					GET_PLAYER(ePlayer).changeImprovementYieldChange((ImprovementTypes)pInfo->GetID(), YIELD_CULTURE, -1 * GetEffects()->iGreatPersonTileImprovementCulture);
 			}
 		}
 		// Refresh yield
@@ -1617,7 +1632,7 @@ void CvActiveResolution::RemoveEffects(PlayerTypes ePlayer)
 		}
 		// Refresh yield
 	}
-
+	
 	m_iTurnEnacted = -1;
 }
 
@@ -1639,6 +1654,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvActiveResolution& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	if (uiVersion < 2)
 	{
 		// Since version 2, m_iID was moved to a different class
@@ -1658,6 +1674,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvActiveResolution& readFrom)
 	uint uiVersion = 2;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_iTurnEnacted;
 
 	return saveTo;
@@ -1757,6 +1774,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvRepealProposal& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.m_iTargetResolutionID;
 	loadFrom >> writeTo.m_RepealDecision;
 
@@ -1771,6 +1789,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvRepealProposal& readFrom)
 	uint uiVersion = 1;
 
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_iTargetResolutionID;
 	saveTo << readFrom.m_RepealDecision;
 
@@ -2350,6 +2369,7 @@ void CvLeague::DoProposeRepeal(int iResolutionID, PlayerTypes eProposer)
 			m_vRepealProposals.push_back(proposal);
 			iFound++;
 
+#if !defined(NO_ACHIEVEMENTS)
 			// XP2 Achievement
 			if (!GC.getGame().isGameMultiPlayer())
 			{
@@ -2362,6 +2382,7 @@ void CvLeague::DoProposeRepeal(int iResolutionID, PlayerTypes eProposer)
 					}
 				}
 			}
+#endif
 		}
 
 	}
@@ -2543,7 +2564,15 @@ bool CvLeague::CanProposeEnact(ResolutionTypes eResolution, PlayerTypes ePropose
 			bValid = false;
 		}
 	}
-
+	
+#if defined(MOD_EVENTS_RESOLUTIONS)
+	if (MOD_EVENTS_RESOLUTIONS) {
+		if (GAMEEVENTINVOKE_TESTALL(GAMEEVENT_PlayerCanPropose, eProposer, eResolution, iChoice, true) == GAMEEVENTRETURN_FALSE) {
+			bValid = false;
+		}
+	}
+#endif
+	
 	return bValid;
 }
 
@@ -2576,6 +2605,15 @@ bool CvLeague::CanProposeRepeal(int iResolutionID, PlayerTypes eProposer, CvStri
 		bValid = false;
 	}
 
+#if defined(MOD_EVENTS_RESOLUTIONS)
+	if (MOD_EVENTS_RESOLUTIONS) {
+		if (GAMEEVENTINVOKE_TESTALL(GAMEEVENT_PlayerCanPropose, eProposer, iResolutionID, 0, false) == GAMEEVENTRETURN_FALSE) {
+			bValid = false;
+		}
+	}
+#endif
+	
+	
 	// Must already be active
 	for (uint iIndex = 0; iIndex < m_vActiveResolutions.size(); iIndex++)
 	{
@@ -2905,7 +2943,11 @@ std::vector<int> CvLeague::GetChoicesForDecision(ResolutionDecisionTypes eDecisi
 		for (uint i = 0; i < MAX_MAJOR_CIVS; i++)
 		{
 			PlayerTypes e = (PlayerTypes) i;
+#if defined(MOD_RELIGION_LOCAL_RELIGIONS)
+			if (GET_PLAYER(e).isAlive() && GET_PLAYER(e).GetReligions()->HasCreatedReligion(true))
+#else
 			if (GET_PLAYER(e).isAlive() && GET_PLAYER(e).GetReligions()->HasCreatedReligion())
+#endif
 			{
 				vChoices.push_back(GET_PLAYER(e).GetReligions()->GetReligionCreatedByPlayer());
 			}
@@ -3341,6 +3383,7 @@ int CvLeague::CalculateStartingVotesForMember(PlayerTypes ePlayer, bool bForceUp
 				sTemp << iWonderVotes;
 				pMember->sVoteSources += sTemp.toUTF8();
 			}
+			
 			if (iWorldReligionVotes > 0)
 			{
 				Localization::String sTemp = Localization::Lookup("TXT_KEY_LEAGUE_OVERVIEW_MEMBER_DETAILS_WORLD_RELIGION_VOTES");
@@ -3840,6 +3883,28 @@ bool CvLeague::IsTradeEmbargoed(PlayerTypes eTrader, PlayerTypes eRecipient)
 	return false;
 }
 
+#if defined(MOD_API_EXTENSIONS)
+bool CvLeague::IsPlayerEmbargoed(PlayerTypes ePlayer)
+{
+	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS) return false;
+	bool bMinor = GET_PLAYER(ePlayer).isMinorCiv();
+
+	for (ActiveResolutionList::iterator it = m_vActiveResolutions.begin(); it != m_vActiveResolutions.end(); it++) {
+		if (bMinor) {
+			if (it->GetEffects()->bEmbargoCityStates) {
+				return true;
+			}
+		} else {			
+			if (it->GetEffects()->bEmbargoPlayer && ePlayer == (PlayerTypes) it->GetProposerDecision()->GetDecision()) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+#endif
+
 bool CvLeague::IsLuxuryHappinessBanned(ResourceTypes eResource)
 {
 	for (ActiveResolutionList::iterator it = m_vActiveResolutions.begin(); it != m_vActiveResolutions.end(); it++)
@@ -3903,6 +3968,7 @@ int CvLeague::GetFeatureYieldChange(FeatureTypes eFeature, YieldTypes eYield)
 					}
 				}
 			}
+			
 			iValue += iNaturalWonderMod;
 		}
 	}
@@ -4882,6 +4948,7 @@ std::vector<CvString> CvLeague::GetCurrentEffectsSummary(PlayerTypes /*eObserver
 		sTemp << sEntries;
 		vsEffects.push_back(sTemp.toUTF8());
 	}
+
 	if (effects.iUnitMaintenanceGoldPercent != 0)
 	{
 		Localization::String sTemp = Localization::Lookup("TXT_KEY_LEAGUE_OVERVIEW_EFFECT_SUMMARY_UNIT_MAINTENANCE");
@@ -5213,10 +5280,12 @@ void CvLeague::CheckProjectAchievements()
 				}
 			}
 
+#if !defined(NO_ACHIEVEMENTS)
 			if (iHighestContributorProjects >= GC.getNumLeagueProjectInfos() && GC.getNumLeagueProjectInfos() > 0)
 			{
 				gDLL->UnlockAchievement(ACHIEVEMENT_XP2_44);
 			}
+#endif
 		}
 	}
 }
@@ -5262,7 +5331,11 @@ void CvLeague::CheckStartSpecialSession(LeagueSpecialSessionTypes eSpecialSessio
 			CvGame& kGame = GC.getGame();
 			CvPlayer& kActivePlayer = GET_PLAYER(kGame.getActivePlayer());
 
+#if defined(MOD_API_EXTENSIONS)
+			if(!kGame.isReallyNetworkMultiPlayer() && !kActivePlayer.isObserver()){
+#else
 			if(!kGame.isNetworkMultiPlayer() && !kActivePlayer.isObserver()){
+#endif
 				// Show splash screen
 				CvPopupInfo kPopup(BUTTONPOPUP_LEAGUE_SPLASH, GetID(), GetHostMember(), eSpecialSession, 0, /*bJustFounded*/ false);
 				GC.GetEngineUserInterface()->AddPopup(kPopup);
@@ -5775,6 +5848,10 @@ void CvLeague::NotifyProposalResult(CvEnactProposal* pProposal)
 	CvAssert(pProposal != NULL);
 	if (pProposal == NULL) return;
 
+#if defined(MOD_EVENTS_RESOLUTIONS)
+	int iDecision = -1;
+#endif
+
 	CvString sSummary = "";
 	CvString sMessage = "";
 	if (pProposal->GetEffects()->bDiplomaticVictory)
@@ -5805,6 +5882,10 @@ void CvLeague::NotifyProposalResult(CvEnactProposal* pProposal)
 			sMessage += sTemp.toUTF8();
 		}
 		sMessage += "[NEWLINE]" + pProposal->GetVoterDecision()->GetVotesAsText(this);
+	
+#if defined(MOD_EVENTS_RESOLUTIONS)
+		iDecision = pProposal->GetVoterDecision()->GetDecision();
+#endif
 	}
 	else if (pProposal->GetEffects()->bChangeLeagueHost)
 	{
@@ -5841,6 +5922,10 @@ void CvLeague::NotifyProposalResult(CvEnactProposal* pProposal)
 		sMessageTemp << GetName() << sHostKey;
 		sMessage += sMessageTemp.toUTF8();
 		sMessage += "[NEWLINE]" + pProposal->GetVoterDecision()->GetVotesAsText(this);
+	
+#if defined(MOD_EVENTS_RESOLUTIONS)
+		iDecision = pProposal->GetVoterDecision()->GetDecision();
+#endif
 	}
 	else
 	{
@@ -5857,7 +5942,17 @@ void CvLeague::NotifyProposalResult(CvEnactProposal* pProposal)
 		sSummary = sSummaryTemp.toUTF8();
 		sMessage = sMessageTemp.toUTF8();
 		sMessage += "[NEWLINE]" + pProposal->GetVoterDecision()->GetVotesAsText(this);
+	
+#if defined(MOD_EVENTS_RESOLUTIONS)
+		iDecision = pProposal->GetProposerDecision()->GetDecision();
+#endif
 	}
+
+#if defined(MOD_EVENTS_RESOLUTIONS)
+	if (MOD_EVENTS_RESOLUTIONS) {
+		GAMEEVENTINVOKE_HOOK(GAMEEVENT_ResolutionResult, pProposal->GetType(), iDecision, true, pProposal->IsPassed(GetVotesSpentThisSession()));
+	}
+#endif
 
 	for (MemberList::iterator it = m_vMembers.begin(); it != m_vMembers.end(); it++)
 	{
@@ -5892,6 +5987,12 @@ void CvLeague::NotifyProposalResult(CvRepealProposal* pProposal)
 	CvString sSummary = sSummaryTemp.toUTF8();
 	CvString sMessage = sMessageTemp.toUTF8();
 	sMessage += "[NEWLINE]" + pProposal->GetRepealDecision()->GetVotesAsText(this);
+
+#if defined(MOD_EVENTS_RESOLUTIONS)
+	if (MOD_EVENTS_RESOLUTIONS) {
+		GAMEEVENTINVOKE_HOOK(GAMEEVENT_ResolutionResult, pProposal->GetType(), pProposal->GetProposerDecision()->GetDecision(), false, pProposal->IsPassed(iTotalSessionVotes));
+	}
+#endif
 
 	for (MemberList::iterator it = m_vMembers.begin(); it != m_vMembers.end(); it++)
 	{
@@ -6045,7 +6146,11 @@ void CvLeague::CheckProjectsProgress()
 						CvGame& kGame = GC.getGame();
 						CvPlayer& kActivePlayer = GET_PLAYER(kGame.getActivePlayer());
 
+#if defined(MOD_API_EXTENSIONS)
+						if(!kGame.isReallyNetworkMultiPlayer() && !kActivePlayer.isObserver())
+#else
 						if(!kGame.isNetworkMultiPlayer() && !kActivePlayer.isObserver())
+#endif
 						{
 							CvPopupInfo kPopup(BUTTONPOPUP_LEAGUE_PROJECT_COMPLETED, GetID(), it->eType);
 							GC.GetEngineUserInterface()->AddPopup(kPopup);
@@ -6362,6 +6467,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvLeague& writeTo)
 	uint uiVersion;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	loadFrom >> writeTo.m_eID;
 	if (uiVersion >= 4)
 	{
@@ -6562,6 +6668,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvLeague& readFrom)
 	uint uiVersion = 14;
 	
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_eID;
 	saveTo << readFrom.m_bUnitedNations;
 	saveTo << readFrom.m_bInSession;
@@ -6785,6 +6892,17 @@ void CvGameLeagues::DoPlayerTurn(CvPlayer& kPlayer)
 					}
 					else
 					{
+#if defined(MOD_EVENTS_RESOLUTIONS)
+						bool bAllUsed = false;
+						
+						if (MOD_EVENTS_RESOLUTIONS) {
+							if (GAMEEVENTINVOKE_TESTANY(GAMEEVENT_ResolutionProposing, kPlayer.GetID(), it->GetID()) == GAMEEVENTRETURN_TRUE) {
+								bAllUsed = true;
+							}
+						}
+						
+						if (!bAllUsed)
+#endif
 						kPlayer.GetLeagueAI()->DoProposals(it);
 					}
 				}
@@ -6815,6 +6933,18 @@ void CvGameLeagues::DoPlayerTurn(CvPlayer& kPlayer)
 							}
 							else
 							{
+#if defined(MOD_EVENTS_RESOLUTIONS)
+								bool bAllUsed = false;
+								
+								if (MOD_EVENTS_RESOLUTIONS && it->GetRemainingVotesForMember(kPlayer.GetID()) > 0) {
+									if (GAMEEVENTINVOKE_TESTANY(GAMEEVENT_ResolutionVoting, kPlayer.GetID(), it->GetID()) == GAMEEVENTRETURN_TRUE) {
+										bAllUsed = true;
+									}
+								}
+						
+								if (!bAllUsed)
+#endif
+								
 								kPlayer.GetLeagueAI()->DoVotes(it);
 							}
 						}
@@ -6901,7 +7031,11 @@ void CvGameLeagues::FoundLeague(PlayerTypes eFounder)
 			CvGame& kGame = GC.getGame();
 			CvPlayer& kActivePlayer = GET_PLAYER(kGame.getActivePlayer());
 
+#if defined(MOD_API_EXTENSIONS)
+			if(!kGame.isReallyNetworkMultiPlayer() && !kActivePlayer.isObserver()){
+#else
 			if(!kGame.isNetworkMultiPlayer() && !kActivePlayer.isObserver()){
+#endif
 				// Show splash screen
 				CvPopupInfo kPopup(BUTTONPOPUP_LEAGUE_SPLASH, league.GetID(), league.GetHostMember(), eGoverningSpecialSession, 0, /*bJustFounded*/ true);
 				GC.GetEngineUserInterface()->AddPopup(kPopup);
@@ -7295,6 +7429,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvGameLeagues& writeTo)
 	int iNumLeagues;
 
 	loadFrom >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(loadFrom);
 	if (uiVersion >= 4)
 	{
 		loadFrom >> writeTo.m_iGeneratedIDCount;
@@ -7345,6 +7480,7 @@ FDataStream& operator<<(FDataStream& saveTo, const CvGameLeagues& readFrom)
 	uint uiVersion = 5;
 	
 	saveTo << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(saveTo);
 	saveTo << readFrom.m_iGeneratedIDCount;
 	saveTo << readFrom.m_vActiveLeagues.size();
 	for (uint iLeague = 0; iLeague < readFrom.m_vActiveLeagues.size(); iLeague++)
@@ -7395,6 +7531,7 @@ void CvLeagueAI::Read(FDataStream& kStream)
 {
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	if (uiVersion >= 2)
 	{
@@ -7422,6 +7559,7 @@ void CvLeagueAI::Write(FDataStream& kStream)
 {
 	uint uiVersion = 2;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	kStream << m_vVoteCommitmentList.size();
 	for (VoteCommitmentList::iterator it = m_vVoteCommitmentList.begin(); it != m_vVoteCommitmentList.end(); ++it)
@@ -9163,6 +9301,7 @@ int CvLeagueAI::ScoreVoteChoiceYesNo(CvProposal* pProposal, int iChoice, bool bE
 			iScore += 15 * iFactor;
 		}
 	}
+
 	// Scholars in Residence
 	if (pProposal->GetEffects()->iMemberDiscoveredTechMod != 0)
 	{
@@ -9485,6 +9624,7 @@ int CvLeagueAI::ScoreVoteChoicePlayer(CvProposal* pProposal, int iChoice, bool b
 	if (pProposal->GetEffects()->bDiplomaticVictory)
 	{
 		AlignmentLevels eAlignment = EvaluateAlignment(eChoicePlayer);
+
 		if (eAlignment == ALIGNMENT_LIBERATOR)
 		{
 			iScore += 200;
@@ -9547,54 +9687,55 @@ int CvLeagueAI::ScoreVoteChoicePlayer(CvProposal* pProposal, int iChoice, bool b
 	// Mostly same as evaluating Diplomatic Victory, but with higher value to pick others you like
 	if (pProposal->GetEffects()->bChangeLeagueHost)
 	{
-		AlignmentLevels eAlignment = EvaluateAlignment(eChoicePlayer);
-		if (eAlignment == ALIGNMENT_LIBERATOR)
-		{
-			iScore += 200;
-		}
-		else if (eAlignment == ALIGNMENT_SELF)
-		{
-			iScore += 100;
-		}
-		else if (eAlignment == ALIGNMENT_LEADER)
-		{
-			iScore += 50;
-		}
-		else if (eAlignment == ALIGNMENT_WAR)
-		{
-			iScore += -500;
-		}
-		else
-		{
-			if (bSeekingDiploVictory)
-			{
-				iScore += -150;
-			}
+			AlignmentLevels eAlignment = EvaluateAlignment(eChoicePlayer);
 
-			switch (eAlignment)
+			if (eAlignment == ALIGNMENT_LIBERATOR)
 			{
-			case ALIGNMENT_ALLY:
-				iScore += 130;
-				break;
-			case ALIGNMENT_CONFIDANT:
-				iScore += 90;
-				break;
-			case ALIGNMENT_FRIEND:
-				iScore += 50;
-				break;
-			case ALIGNMENT_RIVAL:
-				iScore += -50;
-				break;
-			case ALIGNMENT_HATRED:
-				iScore += -90;
-				break;
-			case ALIGNMENT_ENEMY:
-				iScore += -130;
-				break;
-			default:
-				break;
+				iScore += 200;
 			}
-		}
+			else if (eAlignment == ALIGNMENT_SELF)
+			{
+				iScore += 100;
+			}
+			else if (eAlignment == ALIGNMENT_LEADER)
+			{
+				iScore += 50;
+			}
+			else if (eAlignment == ALIGNMENT_WAR)
+			{
+				iScore += -500;
+			}
+			else
+			{
+				if (bSeekingDiploVictory)
+				{
+					iScore += -150;
+				}
+
+				switch (eAlignment)
+				{
+				case ALIGNMENT_ALLY:
+					iScore += 130;
+					break;
+				case ALIGNMENT_CONFIDANT:
+					iScore += 90;
+					break;
+				case ALIGNMENT_FRIEND:
+					iScore += 50;
+					break;
+				case ALIGNMENT_RIVAL:
+					iScore += -50;
+					break;
+				case ALIGNMENT_HATRED:
+					iScore += -90;
+					break;
+				case ALIGNMENT_ENEMY:
+					iScore += -130;
+					break;
+				default:
+					break;
+				}
+			}
 	}
 
 	return iScore;
@@ -10538,7 +10679,6 @@ int CvResolutionEntry::GetLandmarkCulture() const
 {
 	return m_iLandmarkCulture;
 }
-
 
 // ================================================================================
 //			CvResolutionXMLEntries

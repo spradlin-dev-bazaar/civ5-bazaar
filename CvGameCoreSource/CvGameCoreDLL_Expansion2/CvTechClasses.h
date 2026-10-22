@@ -74,6 +74,12 @@ public:
 	bool IsResearchAgreementTradingAllowed() const;
 	bool IsTradeAgreementTradingAllowed() const;
 	bool IsPermanentAllianceTrading() const;
+#if defined(MOD_TECHS_CITY_WORKING)
+	int GetCityWorkingChange() const;
+#endif
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	int GetCityAutomatonWorkersChange() const;
+#endif
 	bool IsBridgeBuilding() const;
 	bool IsWaterWork() const;
 	int IsFreePromotion(int i) const;
@@ -139,6 +145,12 @@ private:
 	bool m_bResearchAgreementTradingAllowed;
 	bool m_bTradeAgreementTradingAllowed;
 	bool m_bPermanentAllianceTrading;
+#if defined(MOD_TECHS_CITY_WORKING)
+	int m_iCityWorkingChange;
+#endif
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	int m_iCityAutomatonWorkersChange;
+#endif
 	bool m_bBridgeBuilding;
 	bool m_bWaterWork;
 	bool m_bTriggersArchaeologicalSites;
@@ -293,11 +305,19 @@ public:
 	void IncrementTechCount(TechTypes eIndex);
 	int GetTechCount(TechTypes eIndex) const;
 	void SetResearchProgress(TechTypes eIndex, int iNewValue, PlayerTypes ePlayer);
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+	void SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, PlayerTypes ePlayer, int iPlayerOverflow = 0, int iPlayerOverflowDivisorTimes100 = 100);
+#else
 	void SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, PlayerTypes ePlayer);
+#endif
 	int GetResearchProgress(TechTypes eIndex) const;
 	int GetResearchProgressTimes100(TechTypes eIndex) const;
 	void ChangeResearchProgress(TechTypes eIndex, int iChange, PlayerTypes ePlayer);
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+	void ChangeResearchProgressTimes100(TechTypes eIndex, int iChange, PlayerTypes ePlayer, int iPlayerOverflow = 0, int iPlayerOverflowDivisorTimes100 = 100);
+#else
 	void ChangeResearchProgressTimes100(TechTypes eIndex, int iChange, PlayerTypes ePlayer);
+#endif
 	int ChangeResearchProgressPercent(TechTypes eIndex, int iPercent, PlayerTypes ePlayer);
 	int GetResearchCost(TechTypes eTech) const;
 	int GetResearchLeft(TechTypes eTech) const;

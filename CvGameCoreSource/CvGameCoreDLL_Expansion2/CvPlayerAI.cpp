@@ -30,6 +30,9 @@
 #include "CvCitySpecializationAI.h"
 #include "cvStopWatch.h"
 #include "CvEconomicAI.h"
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+#include "CvTypes.h"
+#endif
 
 // Include this after all other headers.
 #include "LintFree.h"
@@ -331,7 +334,13 @@ void CvPlayerAI::AI_conquerCity(CvCity* pCity, PlayerTypes eOldOwner)
 	{
 		// Burn the city if the empire is unhappy - keeping the city will only make things worse or if map hint dictates
 		// Huns will burn down everything possible once they have a core of a few cities (was 3, but this put Attila out of the running long term as a conqueror)
+#if defined(MOD_GLOBAL_CS_RAZE_RARELY)
+		CUSTOMLOG("AI_conquerCity: City=%s, Player=%d, ExcessHappiness=%d", pCity->getName().GetCString(), GetID(), GetExcessHappiness());
+		bool bUnhappy = isMinorCiv() ? IsEmpireVeryUnhappy() : IsEmpireUnhappy();
+		if (bUnhappy || (GC.getMap().GetAIMapHint() & 2) || (GetPlayerTraits()->GetRazeSpeedModifier() > 0 && getNumCities() >= 3 + (GC.getGame().getGameTurn() / 100)) )
+#else
 		if (IsEmpireUnhappy() || (GC.getMap().GetAIMapHint() & 2) || (GetPlayerTraits()->GetRazeSpeedModifier() > 0 && getNumCities() >= 3 + (GC.getGame().getGameTurn() / 100)) )
+#endif
 		{
 			pCity->doTask(TASK_RAZE);
 			return;
@@ -408,16 +417,86 @@ int CvPlayerAI::AI_foundValue(int iX, int iY, int, bool bStartingLoc)
 	return rtnValue;
 }
 
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+bool CvPlayerAI::CanFoundOrEnhanceReligion()
+{
+	CvGameReligions *pReligions = GC.getGame().GetGameReligions();
+	ReligionTypes eMyReligion = pReligions->GetReligionCreatedByPlayer(GetID());
+	
+	if(eMyReligion <= RELIGION_PANTHEON)
+	{
+		// I've not got a religion, can I still get one?
+		return pReligions->GetNumReligionsStillToFound() > 0;
+	}
+	
+	// I've got a religion, do I need to enhance it
+	const CvReligion* pMyReligion = pReligions->GetReligion(eMyReligion, GetID());
+	return !pMyReligion->m_bEnhanced;
+}
+#endif
+
 void CvPlayerAI::AI_chooseFreeGreatPerson()
 {
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+	bool bCanPickProphet = true;
+	bool bCanPickMoV = true;
+	bool bCanPickEngineer = true;
+#endif
+
 	while(GetNumFreeGreatPeople() > 0)
 	{
 		UnitTypes eDesiredGreatPerson = NO_UNIT;
+		
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+		if (MOD_AI_GREAT_PEOPLE_CHOICES && bCanPickProphet && CanFoundOrEnhanceReligion())
+		{
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+			eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_PROPHET");
+#else
+			eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_PROPHET");
+#endif
 
+			bCanPickProphet = false;
+		}
+		else if (MOD_AI_GREAT_PEOPLE_CHOICES && bCanPickMoV && GetPlayerTraits()->IsNoAnnexing() && GC.getGame().getGameTurn() <= (GC.getGame().getEstimateEndTurn() / 3))
+		{
+			// Find the eUnit replacement that's the merchant of venice
+			for(int iVeniceSearch = 0; iVeniceSearch < GC.getNumUnitClassInfos(); iVeniceSearch++)
+			{
+				const UnitClassTypes eVeniceUnitClass = static_cast<UnitClassTypes>(iVeniceSearch);
+				CvUnitClassInfo* pkVeniceUnitClassInfo = GC.getUnitClassInfo(eVeniceUnitClass);
+				if(pkVeniceUnitClassInfo)
+				{
+					const UnitTypes eMerchantOfVeniceUnit = (UnitTypes) getCivilizationInfo().getCivilizationUnits(eVeniceUnitClass);
+					if (eMerchantOfVeniceUnit != NO_UNIT)
+					{
+						CvUnitEntry* pVeniceUnitEntry = GC.getUnitInfo(eMerchantOfVeniceUnit);
+						if (pVeniceUnitEntry->IsCanBuyCityState())
+						{
+							eDesiredGreatPerson = eMerchantOfVeniceUnit;	
+							break;
+						}
+					}
+				}
+			}
+			
+			bCanPickMoV = false;
+		}
+		else if(bCanPickEngineer && GetDiplomacyAI()->GetWonderCompetitiveness() >= 8 && GC.getGame().getGameTurn() <= (GC.getGame().getEstimateEndTurn() / 2))
+#else
 		// Highly wonder competitive and still early in game?
 		if(GetDiplomacyAI()->GetWonderCompetitiveness() >= 8 && GC.getGame().getGameTurn() <= (GC.getGame().getEstimateEndTurn() / 2))
+#endif
 		{
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+			eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_ENGINEER");
+#else
 			eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_ENGINEER");
+#endif
+
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+			bCanPickEngineer = false;
+#endif
 		}
 		else
 		{
@@ -425,28 +504,96 @@ void CvPlayerAI::AI_chooseFreeGreatPerson()
 			AIGrandStrategyTypes eVictoryStrategy = GetGrandStrategyAI()->GetActiveGrandStrategy();
 			if(eVictoryStrategy == (AIGrandStrategyTypes) GC.getInfoTypeForString("AIGRANDSTRATEGY_CONQUEST"))
 			{
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+				eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_GREAT_GENERAL");
+#else
 				eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_GREAT_GENERAL");
+#endif
 			}
 			else if(eVictoryStrategy == (AIGrandStrategyTypes) GC.getInfoTypeForString("AIGRANDSTRATEGY_CULTURE"))
 			{
-				eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_ARTIST");
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+				if (MOD_AI_GREAT_PEOPLE_CHOICES)
+				{
+					if (GetCulture()->GetNumAvailableGreatWorkSlots(CvTypes::getGREAT_WORK_SLOT_ART_ARTIFACT()) > 0)
+					{
+						// Grab an artist first, as they come after writers, so we'll likely to have less of them
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+						eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_ARTIST");
+#else
+						eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_ARTIST");
+#endif
+					}
+					else if (GetCulture()->GetNumAvailableGreatWorkSlots(CvTypes::getGREAT_WORK_SLOT_LITERATURE()))
+					{
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+						eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_WRITER");
+#else
+						eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_WRITER");
+#endif
+					}
+					else
+					{
+						// Even without a music slot, we can always send them on a concert tour
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+						eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_MUSICIAN");
+#else
+						eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_MUSICIAN");
+#endif
+					}
+				}
+				else
+#endif
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+					eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_ARTIST");
+#else
+					eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_ARTIST");
+#endif
 			}
 			else if(eVictoryStrategy == (AIGrandStrategyTypes) GC.getInfoTypeForString("AIGRANDSTRATEGY_UNITED_NATIONS"))
 			{
-				eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_MERCHANT");
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+					eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_MERCHANT");
+#else
+					eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_MERCHANT");
+#endif
 			}
+#if defined(MOD_BUGFIX_MINOR)
+			else
+#else
 			else if(eVictoryStrategy == (AIGrandStrategyTypes) GC.getInfoTypeForString("AIGRANDSTRATEGY_SPACESHIP"))
+#endif
 			{
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+				eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_SCIENTIST");
+#else
 				eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_SCIENTIST");
+#endif
 			}
 		}
+
+#if defined(MOD_AI_GREAT_PEOPLE_CHOICES)
+		if(MOD_AI_GREAT_PEOPLE_CHOICES && eDesiredGreatPerson != NO_UNIT)
+		{
+			// Can't go wrong with a Great Scientist!
+#if defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+			eDesiredGreatPerson = GetSpecificUnitType("UNITCLASS_SCIENTIST");
+#else
+			eDesiredGreatPerson = (UnitTypes)GC.getInfoTypeForString("UNIT_SCIENTIST");
+#endif
+		}
+#endif
 
 		if(eDesiredGreatPerson != NO_UNIT)
 		{
 			CvCity* pCapital = getCapitalCity();
 			if(pCapital)
 			{
+#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+				pCapital->GetCityCitizens()->DoSpawnGreatPerson(eDesiredGreatPerson, true, false, MOD_GLOBAL_TRULY_FREE_GP);
+#else
 				pCapital->GetCityCitizens()->DoSpawnGreatPerson(eDesiredGreatPerson, true, false);
+#endif
 			}
 			ChangeNumFreeGreatPeople(-1);
 		}
@@ -460,10 +607,27 @@ void CvPlayerAI::AI_chooseFreeGreatPerson()
 void CvPlayerAI::AI_chooseFreeTech()
 {
 	TechTypes eBestTech = NO_TECH;
+	
+#if defined(MOD_BUGFIX_MINOR)
+	if(GC.getGame().isOption(GAMEOPTION_NO_SCIENCE))
+		return;
+#endif
 
 	clearResearchQueue();
 
+#if defined(MOD_EVENTS_AI_OVERRIDE_TECH)
+	if (MOD_EVENTS_AI_OVERRIDE_TECH && eBestTech == NO_TECH) {
+		int iValue = 0;
+		if (GAMEEVENTINVOKE_VALUE(iValue, GAMEEVENT_AiOverrideChooseNextTech, GetID(), true) == GAMEEVENTRETURN_VALUE) {
+			// Defend against modder stupidity!
+			if (iValue >= 0 && iValue < GC.getNumTechInfos() && !GET_TEAM(getTeam()).GetTeamTechs()->HasTech((TechTypes) iValue)) {
+				eBestTech = (TechTypes)iValue;
+			}
+		}
+	}
+#else
 	// TODO: script override
+#endif
 
 	if(eBestTech == NO_TECH)
 	{
@@ -508,7 +672,19 @@ void CvPlayerAI::AI_chooseResearch()
 
 	if(GetPlayerTechs()->GetCurrentResearch() == NO_TECH)
 	{
+#if defined(MOD_EVENTS_AI_OVERRIDE_TECH)
+		if (MOD_EVENTS_AI_OVERRIDE_TECH && eBestTech == NO_TECH) {
+			int iValue = 0;
+			if (GAMEEVENTINVOKE_VALUE(iValue, GAMEEVENT_AiOverrideChooseNextTech, GetID(), false) == GAMEEVENTRETURN_VALUE) {
+				// Defend against modder stupidity!
+				if (iValue >= 0 && iValue < GC.getNumTechInfos() && !GET_TEAM(getTeam()).GetTeamTechs()->HasTech((TechTypes) iValue)) {
+					eBestTech = (TechTypes)iValue;
+				}
+			}
+		}
+#else
 		//todo: script override
+#endif
 
 		if(eBestTech == NO_TECH)
 		{
@@ -689,6 +865,7 @@ void CvPlayerAI::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 }
 
 
@@ -703,6 +880,7 @@ void CvPlayerAI::Write(FDataStream& kStream) const
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 }
 
 void CvPlayerAI::AI_launch(VictoryTypes eVictory)
@@ -933,7 +1111,12 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveWriter(CvUnit* pGreatWriter)
 	{
 		eDirective = GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 	}
+#if defined(MOD_AI_SMART_V3)
+	// AMS: Wait idle for 6 turns until culture blast due to no alternatives, maybe a work slot is built/conquered meanwhile.
+	else if (!MOD_AI_SMART_V3 || ((GC.getGame().getGameTurn() - pGreatWriter->getGameTurnCreated()) >= (GC.getAI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT() / 2)))
+#else
 	else
+#endif
 	{
 		eDirective = GREAT_PEOPLE_DIRECTIVE_CULTURE_BLAST;
 	}
@@ -970,7 +1153,12 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveArtist(CvUnit* pGreatArtist)
 	}
 
 	// If Brazil and we're closing in on Culture Victory
+#if defined(MOD_AI_SMART_V3)
+	int iInfluentialOn = MOD_AI_SMART_V3 ? (GC.getGame().GetGameCulture()->GetNumCivsInfluentialForWin() / 4) : 0;
+	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GetPlayerTraits()->GetGoldenAgeTourismModifier() > 0 && GetCulture()->GetNumCivsInfluentialOn() > iInfluentialOn)
+#else
 	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GetPlayerTraits()->GetGoldenAgeTourismModifier() > 0 && GetCulture()->GetNumCivsInfluentialOn() > 0)
+#endif
 	{
 		eDirective = GREAT_PEOPLE_DIRECTIVE_GOLDEN_AGE;
 	}
@@ -982,7 +1170,11 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveArtist(CvUnit* pGreatArtist)
 		eDirective = GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 	}
 
+#if defined(MOD_AI_SMART_V3)
+	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && !isGoldenAge() && (MOD_AI_SMART_V3 || ((GC.getGame().getGameTurn() - pGreatArtist->getGameTurnCreated()) >= (GC.getAI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT() / 2))))
+#else
 	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && !isGoldenAge())
+#endif
 	{
 		eDirective = GREAT_PEOPLE_DIRECTIVE_GOLDEN_AGE;
 	}
@@ -1016,7 +1208,11 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveMusician(CvUnit* pGreatMusicia
 	{
 		eDirective = GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 	}
+#if defined(MOD_AI_SMART_V3)
+	else if (MOD_AI_SMART_V3 || ((GC.getGame().getGameTurn() - pGreatMusician->getGameTurnCreated()) >= (GC.getAI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT() / 2)))
+#else
 	else
+#endif
 	{
 		CvPlot* pTarget = FindBestMusicianTargetPlot(pGreatMusician, true);
 		if(pTarget)
@@ -1075,9 +1271,19 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveMerchant(CvUnit* pGreatMerchan
 		return NO_GREAT_PEOPLE_DIRECTIVE_TYPE;
 	}
 
+#if defined(MOD_AI_SMART_V3)
+	// Create improvement only for first quarter of the game, and not with venice powers. 
+	int iMultiplier = MOD_AI_SMART_V3 ? 1 : 2;
+	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GC.getGame().getGameTurn() <= ((GC.getGame().getEstimateEndTurn() * iMultiplier) / 4))
+#else
 	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GC.getGame().getGameTurn() <= ((GC.getGame().getEstimateEndTurn() * 2) / 4))
+#endif
 	{
+#if defined(MOD_AI_SMART_V3)
+		if ((MOD_AI_SMART_V3 || GetDiplomacyAI()->IsGoingForDiploVictory()) && !bTheVeniceException)
+#else
 		if (GetDiplomacyAI()->IsGoingForDiploVictory() && !bTheVeniceException)
+#endif
 		{
 			eDirective = GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
 		}
@@ -1111,9 +1317,19 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveScientist(CvUnit* /*pGreatScie
 		eDirective = GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 	}
 
+#if defined(MOD_AI_SMART_V3)
+	// Go for improvement for third part of estimated game, no matter what.
+	int iDivisor = MOD_AI_SMART_V3 ? 3 : 4;
+	if(eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GC.getGame().getGameTurn() <= ((GC.getGame().getEstimateEndTurn() * 1) / iDivisor))
+#else
 	if(eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GC.getGame().getGameTurn() <= ((GC.getGame().getEstimateEndTurn() * 1) / 4))
+#endif
 	{
+#if defined(MOD_AI_SMART_V3)
+		if(MOD_AI_SMART_V3 || GetDiplomacyAI()->IsGoingForSpaceshipVictory())
+#else
 		if(GetDiplomacyAI()->IsGoingForSpaceshipVictory())
+#endif
 		{
 			eDirective = GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
 		}
@@ -1380,7 +1596,11 @@ CvPlot* CvPlayerAI::FindBestMusicianTargetPlot(CvUnit* pGreatMusician, bool bOnl
 	{
 		iBestTurnsToReach = MAX_INT;
 		CvPlot *pLoopPlot;
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		for(int iJ = 0; iJ < pBestTargetCity->GetNumWorkablePlots(); iJ++)
+#else
 		for(int iJ = 0; iJ < NUM_CITY_PLOTS; iJ++)
+#endif
 		{
 			pLoopPlot = plotCity(pBestTargetCity->getX(), pBestTargetCity->getY(), iJ);
 			if(pLoopPlot != NULL)

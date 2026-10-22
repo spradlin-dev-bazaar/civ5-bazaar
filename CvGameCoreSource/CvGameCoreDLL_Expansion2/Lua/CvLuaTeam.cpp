@@ -76,6 +76,9 @@ void CvLuaTeam::PushMethods(lua_State* L, int t)
 	Method(IsHuman);
 	Method(IsBarbarian);
 
+#if defined(MOD_API_LUA_EXTENSIONS)
+	Method(IsMajorCiv);
+#endif
 	Method(IsMinorCiv);
 	Method(IsMinorCivWarmonger);
 
@@ -126,6 +129,16 @@ void CvLuaTeam::PushMethods(lua_State* L, int t)
 	Method(GetPermanentAllianceTradingCount);
 	Method(IsPermanentAllianceTrading);
 	Method(ChangePermanentAllianceTradingCount);
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TECHS_CITY_WORKING)
+	Method(GetCityWorkingChange);
+	Method(IsCityWorkingChange);
+	Method(ChangeCityWorkingChange);
+#endif
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	Method(GetCityAutomatonWorkersChange);
+	Method(IsCityAutomatonWorkersChange);
+	Method(ChangeCityAutomatonWorkersChange);
+#endif
 	Method(GetBridgeBuildingCount);
 	Method(IsBridgeBuilding);
 	Method(ChangeBridgeBuildingCount);
@@ -161,6 +174,9 @@ void CvLuaTeam::PushMethods(lua_State* L, int t)
 	Method(GetKilledByTeam);
 
 	Method(HasEmbassyAtTeam);
+#if defined(MOD_API_LUA_EXTENSIONS)
+	Method(HasSpyAtTeam);
+#endif
 	Method(IsAllowsOpenBordersToTeam);
 	Method(IsForcePeace);
 	Method(IsDefensivePact);
@@ -270,21 +286,52 @@ int CvLuaTeam::lCanChangeWarPeace(lua_State* L)
 //bool canDeclareWar(TeamTypes eTeam);
 int CvLuaTeam::lCanDeclareWar(lua_State* L)
 {
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	CvTeam* pkTeam = GetInstance(L);
+	TeamTypes eOtherTeam = (TeamTypes)lua_tointeger(L, 2);
+	PlayerTypes eOriginatingPlayer = (PlayerTypes)luaL_optint(L, 3, -1);
+
+	const bool bCanDeclareWar = pkTeam->canDeclareWar(eOtherTeam, eOriginatingPlayer);
+	lua_pushboolean(L, bCanDeclareWar);
+	return 1;
+#else
 	return BasicLuaMethod(L, &CvTeam::canDeclareWar);
+#endif
 }
 
 //------------------------------------------------------------------------------
 //void declareWar(TeamTypes eTeam);
 int CvLuaTeam::lDeclareWar(lua_State* L)
 {
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	CvTeam* pkTeam = GetInstance(L);
+	TeamTypes eOtherTeam = (TeamTypes)lua_tointeger(L, 2);
+	const bool bDefensivePact = luaL_optbool(L, 3, false);
+	PlayerTypes eOriginatingPlayer = (PlayerTypes)luaL_optint(L, 4, -1);
+
+	pkTeam->declareWar(eOtherTeam, bDefensivePact, eOriginatingPlayer);
+	return 0;
+#else
 	return BasicLuaMethod(L, &CvTeam::declareWar);
+#endif
 }
 
 //------------------------------------------------------------------------------
 //void makePeace(TeamTypes eTeam);
 int CvLuaTeam::lMakePeace(lua_State* L)
 {
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	CvTeam* pkTeam = GetInstance(L);
+	TeamTypes eOtherTeam = (TeamTypes)lua_tointeger(L, 2);
+	const bool bBumpUnits = luaL_optbool(L, 3, true);
+	const bool bSuppressNotification = luaL_optbool(L, 4, false);
+	PlayerTypes eOriginatingPlayer = (PlayerTypes)luaL_optint(L, 5, -1);
+
+	pkTeam->makePeace(eOtherTeam, bBumpUnits, bSuppressNotification, eOriginatingPlayer);
+	return 0;
+#else
 	return BasicLuaMethod(L, &CvTeam::makePeace);
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -473,6 +520,15 @@ int CvLuaTeam::lIsBarbarian(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvTeam::isBarbarian);
 }
+
+#if defined(MOD_API_LUA_EXTENSIONS)
+//------------------------------------------------------------------------------
+//bool isMajorCiv();
+int CvLuaTeam::lIsMajorCiv(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::isMajorCiv);
+}
+#endif
 
 //------------------------------------------------------------------------------
 //bool isMinorCiv();
@@ -806,6 +862,52 @@ int CvLuaTeam::lChangePermanentAllianceTradingCount(lua_State* L)
 	return BasicLuaMethod(L, &CvTeam::changePermanentAllianceTradingCount);
 }
 
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TECHS_CITY_WORKING)
+//------------------------------------------------------------------------------
+//int getCityWorkingChange();
+int CvLuaTeam::lGetCityWorkingChange(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::GetCityWorkingChange);
+}
+
+//------------------------------------------------------------------------------
+//bool isCityWorkingChange();
+int CvLuaTeam::lIsCityWorkingChange(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::isCityWorkingChange);
+}
+
+//------------------------------------------------------------------------------
+//void changeCityWorkingChange(int iChange);
+int CvLuaTeam::lChangeCityWorkingChange(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::changeCityWorkingChange);
+}
+#endif
+
+#if defined(MOD_API_LUA_EXTENSIONS) && defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+//------------------------------------------------------------------------------
+//int getCityAutomatonWorkersChange();
+int CvLuaTeam::lGetCityAutomatonWorkersChange(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::GetCityAutomatonWorkersChange);
+}
+
+//------------------------------------------------------------------------------
+//bool isCityAutomatonWorkersChange();
+int CvLuaTeam::lIsCityAutomatonWorkersChange(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::isCityAutomatonWorkersChange);
+}
+
+//------------------------------------------------------------------------------
+//void changeCityAutomatonWorkersChange(int iChange);
+int CvLuaTeam::lChangeCityAutomatonWorkersChange(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::changeCityAutomatonWorkersChange);
+}
+#endif
+
 //------------------------------------------------------------------------------
 //int getBridgeBuildingCount();
 int CvLuaTeam::lGetBridgeBuildingCount(lua_State* L)
@@ -984,6 +1086,13 @@ int CvLuaTeam::lHasEmbassyAtTeam(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvTeam::HasEmbassyAtTeam);
 }
+#if defined(MOD_API_LUA_EXTENSIONS)
+//------------------------------------------------------------------------------
+int CvLuaTeam::lHasSpyAtTeam(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvTeam::HasSpyAtTeam);
+}
+#endif
 //------------------------------------------------------------------------------
 //bool isAllowsOpenBordersToTeam(TeamTypes eIndex);
 int CvLuaTeam::lIsAllowsOpenBordersToTeam(lua_State* L)
@@ -1157,8 +1266,20 @@ int CvLuaTeam::lSetHasTech(lua_State* L)
 	const TechTypes eIndex = (TechTypes)lua_tointeger(L, 2);
 	const bool bNewValue = lua_toboolean(L, 3);
 	const PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 4);
+
+#if defined(MOD_BUGFIX_LUA_API)
+	bool bFirst = lua_toboolean(L, 4);
+	bool bAnnounce = lua_toboolean(L, 5);
+
+	if (lua_gettop(L) == 6)
+	{
+		bFirst = lua_toboolean(L, 5);
+		bAnnounce = lua_toboolean(L, 6);
+	}
+#else
 	const bool bFirst = lua_toboolean(L, 4);
 	const bool bAnnounce = lua_toboolean(L, 5);
+#endif
 
 	pkTeam->setHasTech(eIndex, bNewValue, ePlayer, bFirst, bAnnounce);
 	return 0;

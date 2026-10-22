@@ -57,6 +57,12 @@ CvTechEntry::CvTechEntry(void):
 	m_bResearchAgreementTradingAllowed(false),
 	m_bTradeAgreementTradingAllowed(false),
 	m_bPermanentAllianceTrading(false),
+#if defined(MOD_TECHS_CITY_WORKING)
+	m_iCityWorkingChange(0),
+#endif
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	m_iCityAutomatonWorkersChange(0),
+#endif
 	m_bBridgeBuilding(false),
 	m_bWaterWork(false),
 	m_bTriggersArchaeologicalSites(false),
@@ -123,6 +129,12 @@ bool CvTechEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	m_bResearchAgreementTradingAllowed = kResults.GetBool("ResearchAgreementTradingAllowed");
 	m_bTradeAgreementTradingAllowed = kResults.GetBool("TradeAgreementTradingAllowed");
 	m_bPermanentAllianceTrading = kResults.GetBool("PermanentAllianceTradingAllowed");
+#if defined(MOD_TECHS_CITY_WORKING)
+	m_iCityWorkingChange = kResults.GetInt("CityWorkingChange");
+#endif
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	m_iCityAutomatonWorkersChange = kResults.GetInt("CityAutomatonWorkersChange");
+#endif
 	m_bBridgeBuilding = kResults.GetBool("BridgeBuilding");
 	m_bWaterWork = kResults.GetBool("WaterWork");
 	m_iGridX = kResults.GetInt("GridX");
@@ -443,6 +455,22 @@ bool CvTechEntry::IsPermanentAllianceTrading() const
 {
 	return m_bPermanentAllianceTrading;
 }
+
+#if defined(MOD_TECHS_CITY_WORKING)
+/// Change in number of rings a city can work
+int CvTechEntry::GetCityWorkingChange() const
+{
+	return m_iCityWorkingChange;
+}
+#endif
+
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+/// Change the number of automaton workers a city can have
+int CvTechEntry::GetCityAutomatonWorkersChange() const
+{
+	return m_iCityAutomatonWorkersChange;
+}
+#endif
 
 /// Are river crossings treated as bridges?
 bool CvTechEntry::IsBridgeBuilding() const
@@ -791,6 +819,7 @@ void CvPlayerTechs::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	// TODO: If m_pTechs is NULL then the stream will not be advanced causing errors to occur.
 	CvAssertMsg(m_pTechs != NULL && m_pTechs->GetNumTechs() > 0, "Number of techs to serialize is expected to greater than 0");
@@ -825,6 +854,7 @@ void CvPlayerTechs::Write(FDataStream& kStream)
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	// TODO: If m_pTechs is NULL then the stream will not advance
 	CvAssertMsg(m_pTechs != NULL && m_pTechs->GetNumTechs() > 0, "Number of techs to serialize is expected to greater than 0");
@@ -971,7 +1001,11 @@ void CvPlayerTechs::SetLocalePriorities()
 	for(pCity = m_pPlayer->firstCity(&iLoop); pCity != NULL; pCity = m_pPlayer->nextCity(&iLoop))
 	{
 		// Look at all Tiles this City could potentially work to see if there are any non-water resources that could be improved
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		for(int iPlotLoop = 0; iPlotLoop < pCity->GetNumWorkablePlots(); iPlotLoop++)
+#else
 		for(int iPlotLoop = 0; iPlotLoop < NUM_CITY_PLOTS; iPlotLoop++)
+#endif
 		{
 			CvPlot* pLoopPlot = plotCity(pCity->getX(), pCity->getY(), iPlotLoop);
 
@@ -981,7 +1015,15 @@ void CvPlayerTechs::SetLocalePriorities()
 
 				if(pLoopPlot->getOwner() == pCity->getOwner() || (iDistance <= 2 && pLoopPlot->getOwner() == NO_PLAYER))
 				{
+#if defined(MOD_AI_SMART_V3)
+					int multiplierValue = 1;
+#endif
+
+#if defined(MOD_AI_SMART_V3)
+					if(MOD_AI_SMART_V3 || !pLoopPlot->isWater())
+#else
 					if(!pLoopPlot->isWater())
+#endif
 					{
 						ResourceTypes eResource = pLoopPlot->getResourceType(m_pPlayer->getTeam());
 						if(eResource == NO_RESOURCE)
@@ -1003,13 +1045,35 @@ void CvPlayerTechs::SetLocalePriorities()
 								const ImprovementTypes eImprovement = (ImprovementTypes)pkBuildInfo->getImprovement();
 								if(eImprovement != NO_IMPROVEMENT)
 								{
-									CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
-									if(pkImprovementInfo && pkImprovementInfo->IsImprovementResourceTrade(eResource))
+#if defined(MOD_AI_SMART_V3)
+									if (MOD_AI_SMART_V3)
 									{
-										eCorrectBuild = eBuild;
-										eCorrectImprovement = eImprovement;
-										break;
+										if(pLoopPlot->canHaveImprovement(eImprovement))
+										{
+											CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
+											if (pkImprovementInfo && pkImprovementInfo->IsImprovementResourceTrade(eResource))
+											{
+												multiplierValue = 2;
+											}
+										
+											eCorrectBuild = eBuild;
+											eCorrectImprovement = eImprovement;
+											break;
+										}
 									}
+									else
+									{
+#endif
+										CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
+										if(pkImprovementInfo && pkImprovementInfo->IsImprovementResourceTrade(eResource))
+										{
+											eCorrectBuild = eBuild;
+											eCorrectImprovement = eImprovement;
+											break;
+										}
+#if defined(MOD_AI_SMART_V3)
+									}
+#endif
 								}
 							}
 						}
@@ -1029,8 +1093,23 @@ void CvPlayerTechs::SetLocalePriorities()
 							CvAssert(iTech < m_pTechs->GetNumTechs());		// Just assert on a value off the top end, a -1 is ok to just skip silently
 							if (iTech >= 0 && iTech < m_pTechs->GetNumTechs())
 							{
-								m_piLocaleTechPriority[iTech]++;
-								m_peLocaleTechResources[iTech] = eResource;
+#if defined(MOD_AI_SMART_V3)
+								if (MOD_AI_SMART_V3)
+								{
+									m_piLocaleTechPriority[iTech] += multiplierValue;
+									if (multiplierValue == 2)
+									{
+										m_peLocaleTechResources[iTech] = eResource;								
+									}
+								}
+								else
+								{
+#endif
+									m_piLocaleTechPriority[iTech]++;
+									m_peLocaleTechResources[iTech] = eResource;
+#if defined(MOD_AI_SMART_V3)
+								}
+#endif
 							}
 						}
 					}
@@ -1263,6 +1342,7 @@ bool CvPlayerTechs::IsNoResearchAvailable() const
 ///Check for Achievement
 void CvPlayerTechs::CheckForTechAchievement() const
 {
+#if !defined(NO_ACHIEVEMENTS)
 	if(m_pPlayer->isHuman() && !GC.getGame().isGameMultiPlayer())
 	{
 		//Check for Catherine Achievement
@@ -1324,6 +1404,7 @@ void CvPlayerTechs::CheckForTechAchievement() const
 			gDLL->UnlockAchievement(ACHIEVEMENT_ALL_TECHS);
 		}
 	}
+#endif
 }
 
 /// Accessor: How many turns of research left?
@@ -1344,7 +1425,11 @@ int CvPlayerTechs::GetResearchTurnsLeft(TechTypes eTech, bool bOverflow) const
 /// Accessor: How many turns of research left? (in hundredths)
 int CvPlayerTechs::GetResearchTurnsLeftTimes100(TechTypes eTech, bool bOverflow) const
 {
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+	long long iResearchRate;
+#else
 	int iResearchRate;
+#endif
 	int iOverflow;
 	int iTurnsLeft;
 	int iI;
@@ -1379,7 +1464,11 @@ int CvPlayerTechs::GetResearchTurnsLeftTimes100(TechTypes eTech, bool bOverflow)
 	// Get the team progress
 	int iResearchProgress = GET_TEAM(m_pPlayer->getTeam()).GetTeamTechs()->GetResearchProgress(eTech);
 	// Get the raw amount left
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+	long long iResearchLeft = std::max(0, (iResearchCost - iResearchProgress));
+#else
 	int iResearchLeft = std::max(0, (iResearchCost - iResearchProgress));
+#endif
 
 	// Removed any current overflow if requested.
 	if(bOverflow)
@@ -1389,7 +1478,11 @@ int CvPlayerTechs::GetResearchTurnsLeftTimes100(TechTypes eTech, bool bOverflow)
 
 	iResearchLeft *= 10000;
 
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+	iTurnsLeft = (int) (iResearchLeft / iResearchRate);
+#else
 	iTurnsLeft = (iResearchLeft / iResearchRate);
+#endif
 
 	if(iTurnsLeft * iResearchRate < iResearchLeft)
 	{
@@ -1427,7 +1520,12 @@ CvTechXMLEntries* CvPlayerTechs::GetTechs() const
 int CvPlayerTechs::GetResearchCost(TechTypes eTech) const
 {
 	// Get the research cost for the team
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+	// For late game eras with many cities, *10000 and *(100+iMod) in the code below can overflow a 32-bit int
+	long long iResearchCost = GET_TEAM(m_pPlayer->getTeam()).GetTeamTechs()->GetResearchCost(eTech);
+#else
 	int iResearchCost = GET_TEAM(m_pPlayer->getTeam()).GetTeamTechs()->GetResearchCost(eTech);
+#endif
 	
 	// Adjust to the player's research modifier
 	int iResearchMod = std::max(1, m_pPlayer->calculateResearchModifier(eTech));
@@ -1445,7 +1543,11 @@ int CvPlayerTechs::GetResearchCost(TechTypes eTech) const
 	else
 		iResearchCost = (iResearchCost / 100);
 
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+	return (int) iResearchCost;
+#else
 	return iResearchCost;
+#endif
 }
 
 //	----------------------------------------------------------------------------
@@ -1518,7 +1620,13 @@ void CvPlayerTechs::AddFlavorAsStrategies(int iPropagatePercent)
 	}
 
 	// Now populate the AI with the current flavor information
+#if defined(MOD_AI_SMART_V3)
+	int iDifficultyBonus = (200 - ((GC.getGame().getHandicapInfo().getAIGrowthPercent() + GC.getGame().getHandicapInfo().getAITrainPercent()) / 2));
+	int estimatedTurnsWithDiff = MOD_AI_SMART_V3 ? (GC.getGame().getDefaultEstimateEndTurn() * 90) / iDifficultyBonus : GC.getGame().getDefaultEstimateEndTurn();
+	int iGameProgressFactor = (GC.getGame().getElapsedGameTurns() * 1000) / estimatedTurnsWithDiff;
+#else
 	int iGameProgressFactor = (GC.getGame().getElapsedGameTurns() * 1000) / GC.getGame().getDefaultEstimateEndTurn();
+#endif
 	iGameProgressFactor = min(900,max(100,iGameProgressFactor));
 	for(int iFlavor = 0; iFlavor < GC.getNumFlavorTypes(); iFlavor++)
 	{
@@ -1527,11 +1635,25 @@ void CvPlayerTechs::AddFlavorAsStrategies(int iPropagatePercent)
 		// Scale the current to the same scale as the personality
 		iCurrentFlavorValue = (iCurrentFlavorValue * 10) / iBiggestFlavor;
 
+#if defined(MOD_AI_SMART_V3)
+		int iPersonalityFlavorValue = m_pPlayer->GetGrandStrategyAI()->GetPersonalityAndGrandStrategy((FlavorTypes) iFlavor, MOD_AI_SMART_V3 /*bBoostGSMainFlavor*/);
+#else
 		int iPersonalityFlavorValue = m_pPlayer->GetGrandStrategyAI()->GetPersonalityAndGrandStrategy((FlavorTypes) iFlavor);
+#endif
 
 		// this should give a more even blend between the personality and long term strategy and the more fickle current needs
 		// in the beginning of the game it will be responsive to current events, but later it should try to go for the goal more strongly
 		int iFlavorValue = ((iCurrentFlavorValue * (1000 - iGameProgressFactor)) + (iPersonalityFlavorValue * iGameProgressFactor)) / 1000;
+
+#if defined(MOD_AI_SMART_V3)
+		// Try always give a significant flavor, as is easily zeroed with previous computations...
+		if (MOD_AI_SMART_V3 && iFlavorValue < 10)
+		{
+			int flavorDivisor = (iGameProgressFactor > 500) ? 8 : 4;
+			int boostValue = (10 - iFlavorValue) / flavorDivisor;
+			iFlavorValue += boostValue;
+		}
+#endif
 
 		if(iFlavorValue > 0)
 		{
@@ -1745,6 +1867,7 @@ void CvTeamTechs::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	kStream >> m_eLastTechAcquired;
 
@@ -1777,6 +1900,7 @@ void CvTeamTechs::Write(FDataStream& kStream)
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	kStream << m_eLastTechAcquired;
 
@@ -1932,7 +2056,11 @@ void CvTeamTechs::SetResearchProgress(TechTypes eIndex, int iNewValue, PlayerTyp
 }
 
 /// Accessor: set research done on one tech (in hundredths)
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, PlayerTypes ePlayer, int iPlayerOverflow, int iPlayerOverflowDivisorTimes100)
+#else
 void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, PlayerTypes ePlayer)
+#endif
 {
 	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
 	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
@@ -1950,8 +2078,13 @@ void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, P
 			GC.GetEngineUserInterface()->setDirty(Score_DIRTY_BIT, true);
 		}
 
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+		long long iResearchProgress = GetResearchProgressTimes100(eIndex);
+		long long iResearchCost = GetResearchCost(eIndex) * 100;
+#else
 		int iResearchProgress = GetResearchProgressTimes100(eIndex);
 		int iResearchCost = GetResearchCost(eIndex) * 100;
+#endif
 
 		// Player modifiers to cost
 		int iResearchMod = std::max(1, GET_PLAYER(ePlayer).calculateResearchModifier(eIndex));
@@ -1960,8 +2093,15 @@ void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, P
 		iNumCitiesMod = iNumCitiesMod * GET_PLAYER(ePlayer).GetMaxEffectiveCities(/*bIncludePuppets*/ true);
 		iResearchCost = iResearchCost * (100 + iNumCitiesMod) / 100;
 		
+#if defined(MOD_BUGFIX_RESEARCH_NAN)
+		int iOverflow = (int) (iResearchProgress - iResearchCost);
+#else
 		int iOverflow = iResearchProgress - iResearchCost;
+#endif
 
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+		if (!MOD_BUGFIX_RESEARCH_OVERFLOW) {
+#endif
 		// April 2014 Balance Patch change - EFB
 		//    Don't allow the overflow to get out of hand
 		int iMaxOverflow = GetMaxResearchOverflow(eIndex, ePlayer);
@@ -1969,9 +2109,24 @@ void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, P
 		{
 			iOverflow = iMaxOverflow;
 		}
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+		}
+#endif
 
 		if(iOverflow >= 0)
 		{
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+			if (MOD_BUGFIX_RESEARCH_OVERFLOW) {
+				// iNewValue = iPlayerBeakersThisTurn + ((iPlayerOverflow * iPlayerOverflowDivisorTimes100) / 100)
+				if (iOverflow > iPlayerOverflow) {
+					// If we completed the tech using only iBeakersThisTurn, we need to hand back the remaining iPlayerBeakersThisTurn and the scaled down iPlayerOverflow
+					iOverflow = (iOverflow - iPlayerOverflow) + (iPlayerOverflow * 100 / iPlayerOverflowDivisorTimes100); 
+				} else {
+					// Otherwise we used all of iBeakersThisTurn and some of iPlayerOverflow, so we need to hand back the scaled down iOverflow
+					iOverflow = iOverflow * 100 / iPlayerOverflowDivisorTimes100;
+				}
+			}
+#endif
 			GET_PLAYER(ePlayer).changeOverflowResearchTimes100(iOverflow);
 			m_pTeam->setHasTech(eIndex, true, ePlayer, true, true);
 			SetNoTradeTech(eIndex, true);
@@ -2004,6 +2159,9 @@ void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, P
 /// Accessor: get research done on one tech
 int CvTeamTechs::GetResearchProgress(TechTypes eIndex) const
 {
+#if defined(MOD_BUGFIX_MINOR)
+	return GetResearchProgressTimes100(eIndex) / 100;
+#else
 	if(eIndex != NO_TECH)
 	{
 		return m_paiResearchProgress[eIndex] / 100;
@@ -2012,6 +2170,7 @@ int CvTeamTechs::GetResearchProgress(TechTypes eIndex) const
 	{
 		return 0;
 	}
+#endif
 }
 
 /// Accessor: get research done on one tech (in hundredths)
@@ -2082,9 +2241,17 @@ void CvTeamTechs::ChangeResearchProgress(TechTypes eIndex, int iChange, PlayerTy
 }
 
 /// Add an increment of research to a tech (in hundredths)
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+void CvTeamTechs::ChangeResearchProgressTimes100(TechTypes eIndex, int iChange, PlayerTypes ePlayer, int iPlayerOverflow, int iPlayerOverflowDivisorTimes100)
+#else
 void CvTeamTechs::ChangeResearchProgressTimes100(TechTypes eIndex, int iChange, PlayerTypes ePlayer)
+#endif
 {
+#if defined(MOD_BUGFIX_RESEARCH_OVERFLOW)
+	SetResearchProgressTimes100(eIndex, (GetResearchProgressTimes100(eIndex) + iChange), ePlayer, iPlayerOverflow, iPlayerOverflowDivisorTimes100);
+#else
 	SetResearchProgressTimes100(eIndex, (GetResearchProgressTimes100(eIndex) + iChange), ePlayer);
+#endif
 }
 
 /// Add research for a tech to a specified percent complete

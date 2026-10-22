@@ -16,6 +16,14 @@
 
 #define BULLY_DEBUGGING false
 
+#if defined(MOD_EVENTS_DIPLO_MODIFIERS)
+struct Opinion
+{
+	Localization::String m_str;
+	int m_iValue;
+};
+#endif
+
 struct DiploLogData
 {
 	DiploStatementTypes m_eDiploLogStatement;
@@ -51,6 +59,9 @@ FDataStream& operator>>(FDataStream&, DeclarationLogData&);
 class CvDiplomacyAI
 {
 public:
+#if defined(MOD_AI_MP_DIPLOMACY)
+	// DiplomacyPlayerType moved to CvEnums.h
+#else
 	enum DiplomacyPlayerType
 	{
 	    DIPLO_FIRST_PLAYER		=  0,
@@ -58,6 +69,7 @@ public:
 	    DIPLO_AI_PLAYERS		= -2,
 	    DIPLO_HUMAN_PLAYERS		= -3
 	};
+#endif
 
 	struct MinorGoldGiftInfo
 	{
@@ -87,7 +99,11 @@ public:
 	// Turn Stuff
 	/////////////////////////////////////////////////////////
 
+#if defined(MOD_AI_MP_DIPLOMACY)
+	void DoTurn(PlayerTypes eTargetPlayer, DiplomacyPlayerType eTargetPlayerType=DIPLO_FIRST_PLAYER);
+#else
 	void DoTurn(PlayerTypes eTargetPlayer);
+#endif
 	void DoCounters();
 
 	/////////////////////////////////////////////////////////
@@ -177,7 +193,6 @@ public:
 	/////////////////////////////////////////////////////////
 
 	void DoMakePeaceWithMinors();
-
 	void DoUpdatePeaceTreatyWillingness();
 
 	bool IsWillingToMakePeaceWithHuman(PlayerTypes ePlayer);
@@ -238,6 +253,9 @@ public:
 	void DoUpdateWarGoals();
 
 	// Num Turns At War
+#if defined(MOD_API_EXTENSIONS)
+	int GetTeamNumTurnsAtWar(TeamTypes eTeam) const;
+#endif
 	int GetPlayerNumTurnsAtWar(PlayerTypes ePlayer) const;
 	void SetPlayerNumTurnsAtWar(PlayerTypes ePlayer, int iValue);
 	void ChangePlayerNumTurnsAtWar(PlayerTypes ePlayer, int iChange);
@@ -528,7 +546,11 @@ public:
 
 	// Get the amount of warmonger hatred they generated
 	int GetOtherPlayerWarmongerAmount(PlayerTypes ePlayer);
+#if defined(MOD_API_EXTENSIONS)
+	void ChangeOtherPlayerWarmongerAmountTimes100(PlayerTypes ePlayer, int iChange);
+#else
 	void ChangeOtherPlayerWarmongerAmount(PlayerTypes ePlayer, int iChange);
+#endif
 	int GetOtherPlayerWarmongerScore(PlayerTypes ePlayer);
 
 	/////////////////////////////////////////////////////////
@@ -800,6 +822,18 @@ public:
 
 	//bool IsWorkingAgainstPlayer(PlayerTypes ePlayer);
 
+#if defined(MOD_DIPLOMACY_STFU)
+	bool WantAILeaderMessage(DiploMessageTypes eDiploMessage, PlayerTypes eFromPlayer, DiploUIStateTypes eDiploUIState, LeaderheadAnimationTypes eAction, int iExtraData);
+	void DisplayAILeaderMessage(PlayerTypes eFromPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void DisplayAILeaderMessage(PlayerTypes eFromPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, PlayerTypes eThirdParty, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void DisplayAILeaderMessage(PlayerTypes eFromPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, PlayerTypes eThirdParty, const Localization::String& strOptionalKey1, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void SendAILeaderMessage(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void SendAILeaderMessage(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, PlayerTypes eThirdParty, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void SendAILeaderMessage(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, PlayerTypes eThirdParty, const Localization::String& strOptionalKey1, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void SendAILeaderMessage(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, PlayerTypes eThirdParty, const Localization::String& strOptionalKey1, const Localization::String& strOptionalKey2, LeaderheadAnimationTypes eAction, int iExtraData = -1);
+	void SendAIDealRequest(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, CvDeal* pDeal, DiploUIStateTypes eDiploUIState, DiploMessageTypes eDiploMessage, LeaderheadAnimationTypes eAction);
+#endif
+
 	/////////////////////////////////////////////////////////
 	// A Player's adherence to statements made to this AI
 	/////////////////////////////////////////////////////////
@@ -998,6 +1032,9 @@ public:
 	int GetSupportedMyProposalScore(PlayerTypes ePlayer);
 	int GetFoiledMyProposalScore(PlayerTypes ePlayer);
 	int GetSupportedMyHostingScore(PlayerTypes ePlayer);
+#if defined(MOD_EVENTS_DIPLO_MODIFIERS)
+	int GetDiploModifiers(PlayerTypes ePlayer, std::vector<Opinion>& aOpinions);
+#endif
 	int GetScenarioModifier1(PlayerTypes ePlayer);
 	int GetScenarioModifier2(PlayerTypes ePlayer);
 	int GetScenarioModifier3(PlayerTypes ePlayer);
@@ -1031,6 +1068,9 @@ public:
 	void ChangeDiploLogStatementTurnForIndex(PlayerTypes ePlayer, int iIndex, int iChange);
 
 	int GetNumTurnsSinceStatementSent(PlayerTypes ePlayer, DiploStatementTypes eDiploLogStatement);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	int GetNumTurnsSinceSomethingSent(PlayerTypes ePlayer);
+#endif
 
 	// Minor Civ Log
 	void LogMinorCivGiftGold(PlayerTypes ePlayer, int iOldFriendship, int iGold, bool bSaving, bool bWantQuickBoost, PlayerTypes ePlayerTryingToPass);
@@ -1282,7 +1322,11 @@ private:
 		char m_aiOtherPlayerNumMajorsAttacked[MAX_MAJOR_CIVS];
 		char m_aiOtherPlayerNumMajorsConquered[MAX_MAJOR_CIVS];
 
+#if defined(MOD_API_EXTENSIONS)
+		int m_aiOtherPlayerWarmongerAmountTimes100[MAX_MAJOR_CIVS];
+#else
 		int m_aiOtherPlayerWarmongerAmount[MAX_MAJOR_CIVS];
+#endif
 
 		short m_aiOtherPlayerTurnsSinceWeLikedTheirProposal[MAX_MAJOR_CIVS];
 		short m_aiOtherPlayerTurnsSinceWeDislikedTheirProposal[MAX_MAJOR_CIVS];
@@ -1324,8 +1368,17 @@ private:
 
 		char m_aacCoopWarAcceptedState[MAX_MAJOR_CIVS* MAX_MAJOR_CIVS];
 		short m_aaiCoopWarCounter[MAX_MAJOR_CIVS* MAX_MAJOR_CIVS];
+
+#if defined(MOD_AI_MP_DIPLOMACY)
+		float m_aTradePriority[MAX_MAJOR_CIVS]; // current ai to human trade priority
+#endif
 	};
 	DiplomacyAIData* m_pDiploData;
+
+#if defined(MOD_DIPLOMACY_STFU)
+	Database::Results* m_pStfuResponseQuery;
+	Database::Results* m_pStfuQuery;
+#endif
 
 	// Scratch pad to keep track of Diplo Messages we've sent out in the past
 	short* m_paDiploLogStatementTurnCountScratchPad;
@@ -1407,7 +1460,6 @@ private:
 	bool* m_pabFriendDenouncedUs;
 	bool* m_pabFriendDeclaredWarOnUs;
 	short* m_paiDenouncedPlayerCounter;
-
 	short* m_paiNumRequestsRefused;
 
 	short* m_paiNumCiviliansReturnedToMe;
@@ -1520,7 +1572,11 @@ private:
 	char* m_paiOtherPlayerNumMinorsConquered;
 	char* m_paiOtherPlayerNumMajorsAttacked;
 	char* m_paiOtherPlayerNumMajorsConquered;
+#if defined(MOD_API_EXTENSIONS)
+	int*  m_paiOtherPlayerWarmongerAmountTimes100;
+#else
 	int*  m_paiOtherPlayerWarmongerAmount;
+#endif
 
 	short* m_paiOtherPlayerTurnsSinceWeLikedTheirProposal;
 	short* m_paiOtherPlayerTurnsSinceWeDislikedTheirProposal;
@@ -1541,20 +1597,36 @@ private:
 	typedef std::vector<PlayerTypes> PlayerTypesArray;
 	PlayerTypesArray	m_aGreetPlayers;
 
+#if defined(MOD_AI_MP_DIPLOMACY)
+	DiplomacyPlayerType m_eTargetPlayerType;
+#endif
 	PlayerTypes			m_eTargetPlayer;
 
 	// Data members for injecting test messages
 	PlayerTypes			m_eTestToPlayer;
 	DiploStatementTypes m_eTestStatement;
 	int					m_iTestStatementArg1;
+
+#if defined(MOD_AI_MP_DIPLOMACY)
+	// Greetings are send as Notifications immediately. No need to queue them
+	// Instead we need introduce a system to decide which players to do diplomacy with in simultaneous multiplayer:
+	void DoUpdateHumanTradePriority(PlayerTypes ePlayer, int iOpinionWeight);
+#endif
 };
 
 namespace CvDiplomacyAIHelpers
 {
+#if defined(MOD_CONFIG_AI_IN_XML)
+	int GetWarmongerOffset(PlayerTypes eOriginalOwner, bool bIsCapital);
+	CvString GetWarmongerPreviewString(PlayerTypes eCurrentOwner, bool bIsCapital);
+	CvString GetLiberationPreviewString(PlayerTypes eOriginalOwner, bool bIsCapital);
+	void ApplyWarmongerPenalties(PlayerTypes eConqueror, PlayerTypes eConquered, bool bIsCapital);
+#else
 	int GetWarmongerOffset(int iNumCitiesRemaining, bool bIsMinor);
 	CvString GetWarmongerPreviewString(PlayerTypes eCurrentOwner);
 	CvString GetLiberationPreviewString(PlayerTypes eOriginalOwner);
 	void ApplyWarmongerPenalties(PlayerTypes eConqueror, PlayerTypes eConquered);
+#endif
 }
 
 #endif //CIV5_AI_DIPLOMACY_H

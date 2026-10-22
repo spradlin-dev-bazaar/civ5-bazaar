@@ -183,6 +183,9 @@ public:
 		m_eArmyTypeBeingBuilt =  NO_ARMY_TYPE;
 	}
 	void DoTurn();
+#if defined(MOD_API_EXTENSIONS)
+	void UseStrategy(MilitaryAIStrategyTypes eStrategy, bool bUsingStrategy);
+#endif
 
 	DefenseState GetLandDefenseState() const
 	{
@@ -256,6 +259,9 @@ public:
 	};
 	UnitTypes GetUnitForArmy(CvCity* pCity) const;
 	bool WillAirUnitRebase(CvUnit* pUnit) const;
+#if defined(MOD_AI_SMART_V3)
+	int GetMaxPossibleInterceptions(CvPlot* pCenterPlot, bool bCountPercents = false) const;
+#endif
 	int GetNumEnemyAirUnitsInRange(CvPlot* pCenterPlot, int iRange, bool bCountFighters, bool bCountBombers) const;
 	CvPlot *GetBestAirSweepTarget(CvUnit* pFighter) const;
 
