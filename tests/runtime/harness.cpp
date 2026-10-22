@@ -65,18 +65,28 @@ static bool HasStatus(const char* fileName, CivPluginStatus status)
 	return rec && rec->status == status;
 }
 
-static bool LogHas(const char* text)
+static int LogIndex(const char* text)
 {
 	for (size_t i = 0; i < s_log.size(); ++i)
 		if (s_log[i].find(text) != std::string::npos)
-			return true;
-	return false;
+			return (int)i;
+	return -1;
+}
+
+static bool LogHas(const char* text)
+{
+	return LogIndex(text) >= 0;
+}
+
+static FARPROC ToyExport(const char* dll, const char* function)
+{
+	return GetProcAddress(GetModuleHandleA(Dll(dll).c_str()), function);
 }
 
 static int CallInt(const char* dll, const char* function, int fallback)
 {
 	typedef int (*Fn)();
-	Fn fn = (Fn)GetProcAddress(GetModuleHandleA(Dll(dll).c_str()), function);
+	Fn fn = (Fn)ToyExport(dll, function);
 	return fn ? fn() : fallback;
 }
 
@@ -110,6 +120,7 @@ static void TestLoading()
 	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_LOADED), "a current plugin loads");
 	Check(HasStatus("toy_second.dll", CIV_PLUGIN_LOADED), "a second plugin loads beside it");
 	Check(HasStatus("toy_newer.dll", CIV_PLUGIN_NEWER_API) && !Find("toy_newer.dll")->problems.empty(), "a plugin built for a newer host is refused, with a reason");
+	Check(LogHas("[Toy Newer] shutting down"), "a refused plugin is shut down before it is unloaded");
 	Check(HasStatus("toy_major.dll", CIV_PLUGIN_OTHER_MAJOR), "a plugin built for another major version is refused");
 	Check(HasStatus("toy_no_entry.dll", CIV_PLUGIN_NO_ENTRY), "a DLL without the entry point is refused");
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
@@ -117,6 +128,8 @@ static void TestLoading()
 	Check(HasStatus("toy_conflict.dll", CIV_PLUGIN_LOADED) && !Find("toy_conflict.dll")->problems.empty(), "a second replace of the same function is refused and recorded");
 	Check(CallInt("toy_conflict.dll", "ToyLastRegisterResult", -1) == CIV_HOOK_REPLACE_TAKEN, "the refused plugin is told why");
 	Check(LogHas("Toy Basic already replaces"), "the refusal names the plugin that holds the replacement");
+	Check(LogHas("Plugin Toy Conflict: Its replacement"), "the refusal names the refused plugin, though it is still loading");
+	Check(LogHas("[Toy Basic] starting"), "a plugin logging from its entry point is named in the log");
 	Check(CallInt("toy_basic.dll", "ToyRegisterLate", -1) == CIV_HOOK_NOT_ALLOWED, "registering after loading is refused");
 }
 
@@ -174,9 +187,8 @@ static void TestStrings()
 {
 	printf("\n-- strings and vectors across the boundary\n");
 	typedef void (*FillFn)(std::string&, std::vector<std::string>&);
-	HMODULE basic = GetModuleHandleA(Dll("toy_basic.dll").c_str());
-	FillFn fill = (FillFn)GetProcAddress(basic, "ToyFillStrings");
-	FillFn release = (FillFn)GetProcAddress(basic, "ToyReleaseStrings");
+	FillFn fill = (FillFn)ToyExport("toy_basic.dll", "ToyFillStrings");
+	FillFn release = (FillFn)ToyExport("toy_basic.dll", "ToyReleaseStrings");
 	Check(fill && release, "the test plugin's string helpers are present");
 	if (!fill || !release)
 		return;
@@ -191,6 +203,133 @@ static void TestStrings()
 	release(s2, v2);
 	Check(s2.empty() && v2.empty(), "a plugin frees memory the host allocated");
 	Check(_heapchk() == _HEAPOK, "the shared heap is intact afterwards");
+}
+
+static int s_addDuringShutdown = -1;
+
+static void AddDuringShutdown()
+{
+	FakeUnit unit;
+	s_addDuringShutdown = unit.add(2, 3);
+}
+
+static bool ChangePluginsNow()
+{
+	return CivHostSetPlugins(std::vector<std::string>()) != CIV_PLUGINS_BUSY;
+}
+
+typedef void (*VoidFn)();
+
+static void CallTwice()
+{
+	FakeUnit::Twice(2);
+}
+
+static void LoadEntryBreak()
+{
+	Load("toy_entry_break.dll");
+}
+
+// No C++ objects may live in this frame, or __try is not allowed.
+static bool BreaksOut(VoidFn fn)
+{
+	__try
+	{
+		fn();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		return true;
+	}
+	return false;
+}
+
+static void TestUnload()
+{
+	printf("\n-- unloading\n");
+	FakeUnit unit;
+	typedef void (*SetProbeFn)(VoidFn);
+	SetProbeFn setProbe = (SetProbeFn)ToyExport("toy_basic.dll", "ToySetShutdownProbe");
+	if (setProbe)
+		setProbe(&AddDuringShutdown);
+	VoidFn faultAgain = (VoidFn)ToyExport("toy_fault_before.dll", "ToyFaultOnShutdown");
+	if (faultAgain)
+		faultAgain();
+	const int faults = s_faults;
+	s_log.clear();
+	Check(CivHostUnloadPlugins() && CivHostPlugins().empty(), "plugins unload when none is running");
+	Check(s_addDuringShutdown == 5, "hooks are already removed while plugins shut down");
+	const int second = LogIndex("[Toy Second] shutting down");
+	Check(second >= 0 && second < LogIndex("[Toy Basic] shutting down"), "plugins shut down in reverse load order");
+	Check(unit.add(2, 3) == 5 && FakeUnit::Twice(2) == 4, "no hooks remain after unloading");
+	Check(!GetModuleHandleA(Dll("toy_basic.dll").c_str()), "an unloaded plugin's DLL is released");
+	Check(LogHas("[Toy Fault] shutting down") && !GetModuleHandleA(Dll("toy_fault.dll").c_str()),
+		"a plugin that faulted in a hook is still shut down, then released");
+	Check(LogHas("[Toy Entry Fault] shutting down") && !GetModuleHandleA(Dll("toy_entry_fault.dll").c_str()),
+		"so is a plugin that faulted while loading");
+	Check(s_faults == faults && GetModuleHandleA(Dll("toy_fault_before.dll").c_str()) != 0,
+		"a faulted plugin that faults again while shutting down stays in memory, without a second report");
+}
+
+static void TestPluginList()
+{
+	printf("\n-- changing the plugin list\n");
+	FakeUnit unit;
+	const char* names[] = {"toy_basic.dll", "toy_reentrant.dll", "toy_entry_fault.dll"};
+	std::vector<std::string> list, respelled, reversed;
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+	{
+		list.push_back(Dll(names[i]));
+		respelled.push_back(s_dir + ".\\" + names[i]);
+		reversed.insert(reversed.begin(), Dll(names[i]));
+	}
+
+	Check(CivHostSetPlugins(list) == CIV_PLUGINS_CHANGED, "a new plugin list is loaded");
+	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_LOADED) && unit.add(2, 3) == 105, "a plugin loads again after being unloaded");
+	unit.notify(5);
+	Check(unit.m_notified == 10 && Find("toy_basic.dll")->problems.empty(), "its replacement works again after the reload");
+	Check(HasStatus("toy_entry_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD), "a plugin that faulted and was released is loaded again, not refused");
+	s_log.clear();
+	Check(CivHostSetPlugins(respelled) == CIV_PLUGINS_UNCHANGED && !LogHas("shutting down"), "the same list, spelled differently, changes nothing");
+
+	typedef void (*SetHostCallFn)(bool (*)());
+	SetHostCallFn setHostCall = (SetHostCallFn)ToyExport("toy_reentrant.dll", "ToySetHostCall");
+	Check(setHostCall != 0, "the re-entry test plugin can be given a host call");
+	if (setHostCall)
+		setHostCall(&ChangePluginsNow);
+	FakeUnit::Twice(2);
+	Check(CallInt("toy_reentrant.dll", "ToyHostCallResult", -1) == 0 && CivHostPlugins().size() == 3 && !LogHas("shutting down"),
+		"the list cannot change while a plugin is running");
+
+	VoidFn breakOnNextCall = (VoidFn)ToyExport("toy_reentrant.dll", "ToyBreakOnNextCall");
+	if (breakOnNextCall)
+		breakOnNextCall();
+	Check(BreaksOut(&CallTwice), "an exception the host does not handle passes through to the caller");
+	const CivPluginListResult afterBreak = CivHostSetPlugins(reversed);
+	Check(afterBreak != CIV_PLUGINS_BUSY, "the list can still change after that exception");
+	Check(afterBreak == CIV_PLUGINS_CHANGED, "the same plugins in another order count as a change");
+
+	VoidFn faultOnShutdown = (VoidFn)ToyExport("toy_basic.dll", "ToyFaultOnShutdown");
+	if (faultOnShutdown)
+		faultOnShutdown();
+	const int faults = s_faults;
+	const std::vector<std::string> withoutBasic(1, Dll("toy_reentrant.dll"));
+	Check(CivHostSetPlugins(withoutBasic) == CIV_PLUGINS_CHANGED && s_faults == faults + 1 && GetModuleHandleA(Dll("toy_basic.dll").c_str()) != 0,
+		"a plugin whose shutdown faults is reported and stays in memory");
+	std::vector<std::string> withBasic;
+	withBasic.push_back(Dll("toy_conflict.dll"));
+	withBasic.push_back(Dll("toy_basic.dll"));
+	withBasic.push_back(Dll("toy_reentrant.dll"));
+	Check(CivHostSetPlugins(withBasic) == CIV_PLUGINS_CHANGED && HasStatus("toy_basic.dll", CIV_PLUGIN_STILL_IN_MEMORY)
+			&& Find("toy_basic.dll")->name == "Toy Basic" && HasStatus("toy_conflict.dll", CIV_PLUGIN_LOADED),
+		"it is refused by name when listed again, and the others load");
+	Check(CallInt("toy_basic.dll", "ToyRegisterLate", -1) == CIV_HOOK_NOT_ALLOWED,
+		"a plugin left in memory cannot register hooks, even while another plugin replaces the same function");
+
+	Check(BreaksOut(&LoadEntryBreak), "an exception the host does not handle passes out of a plugin's entry point");
+	Check(CallInt("toy_entry_break.dll", "ToyRegisterLate", -1) == CIV_HOOK_NOT_ALLOWED, "after that, the plugin no longer counts as loading");
+	Check(CivHostSetPlugins(withBasic) == CIV_PLUGINS_CHANGED && !GetModuleHandleA(Dll("toy_entry_break.dll").c_str()),
+		"the half-loaded plugin is unloaded at the next list change");
 }
 
 int main(int argc, char** argv)
@@ -208,6 +347,8 @@ int main(int argc, char** argv)
 	TestShapes();
 	TestQuarantine();
 	TestStrings();
+	TestUnload();
+	TestPluginList();
 
 	printf("\n-- cost per call (Square, %d calls each)\n", calls);
 	Load("toy_bench.dll");

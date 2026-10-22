@@ -36,6 +36,41 @@ TOY_EXPORT int ToyLastRegisterResult()
 	return s_lastRegisterResult;
 }
 
+static void ReplaceNothing(FakeUnit*, int)
+{
+}
+
+TOY_EXPORT int ToyRegisterLate()
+{
+	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
+}
+
+typedef void (*ProbeFn)();
+static ProbeFn s_shutdownProbe = 0;
+static bool s_faultOnShutdown = false;
+
+TOY_EXPORT void ToySetShutdownProbe(ProbeFn probe)
+{
+	s_shutdownProbe = probe;
+}
+
+TOY_EXPORT void ToyFaultOnShutdown()
+{
+	s_faultOnShutdown = true;
+}
+
+TOY_EXPORT void CivPluginShutdown()
+{
+	s_host->Log(s_host->pluginIndex, "shutting down");
+	if (s_shutdownProbe)
+		s_shutdownProbe();
+	if (s_faultOnShutdown)
+	{
+		int* volatile nowhere = 0;
+		*nowhere = 1;
+	}
+}
+
 #if defined(TOY_BASIC)
 
 static bool BeforeAdd(const FakeUnit*, int a, int, int& result)
@@ -70,16 +105,12 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	s_host->Log(s_host->pluginIndex, "starting");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
 	Register(CivHooks::FakeUnit_name::ID, CIV_HOOK_AFTER, (void*)&AfterName);
 	return true;
-}
-
-TOY_EXPORT int ToyRegisterLate()
-{
-	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 }
 
 TOY_EXPORT void ToyFillStrings(std::string& s, std::vector<std::string>& v)
@@ -253,6 +284,16 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return 10 / zero == 1;
 }
 
+#elif defined(TOY_ENTRY_BREAK)
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Entry Break", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	__debugbreak();
+	return true;
+}
+
 #elif defined(TOY_BENCH)
 
 static void AfterSquare(int, int&)
@@ -264,6 +305,47 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_host = host;
 	Describe(info, "Toy Bench", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	Register(CivHooks::Square::ID, CIV_HOOK_AFTER, (void*)&AfterSquare);
+	return true;
+}
+
+#elif defined(TOY_REENTRANT)
+
+typedef bool (*HostCallFn)();
+static HostCallFn s_hostCall = 0;
+static int s_hostCallResult = -1;
+static bool s_breakNextCall = false;
+
+static void AfterTwice(int, int&)
+{
+	if (s_breakNextCall)
+	{
+		s_breakNextCall = false;
+		__debugbreak();
+	}
+	if (s_hostCall)
+		s_hostCallResult = s_hostCall() ? 1 : 0;
+}
+
+TOY_EXPORT void ToySetHostCall(HostCallFn call)
+{
+	s_hostCall = call;
+}
+
+TOY_EXPORT int ToyHostCallResult()
+{
+	return s_hostCallResult;
+}
+
+TOY_EXPORT void ToyBreakOnNextCall()
+{
+	s_breakNextCall = true;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Reentrant", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
 	return true;
 }
 

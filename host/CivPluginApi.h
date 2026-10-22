@@ -39,5 +39,9 @@ struct CivPluginInfo
 };
 
 typedef bool (*CivPluginEntryFn)(const CivHostInfo* host, CivPluginInfo* plugin);
+typedef void (*CivPluginShutdownFn)();
 
 #define CIV_PLUGIN_ENTRY_NAME "CivPluginEntry"
+// Optional, for anything your plugin holds outside the host (threads, sockets, files); the host removes your hooks itself.
+// If your plugin crashes or is refused for any reason, it still needs to be shut down, so it needs to be able to shut down from a partially-loaded state.
+#define CIV_PLUGIN_SHUTDOWN_NAME "CivPluginShutdown"

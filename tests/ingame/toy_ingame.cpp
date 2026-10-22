@@ -65,6 +65,11 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
+TOY_EXPORT void CivPluginShutdown()
+{
+	Log("shutting down");
+}
+
 #elif defined(TOY_RIVAL)
 
 static int ReplaceScore(const CvPlayer*, bool, bool)

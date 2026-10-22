@@ -17,9 +17,18 @@ namespace
 		void* fn;
 	};
 
+	struct KeptPlugin
+	{
+		std::string path;
+		std::string name;
+	};
+
 	std::vector<CivPluginRecord> s_plugins;
 	std::vector<PendingHook> s_pending;
+	std::vector<KeptPlugin> s_kept;
 	int s_loadingPlugin = -1;
+	const CivPluginInfo* s_loadingInfo = 0;
+	int s_pluginCallDepth = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
 
@@ -46,6 +55,33 @@ namespace
 		return plugin >= 0 && plugin < (int)s_plugins.size() && !s_plugins[plugin].quarantined;
 	}
 
+	const char* FileName(const std::string& path)
+	{
+		return path.c_str() + (path.find_last_of("\\/") + 1);
+	}
+
+	bool SamePath(const std::string& a, const std::string& b)
+	{
+		return _stricmp(a.c_str(), b.c_str()) == 0;
+	}
+
+	std::string FullPath(const std::string& requested)
+	{
+		char full[MAX_PATH];
+		const DWORD length = GetFullPathNameA(requested.c_str(), MAX_PATH, full, 0);
+		return (length > 0 && length < MAX_PATH) ? std::string(full) : requested;
+	}
+
+	// A plugin registers and logs from its entry point, before the host has copied its name.
+	const char* DisplayName(int plugin)
+	{
+		if (plugin < 0 || plugin >= (int)s_plugins.size())
+			return "?";
+		if (plugin == s_loadingPlugin && s_loadingInfo->name && *s_loadingInfo->name)
+			return s_loadingInfo->name;
+		return s_plugins[plugin].name.c_str();
+	}
+
 	int FaultFilter(unsigned int code)
 	{
 		switch (code)
@@ -69,24 +105,35 @@ namespace
 	// No C++ objects may live in this frame, or __try is not allowed.
 	bool GuardedCall(CivHookThunk thunk, void* ctx, unsigned int* code)
 	{
+		bool ran = true;
+		++s_pluginCallDepth;
 		__try
 		{
-			thunk(ctx);
-			return true;
+			__try
+			{
+				thunk(ctx);
+			}
+			__except (FaultFilter(*code = GetExceptionCode()))
+			{
+				ran = false;
+			}
 		}
-		__except (FaultFilter(*code = GetExceptionCode()))
+		__finally
 		{
-			return false;
+			--s_pluginCallDepth;
 		}
+		if (!ran && *code == EXCEPTION_STACK_OVERFLOW)
+			_resetstkoflw();
+		return ran;
 	}
 
-	void Quarantine(int plugin, int hookId, unsigned int code)
+	void Quarantine(int plugin, int hookId, const char* where, unsigned int code)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
 		rec.quarantined = true;
 		char problem[512];
 		_snprintf_s(problem, sizeof(problem), _TRUNCATE,
-			"Faulted (code 0x%08X) in %s and was disabled for this session.", code, HookName(hookId));
+			"Faulted (code 0x%08X) in %s.", code, where);
 		rec.problems.push_back(problem);
 		Log("Plugin %s: %s", rec.name.c_str(), problem);
 		if (s_faultSink)
@@ -99,15 +146,13 @@ namespace
 		unsigned int code = 0;
 		if (GuardedCall(thunk, ctx, &code))
 			return true;
-		if (code == EXCEPTION_STACK_OVERFLOW)
-			_resetstkoflw();
-		Quarantine(e->plugin, hookId, code);
+		Quarantine(e->plugin, hookId, HookName(hookId), code);
 		return false;
 	}
 
 	int RegisterHook(int plugin, int hookId, int kind, void* fn)
 	{
-		if (plugin != s_loadingPlugin)
+		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
 			return CIV_HOOK_NOT_ALLOWED;
 		if (hookId < 0 || hookId >= g_CivHookPointCount || !fn)
 			return CIV_HOOK_BAD_ID;
@@ -127,7 +172,7 @@ namespace
 				_snprintf_s(problem, sizeof(problem), _TRUNCATE,
 					"Its replacement of %s was refused: %s already replaces it.", HookName(hookId), owner);
 				s_plugins[plugin].problems.push_back(problem);
-				Log("Plugin %s: %s", s_plugins[plugin].name.empty() ? s_plugins[plugin].path.c_str() : s_plugins[plugin].name.c_str(), problem);
+				Log("Plugin %s: %s", DisplayName(plugin), problem);
 				return CIV_HOOK_REPLACE_TAKEN;
 			}
 		}
@@ -169,8 +214,7 @@ namespace
 
 	void PluginLog(int plugin, const char* message)
 	{
-		const char* name = (plugin >= 0 && plugin < (int)s_plugins.size()) ? s_plugins[plugin].name.c_str() : "?";
-		Log("[%s] %s", name, message ? message : "");
+		Log("[%s] %s", DisplayName(plugin), message ? message : "");
 	}
 
 	struct EntryCall
@@ -187,15 +231,68 @@ namespace
 		c.accepted = c.entry(c.host, c.info);
 	}
 
-	std::string Copy(const char* s)
+	// No C++ objects may live in this frame, or __try is not allowed.
+	bool GuardedEntry(EntryCall* call, unsigned int* code)
 	{
-		return s ? std::string(s) : std::string();
+		bool ran = false;
+		s_loadingPlugin = call->host->pluginIndex;
+		s_loadingInfo = call->info;
+		__try
+		{
+			ran = GuardedCall(&EntryThunk, call, code);
+		}
+		__finally
+		{
+			s_loadingPlugin = -1;
+			s_loadingInfo = 0;
+		}
+		return ran;
+	}
+
+	void ShutdownThunk(void* p)
+	{
+		(*static_cast<CivPluginShutdownFn*>(p))();
+	}
+
+	bool ShutDownCleanly(int plugin)
+	{
+		const CivPluginRecord& rec = s_plugins[plugin];
+		CivPluginShutdownFn shutdown = (CivPluginShutdownFn)GetProcAddress((HMODULE)rec.module, CIV_PLUGIN_SHUTDOWN_NAME);
+		unsigned int code = 0;
+		if (!shutdown || GuardedCall(&ShutdownThunk, &shutdown, &code))
+			return true;
+		if (rec.quarantined)
+			Log("Plugin %s: Faulted (code 0x%08X) in its shutdown function.", rec.name.c_str(), code);
+		else
+			Quarantine(plugin, -1, "its shutdown function", code);
+		return false;
+	}
+
+	// A plugin whose shutdown faulted may still have threads or callbacks pointing into its DLL, so the DLL
+	// stays loaded and the plugin stays refused until Civilization V restarts.
+	void Unload(int plugin)
+	{
+		const bool clean = ShutDownCleanly(plugin);
+		CivPluginRecord& rec = s_plugins[plugin];
+		if (clean)
+		{
+			FreeLibrary((HMODULE)rec.module);
+			delete rec.host;
+			Log("Plugin %s unloaded.", rec.name.c_str());
+		}
+		else
+		{
+			rec.host->pluginIndex = -1;
+			KeptPlugin kept = { rec.path, rec.name };
+			s_kept.push_back(kept);
+			Log("Plugin %s stays in memory because its shutdown function faulted.", rec.name.c_str());
+		}
+		rec.module = 0;
+		rec.host = 0;
 	}
 
 	void Refuse(CivPluginRecord& rec, CivPluginStatus status, const std::string& problem)
 	{
-		if (rec.name.empty())
-			rec.name = rec.path.substr(rec.path.find_last_of("\\/") + 1);
 		rec.status = status;
 		rec.problems.push_back(problem);
 		Log("Plugin %s: %s", rec.name.c_str(), problem.c_str());
@@ -204,9 +301,17 @@ namespace
 	bool AlreadyListed(const std::string& path)
 	{
 		for (size_t i = 0; i < s_plugins.size(); ++i)
-			if (_stricmp(s_plugins[i].path.c_str(), path.c_str()) == 0)
+			if (SamePath(s_plugins[i].path, path))
 				return true;
 		return false;
+	}
+
+	const KeptPlugin* KeptInMemory(const std::string& path)
+	{
+		for (size_t i = 0; i < s_kept.size(); ++i)
+			if (SamePath(s_kept[i].path, path))
+				return &s_kept[i];
+		return 0;
 	}
 
 	std::string RefusalReason(bool accepted, const CivPluginInfo& info, CivPluginStatus* status)
@@ -236,21 +341,22 @@ namespace
 
 	void LoadOne(const std::string& requested)
 	{
-		char full[MAX_PATH];
-		const DWORD length = GetFullPathNameA(requested.c_str(), MAX_PATH, full, 0);
-		const std::string path = (length > 0 && length < MAX_PATH) ? std::string(full) : requested;
+		const std::string path = FullPath(requested);
 		const int index = (int)s_plugins.size();
 		CivPluginRecord blank;
 		blank.path = path;
-		blank.builtApiMajor = 0;
-		blank.builtApiMinor = 0;
-		blank.status = CIV_PLUGIN_FILE_NOT_LOADED;
-		blank.quarantined = false;
+		blank.name = FileName(path);
 		const bool duplicate = AlreadyListed(path);
 		s_plugins.push_back(blank);
 		if (duplicate)
 		{
 			Refuse(s_plugins[index], CIV_PLUGIN_DUPLICATE, "It is listed more than once; only the first listing was loaded.");
+			return;
+		}
+		if (const KeptPlugin* kept = KeptInMemory(path))
+		{
+			s_plugins[index].name = kept->name;
+			Refuse(s_plugins[index], CIV_PLUGIN_STILL_IN_MEMORY, "It stopped working earlier and could not be shut down safely, so it stays off until you restart Civilization V.");
 			return;
 		}
 
@@ -270,34 +376,32 @@ namespace
 			return;
 		}
 
-		// A loaded plugin may keep this pointer for the whole session.
+		// A plugin may keep this pointer for as long as its DLL is loaded.
 		CivHostInfo* host = new CivHostInfo;
 		host->apiMajor = CIV_HOST_API_MAJOR;
 		host->apiMinor = CIV_HOST_API_MINOR;
 		host->pluginIndex = index;
 		host->RegisterHook = &RegisterHook;
 		host->Log = &PluginLog;
+		s_plugins[index].module = module;
+		s_plugins[index].host = host;
 		CivPluginInfo info = { 0, 0, 0, 0 };
 		EntryCall call = { entry, host, &info, false };
 		s_pending.clear();
-		s_loadingPlugin = index;
 		unsigned int code = 0;
-		const bool ran = GuardedCall(&EntryThunk, &call, &code);
-		s_loadingPlugin = -1;
-		if (!ran && code == EXCEPTION_STACK_OVERFLOW)
-			_resetstkoflw();
+		const bool ran = GuardedEntry(&call, &code);
 
 		CivPluginRecord& rec = s_plugins[index];
-		rec.name = info.name ? Copy(info.name) : path;
-		rec.version = Copy(info.version);
+		if (info.name && *info.name)
+			rec.name = info.name;
+		rec.version = info.version ? info.version : "";
 		rec.builtApiMajor = info.builtApiMajor;
 		rec.builtApiMinor = info.builtApiMinor;
 
 		if (!ran)
 		{
-			// The module stays loaded: the fault may have left its code referenced elsewhere.
 			char problem[256];
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted while loading (code 0x%08X) and was disabled for this session.", code);
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "It stopped working while loading (code 0x%08X) and was turned off until you return to the main menu.", code);
 			s_pending.clear();
 			rec.quarantined = true;
 			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
@@ -309,13 +413,47 @@ namespace
 		{
 			s_pending.clear();
 			Refuse(rec, status, problem);
-			FreeLibrary(module);
-			delete host;
+			Unload(index);
 			return;
 		}
 		CommitPending(index);
 		rec.status = CIV_PLUGIN_LOADED;
 		Log("Plugin %s %s loaded (built for API %d.%d).", rec.name.c_str(), rec.version.c_str(), rec.builtApiMajor, rec.builtApiMinor);
+	}
+
+	void DeleteEntries(CivHookEntry* e)
+	{
+		while (e)
+		{
+			CivHookEntry* next = e->next;
+			delete e;
+			e = next;
+		}
+	}
+
+	void RemoveAllHooks()
+	{
+		for (int i = 0; i < g_CivHookPointCount; ++i)
+		{
+			CivHookPoint& hp = g_CivHookPoints[i];
+			if (!hp.active)
+				continue;
+			DeleteEntries(hp.before);
+			DeleteEntries(hp.after);
+			delete hp.replace;
+			hp.before = hp.after = hp.replace = 0;
+			hp.active = 0;
+		}
+	}
+
+	bool SameAsListed(const std::vector<std::string>& paths)
+	{
+		if (paths.size() != s_plugins.size())
+			return false;
+		for (size_t i = 0; i < paths.size(); ++i)
+			if (!SamePath(FullPath(paths[i]), s_plugins[i].path))
+				return false;
+		return true;
 	}
 }
 
@@ -367,4 +505,29 @@ void CivHostLoadPlugins(const std::vector<std::string>& paths)
 {
 	for (size_t i = 0; i < paths.size(); ++i)
 		LoadOne(paths[i]);
+}
+
+CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths)
+{
+	if (SameAsListed(paths))
+		return CIV_PLUGINS_UNCHANGED;
+	if (!CivHostUnloadPlugins())
+		return CIV_PLUGINS_BUSY;
+	if (!paths.empty())
+		Log("---- Loading plugins");
+	CivHostLoadPlugins(paths);
+	return CIV_PLUGINS_CHANGED;
+}
+
+bool CivHostUnloadPlugins()
+{
+	// A plugin call on the stack means its code, and the hook list that called it, are still in use.
+	if (s_pluginCallDepth > 0)
+		return false;
+	RemoveAllHooks();
+	for (size_t i = s_plugins.size(); i-- > 0;)
+		if (s_plugins[i].module)
+			Unload((int)i);
+	s_plugins.clear();
+	return true;
 }

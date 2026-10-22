@@ -110,8 +110,8 @@ Rules fixes currently inside the DLL that are **not** MCP:
 C++ exceptions are off in the host and in plugins; this uses Windows structured exception handling, which works without them. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
 
 - the host logs the plugin, the function and the stack, as the crash handler does today;
-- the plugin is quarantined for the rest of the session: none of its hooks run again;
-- an in-game notification names the plugin, says it was disabled for this session, and points to Mods > Plugins;
+- the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
+- an in-game notification names the plugin, says it is off until the player returns to the main menu, and points to Mods > Plugins;
 - the game keeps running.
 
 Known limit: a plugin that faulted halfway through a replace has left the original unrun and the state possibly half-changed. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
