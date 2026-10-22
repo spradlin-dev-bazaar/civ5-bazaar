@@ -68,3 +68,7 @@ Testing/
 .cache/
 
 !CvGameCoreSource/**/*.lib
+
+CvGameCoreSource/BuildOutput/
+CvGameCoreSource/BuildTemp/
+.venv/
