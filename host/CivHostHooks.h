@@ -11,7 +11,6 @@ struct CivHookEntry
 
 struct CivHookPoint
 {
-	int active;
 	CivHookEntry* before;
 	CivHookEntry* after;
 	CivHookEntry* replace;
@@ -27,6 +26,8 @@ struct CivHookCtx
 typedef void (*CivHookThunk)(void*);
 
 extern CivHookPoint g_CivHookPoints[];
+// One byte per hook point, apart from the hook lists, so the check every wrapper makes stays in cache.
+extern unsigned char g_CivHookActive[];
 extern const int g_CivHookPointCount;
 
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);

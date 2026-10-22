@@ -302,7 +302,7 @@ def wrapper_code(fn, data, src_path, exported):
     lines += thunk_lines(is_void, plugin_args)
     lines += hooked_lines(is_void, self_type, types, names, inner_call)
     lines.append("\t};")
-    lines.append("\tif (!g_CivHookPoints[%s].active)" % ID_PLACEHOLDER)
+    lines.append("\tif (!g_CivHookActive[%s])" % ID_PLACEHOLDER)
     lines.append("\t\treturn %s(%s);" % (orig_name(fn), ", ".join(names)))
     lines.append("\treturn civ_C::Hooked(%s);" % ", ".join((["this"] if self_type else []) + names))
     lines.append("}")
@@ -548,6 +548,7 @@ def write_table(project, registry):
         '#include "CivHostHooks.h"',
         "",
         "CivHookPoint g_CivHookPoints[%d];" % max(1, registry.count()),
+        "unsigned char g_CivHookActive[%d];" % max(1, registry.count()),
         "const int g_CivHookPointCount = %d;" % registry.count(),
         "",
         "extern const char* const g_CivHookPointNames[] =",

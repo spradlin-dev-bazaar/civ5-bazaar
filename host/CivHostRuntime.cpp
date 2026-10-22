@@ -207,7 +207,7 @@ namespace
 			{
 				hp.replace = e;
 			}
-			hp.active = 1;
+			g_CivHookActive[p.id] = 1;
 		}
 		s_pending.clear();
 	}
@@ -435,14 +435,14 @@ namespace
 	{
 		for (int i = 0; i < g_CivHookPointCount; ++i)
 		{
-			CivHookPoint& hp = g_CivHookPoints[i];
-			if (!hp.active)
+			if (!g_CivHookActive[i])
 				continue;
+			CivHookPoint& hp = g_CivHookPoints[i];
 			DeleteEntries(hp.before);
 			DeleteEntries(hp.after);
 			delete hp.replace;
 			hp.before = hp.after = hp.replace = 0;
-			hp.active = 0;
+			g_CivHookActive[i] = 0;
 		}
 	}
 
