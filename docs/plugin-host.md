@@ -43,7 +43,7 @@ VMC is built from the same 1.0.3.276 SDK source as the MCP DLL, with a VS2015 so
 
 ### 1. Everything exported, layouts frozen
 
-A plugin needs real access to players, units, cities, plots, deals, diplomacy, notifications and the globals (`GC`, `gDLL`). The host exports every engine class with one macro on the class declaration (`CIV_HOST_API`). Plugins link against the host's import library.
+A plugin needs real access to players, units, cities, plots, deals, diplomacy, notifications and the globals (`GC`, `gDLL`). The host exports every engine function defined in a source file. The build marks each one in its generated copy of the engine, so the committed engine files stay untouched; marking whole classes instead would make the compiler build member functions the game never uses, and some of those do not compile. Plugins link against the host's import library.
 
 The numbers allow it: 325 classes and roughly 10,900 out-of-line functions, against a limit of 65,535 exports per DLL. The build prints the count.
 
@@ -77,6 +77,8 @@ A hook is a list the host owns. At a hook point the host calls every plugin that
 
 Replace is exclusive: a second replace on a function that already has one is refused at load, logged with both plugin names, and shown on the Plugins screen. Before and after stack without limit. A replacement receives the original function as its first argument, so it can run the engine's own version and adjust around it, or ignore it and do the whole job itself.
 
+Each hook has a number from a committed list, tools/generator/hook-ids.txt. A number always means the same function, and new functions only add numbers at the end, so a plugin built against an older host keeps working on a newer one.
+
 The generator reads the headers and writes one wrapper per function with that function's real signature. It runs as part of every host build. Functions written in headers stay inline and are not hook points; the SDK lists them.
 
 Raw detouring is not used on host functions. It remains only for the closed executable, where the seat playback code already patches by pattern; that stays in the MCP plugin.
@@ -107,7 +109,7 @@ Rules fixes currently inside the DLL that are **not** MCP:
 
 ### 4. Failure containment
 
-C++ exceptions are off in the host and in plugins; this uses Windows structured exception handling, which works without them. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
+C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
 
 - the host logs the plugin, the function and the stack, as the crash handler does today;
 - the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
@@ -190,7 +192,7 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 ## Phases
 
 **P0 — proof of concept (days to two weeks).** In this repository, against the plain Firaxis source, before touching VMC. The first step imports the SDK source unchanged and adds a build script. P0's edits to engine files stay on a separate branch, so the main branch holds the Firaxis source unchanged until VMC is copied over it in P1; anything worth keeping, such as the generator and the build script, moves to the main branch. The rest:
-- export every class with the macro; build; read the export count;
+- export every engine function from the generated copy; build; read the export count;
 - write the generator and run it over the whole codebase; the exit is a clean build with every wrapper in place, which flushes out the awkward signatures (overloads, templates, default arguments, operators, the variadic random-number functions);
 - time an AI turn on the plain build and on the wrapped build, with Visual C++ 2008 and with Clang against the same 2008 binary interface (the Community Patch builds that way), and record the four numbers;
 - a toy plugin that reads a player's gold through the exports, registers a before-hook and an after-hook on one function, and replaces another; a second toy plugin that replaces the same function and is refused;
