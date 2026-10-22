@@ -4,7 +4,7 @@ call "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsvars32.
 set HERE=%~dp0
 set OUT=%HERE%out
 if not exist "%OUT%" mkdir "%OUT%"
-set FLAGS=/nologo /O2 /Oy /Ob2 /GS- /MD /EHsc /W3 /I"%HERE%..\..\host" /I"%HERE%."
+set FLAGS=/nologo /O2 /Oy /Ob2 /GS- /MD /EHsc /W3 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0 /I"%HERE%..\..\host" /I"%HERE%."
 
 cl %FLAGS% /Fo"%OUT%\\" /Fe"%OUT%\harness.exe" "%HERE%harness.cpp" "%HERE%fake_engine.cpp" "%HERE%..\..\host\CivHostRuntime.cpp" >"%OUT%\build.log"
 if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)

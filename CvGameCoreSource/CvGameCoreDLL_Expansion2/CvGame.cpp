@@ -10,6 +10,9 @@
 #include "CvGameCoreUtils.h"
 #include "CvInternalGameCoreUtils.h"
 #include "CvGame.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvMap.h"
 #include "CvPlot.h"
 #include "CvPlayerAI.h"
@@ -1416,6 +1419,9 @@ void CvGame::assignStartingPlots()
 //	---------------------------------------------------------------------------
 void CvGame::update()
 {
+#if defined(CIV_HOST_API)
+	CivHostOnGameUpdate();
+#endif
 	if(IsWaitingForBlockingInput())
 	{
 		if(!GC.GetEngineUserInterface()->isDiploActive())

@@ -426,15 +426,31 @@ def generate_project(hooked_sources):
 
     proj = re.sub(r'(AdditionalIncludeDirectories=")([^"]*)"', absolutize, proj)
     proj = re.sub(r'(AdditionalLibraryDirectories=")([^"]*)"', absolutize, proj)
-    proj = proj.replace('AdditionalIncludeDirectories="', 'AdditionalIncludeDirectories="&quot;%s&quot;;' % HOST_DIR, 1)
+    proj = proj.replace(
+        'AdditionalIncludeDirectories="',
+        'AdditionalIncludeDirectories="&quot;%s&quot;;&quot;%s&quot;;' % (HOST_DIR, MIRROR_ENGINE),
+        1,
+    )
+    # Plugins import from the host by its installed name, so the import library must carry it.
+    proj = proj.replace(
+        'OutputFile="$(OutDir)\\$(ProjectName)$(PlatformName)$(ConfigurationName).dll"',
+        'OutputFile="$(OutDir)\\CvGameCore_Expansion2.dll"',
+        1,
+    )
+    # The engine's PCH sets the two library-layout switches; files outside it must match or
+    # std::string and std::vector differ in size across the call.
     proj = proj.replace(
         'PreprocessorDefinitions="FXS_IS_DLL;',
-        'PreprocessorDefinitions="CIV_HOST_API=__declspec(dllexport);FXS_IS_DLL;',
+        'PreprocessorDefinitions="CIV_HOST_API=__declspec(dllexport);_SECURE_SCL=0;_HAS_ITERATOR_DEBUGGING=0;FXS_IS_DLL;',
         1,
     )
     proj = proj.replace('AdditionalOptions="/EHsc"', 'AdditionalOptions="/EHsc /MP /bigobj /wd4251 /wd4275"', 1)
     extra = []
-    for path in [os.path.join(HOST_DIR, "CivHostRuntime.cpp"), os.path.join(MIRROR_ENGINE, "CivHookTable.cpp")]:
+    for path in [
+        os.path.join(HOST_DIR, "CivHostRuntime.cpp"),
+        os.path.join(HOST_DIR, "CivHostEngine.cpp"),
+        os.path.join(MIRROR_ENGINE, "CivHookTable.cpp"),
+    ]:
         extra.append(
             '\t\t<File RelativePath="%s">\n'
             '\t\t\t<FileConfiguration Name="Mod|Win32">\n'
