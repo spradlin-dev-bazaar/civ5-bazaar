@@ -176,7 +176,8 @@ The documentation ships in the SDK and on a GitHub Pages site for each release.
 1. replace each engine edit with a hook registration from the table above;
 2. move the `CvLuaGame.cpp` methods into the plugin and register them through `RegisterLuaMethods`;
 3. keep the no-PCH drawing file's two defines in line with the SDK property sheet;
-4. package: `MCPServer.dll` under `plugins/`, `LLMLog.lua/.xml`, the `DllPlugins` XML row, the log window's UI entry point, the mod description.
+4. package: `MCPServer.dll` under `plugins/`, `LLMLog.lua/.xml`, the `DllPlugins` XML row, the log window's UI entry point, the mod description;
+5. rename everything named Claude (the folder, files, classes, log names and on-screen text) to neutral names, since the plugin works with any AI model.
 
 The seat/playback code pokes the game executable's memory by pattern scan; that stays in the plugin and needs nothing from the host.
 
