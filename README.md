@@ -30,7 +30,7 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 4. `tests\runtime\run.cmd` runs the automated tests, outside the game.
 5. `tests\ingame\package.py` lays out the host and the test plugins as mod folders in `tests\ingame\out\MODS`, ready to copy into the game's MODS folder.
 
-To measure how much the host slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and package with `package.py bench plain` or `package.py bench host`. Issue #3 has the results so far.
+To measure how much the host slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and package with `package.py bench plain` or `package.py bench host`. Issue #3 has the results so far. Until P1 this works only on the `p0` branch, which has the engine's call into the timer.
 
 ## Limits
 

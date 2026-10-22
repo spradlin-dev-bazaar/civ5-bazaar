@@ -7,9 +7,6 @@
 	------------------------------------------------------------------------------------------------------- */
 #include "CvGameCoreDLLPCH.h"
 #include "CvDllContext.h"
-#if defined(CIV_HOST_API)
-#include "CivHostEngine.h"
-#endif
 
 #include "CvDllBuildingInfo.h"
 #include "CvDllGame.h"
@@ -686,17 +683,10 @@ bool CvDllGameContext::GetHexDebugLayerString(ICvPlot1* pPlot, const char* szLay
 void CvDllGameContext::Init()
 {
 	GC.init();
-#if defined(CIV_HOST_API)
-	// CacheGameDatabaseData only reaches the host when it re-caches, which an Init without a database change skips.
-	CivHostOnDatabaseReady();
-#endif
 }
 //------------------------------------------------------------------------------
 void CvDllGameContext::Uninit()
 {
-#if defined(CIV_HOST_API)
-	CivHostOnEngineShutdown();
-#endif
 	GC.uninit();
 }
 //------------------------------------------------------------------------------

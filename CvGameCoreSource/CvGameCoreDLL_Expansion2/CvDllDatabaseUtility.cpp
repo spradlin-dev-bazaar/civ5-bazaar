@@ -16,9 +16,6 @@
 #include "CvGameCoreDLLPCH.h"
 #include <algorithm>
 #include "CvDLLDatabaseUtility.h"
-#if defined(CIV_HOST_API)
-#include "CivHostEngine.h"
-#endif
 #include "CvDllContext.h"
 #include "CvGlobals.h"
 #include "CvGrandStrategyAI.h"
@@ -183,9 +180,6 @@ bool CvDllDatabaseUtility::CacheGameDatabaseData()
 	if(bSuccess)
 		m_bGameDatabaseNeedsCaching = false;
 
-#if defined(CIV_HOST_API)
-	CivHostOnDatabaseReady();
-#endif
 	return bSuccess;
 }
 //------------------------------------------------------------------------------
