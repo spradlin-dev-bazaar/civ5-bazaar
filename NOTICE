@@ -1,7 +1,7 @@
 This repository contains code from three sources. The MIT licence in LICENSE covers only the third.
 
-1. Game source code from the Civilization V SDK, copyright Firaxis Games and Take-Two Interactive, all rights reserved. It is used under the SDK's terms for making mods and is not covered by the MIT licence. It is in CvGameCoreDLL_Expansion2/, along with the copy of the game's Mods menu in frontend/.
-2. whoward69's DLL-VMC changes to that source, used under his terms: he is credited, it is never sold or used to make money, and this mod has its own ID. Not covered by the MIT licence. It is in CvGameCoreDLL_Expansion2/.
+1. Game source code from the Civilization V SDK, copyright Firaxis Games and Take-Two Interactive, all rights reserved. It is used under the SDK's terms for making mods and is not covered by the MIT licence. It is in CvGameCoreSource/, along with the copy of the game's Mods menu in frontend/.
+2. whoward69's DLL-VMC changes to that source, used under his terms: he is credited, it is never sold or used to make money, and this mod has its own ID. Not covered by the MIT licence. It is in CvGameCoreSource/.
 3. This project's changes to those files, and everything else in this repository, written by spradlin-dev: MIT, see LICENSE. A changed file as a whole is still covered by 1 and 2.
 
 Because parts 1 and 2 may not be sold, the mod as a whole may not be sold either.
