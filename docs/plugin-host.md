@@ -9,7 +9,7 @@ The game loads exactly one rules DLL. Today that DLL is the Local MCP Server mod
 The goal is one **host DLL** that loads any number of **plugin DLLs**, each its own Workshop mod with its own intent:
 
 - the MCP server is a plugin, not part of the host;
-- rules fixes are their own plugins (or plain Lua mods on the host's hooks);
+- rules changes and bug fixes are their own plugins (or plain Lua mods on the host's hooks); the host adds none of its own beyond what VMC already carries;
 - other developers can write plugins against a documented SDK;
 - an existing DLL mod can become a plugin: each engine function it edited becomes a replacement registered by the plugin, with no change to the host;
 - a plugin built for an older host keeps running on a newer one.
@@ -100,11 +100,16 @@ Raw detouring is not used on host functions. It remains only for the closed exec
 | `CvDllContext` shutdown, `DllMain` crash-handler removal | plugin `Shutdown()` lifecycle call |
 | `CvLuaGame.cpp`: a dozen `Game.*` methods for the log window | `RegisterLuaMethods(lua_State*, table)` called when the host registers its own |
 
+**Replacements and the hooks inside them.** A replacement that does not call the original skips everything the original would have done: the hand-placed hooks inside it, and the hooks on every function it would have called. Replacing stays allowed, because turning an existing DLL mod into a plugin and fixing a bug inside a function both need it, and a veto skips the original in the same way. Instead, the host makes the skipping visible:
+
+- When one plugin replaces a function that contains a hand-placed hook another plugin uses, the host treats it as a possible conflict. The plugin that loads second is held back, and the log and the Plugins screen say why. The Plugins screen offers "use both anyway" for that pair, for when the replacement is known to call the original, and saves the choice with the load order.
+- The first time a replacement returns without calling the original, the host writes one line to its log naming the plugin and the function, so a developer looking for a hook that did not fire knows where to start.
+
 Rules fixes currently inside the DLL that are **not** MCP:
 
 | Fix | Where it goes |
 |---|---|
-| captured cities keep their seen-by flags (`CvPlayer::acquireCity`) | host, as a VMC-style switch (`MOD_BUGFIX_...`), default on |
+| captured cities keep their seen-by flags (`CvPlayer::acquireCity`) | its own plugin |
 | seat starting units re-dealt as a human's | MCP plugin (it is about seats) |
 
 ### 4. Failure containment
@@ -155,7 +160,7 @@ A folder shipped with each host release (also the thing other developers downloa
 - `docs/` the generated reference and the guide (the same as the documentation site);
 - `plugin-template/` a minimal plugin that registers one before-hook and one hand-placed hook and logs a line;
 - `plugin-template/` also carries the mod description with the host dependency declared and the SQL that creates the `DllPlugins` table if missing and inserts the plugin's row;
-- `README.md` how to build, how the mod folder must look, how the `DllPlugins` row is written, how a refusal shows up, and the rule of thumb: use a hand-placed hook if one fits, a generated before/after hook otherwise, a replace only when you must, and ask for a hand-placed hook when you find yourself replacing a function other plugins would also want.
+- `README.md` how to build, how the mod folder must look, how the `DllPlugins` row is written, how a refusal shows up, and the rule of thumb: use a hand-placed hook if one fits, a generated before/after hook otherwise, a replace only when you must (calling the original whenever you can), and ask for a hand-placed hook when you find yourself replacing a function other plugins would also want.
 
 ## Developer documentation
 
@@ -206,11 +211,11 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 - enable the toy plugin mod with the host mod disabled and see the Mods browser refuse it; then remove the dependency, start a vanilla game with the plugin mod enabled, and see the plugin do nothing and the database log stay clean.
 Exit: every item above seen working in a real game, and the timing numbers in this document.
 
-**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers and the generated reference), the exports, the hand-placed hook set above, failure containment, the Plugins screen, and the acquireCity fix as a switch. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
+**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers and the generated reference), the exports, the hand-placed hook set above, failure containment and the Plugins screen. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
-**P3 — the rest.** Explorer fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. A plugin-writing guide, the task-based guide, the class summaries, and the documentation site. First GitHub release of the host and SDK from this repository and of the MCP plugin from its own, and the Workshop pages.
+**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. A plugin-writing guide, the task-based guide, the class summaries, and the documentation site. First GitHub release of the host and SDK from this repository and of the MCP plugin from its own, and the Workshop pages.
 
 ## Risks
 
