@@ -168,19 +168,34 @@ A folder shipped with each host release (also the thing other developers downloa
 
 ## Developer documentation
 
-Plugin authors should not have to read the engine source to find where to hook. The documentation has two parts.
+Plugin authors should not have to read the engine source to find where to hook. The documentation is a site of plain web pages, built from the engine source and a few hand-written files. It has two parts.
 
-**Generated reference.** The hook generator already reads every function's signature, so it also writes a reference page for each function: its class and file, its signature, the before, after and replace hook signatures, and whether it is a hook point at all. Functions written in headers are marked as not hookable, with a pointer to their callers. Doxygen, run over the engine source as it stands, adds the list of functions that call each one (which tells a developer when a hook fires), search, cross-links, and any comments Firaxis left. Each page also lists the VMC Lua events fired inside that function, found by scanning function bodies for VMC's event calls, so a developer can see when a Lua mod would be enough.
+**Generated reference.** A docs step of its own, run by hand or when making a release but not on every build, uses the generator's reading of the engine to write one page per function. Each page shows:
+
+- the function's full code as Firaxis and VMC wrote it, so a developer sees what a replacement takes over. Pygments, a standard code-highlighting library, colours it when the pages are built, and parts that this build leaves out behind an `#if` are greyed out;
+- its class and file, its signature, and the before, after and replace hook signatures, or why it is not a hook point;
+- the functions it calls and the functions that call it, which tells a developer when a hook fires. Each call in the code links to the called function's page. A call to a virtual function links to the base version, whose page lists the classes that override it. Calls through function pointers, from Lua or from the game's own program cannot be seen;
+- the VMC Lua events fired inside it, so a developer can see when a Lua mod would be enough;
+- the hand-placed hooks inside it, with the lines where they fire marked, and a reminder that a replacement that does not run the original stops them;
+- the release it was added in, and any releases its code changed in.
+
+Functions written in headers are not hook points; each gets a page saying so, with its callers.
+
+The pages form one tree: folder, file, class, function. Every class sits in one file, and a function outside any class sits directly under its file. Each page shows its place in the tree as a fixed trail of links, and each folder, file and class has a page listing what is in it. A search box reads a generated list of every name.
+
+Each hand-placed hook gets a page too: its section of docs/hand-placed-hooks.md, plus every place in the engine that calls it. One page lists them all.
+
+**Versions.** At each release, the docs step takes a fingerprint of every function's code, ignoring spaces and comments, and compares it with the list saved at the previous release in `tools/generator/function-history.txt`. The list also records which hand-placed hooks each function contains. A function not on the list is marked as added in this release. A function whose fingerprint changed is marked as changed in it; the mark names any hand-placed hook that was added and links to GitHub's line-by-line history of the function at that release. Then the step saves the new list. Only a release updates the list, so unreleased work is never marked; the first release is the starting point and marks nothing. Bazaar adds no fixes, so an engine function rarely changes, and usually only because a hand-placed hook went into it. That is the change a developer most needs to see, because a replacement copied from an older release would stop the new hook.
 
 **Written by hand.**
 
-- a description of each hand-placed hook, written when the hook is added;
+- a description of each hand-placed hook in docs/hand-placed-hooks.md, written when the hook is added;
 - a task-based guide as the front page: common goals ("change combat odds", "react to a city being captured"), each pointing to the hooks that serve it; it starts with the common needs and grows over time;
 - a short summary of each main class (player, city, unit, plot, deals, diplomacy): what it owns and where to look.
 
 Functions are not described in bulk; a function with no hand-written description shows only its generated facts. Because function meanings are frozen, hand-written descriptions never go out of date.
 
-The documentation ships in the SDK and on a GitHub Pages site for each release.
+**Where it is built and published.** The generator needs Visual C++ 2008's header files to read the engine, and GitHub's build machines do not have them. So the docs are built on the developer's machine when making a release, and go into the SDK zip attached to the GitHub release. A GitHub Action then takes the docs out of that zip and publishes them on the project's GitHub Pages site; no generated page is committed to the repository. The site shows the latest release, and each SDK zip carries the docs for its own release. Because host builds only add, the latest docs also hold for plugins built against older releases. Every page shows Firaxis's copyright line and links to NOTICE, since it shows their code. The GitHub wiki is not used: it takes only Markdown, cannot run the site's own styles or search, and has no build step.
 
 ## The MCP plugin
 
@@ -215,7 +230,7 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 - enable the toy plugin mod with the host mod disabled and see the Mods browser refuse it; then remove the dependency, start a vanilla game with the plugin mod enabled, and see the plugin do nothing and the database log stay clean.
 Exit: every item above seen working in a real game, and the timing numbers in this document.
 
-**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers and the generated reference), the exports, the hand-placed hook set above, failure containment and the Plugins screen. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
+**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers), the docs step (writing the generated reference), the exports, the hand-placed hook set above, failure containment and the Plugins screen. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
