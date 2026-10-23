@@ -1,4 +1,4 @@
-# Plugin host: one DLL, many plugin DLLs
+# Bazaar Multi-DLL Mod Loader: one DLL, many plugin DLLs
 
 Status: planned 2026-10-19, reworked 2026-10-21. P0, the proof of concept, was finished on 2026-10-22: the generator, the hooked host, plugin loading and unloading and crash handling all work in the game with small test plugins. The calls from the engine into the host stay on the p0 branch until P1. The Plugins screen and everything from P1 on are not built yet. Anything else in this document is a plan unless a section says otherwise.
 

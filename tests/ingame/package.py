@@ -26,6 +26,7 @@ CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
 PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
 
 HOST_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
+HOST_NAME = "Bazaar Multi-DLL Mod Loader"
 BENCH_ID = "d9b32c9d-2f72-42f0-b53e-50b86d1ed3c7"
 BENCH_DLLS = {
     "plain": os.path.join(PLAIN_OUT, "CvGameCoreDLL_Expansion2Win32Mod.dll"),
@@ -119,10 +120,10 @@ def write_toy_mod(dll_name, mod_name, mod_id):
         f.write("INSERT INTO DllPlugins (File, ApiMajor, ApiMinor) VALUES ('%s', 0, 1);\n" % dll)
     with open(os.path.join(folder, "%s (v 1).modinfo" % mod_name), "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % mod_id)
-        f.write(PROPERTIES.format(name=mod_name, teaser="Test plugin for the Civ Plugin Host.", affects=0))
+        f.write(PROPERTIES.format(name=mod_name, teaser="Test plugin for the %s." % HOST_NAME, affects=0))
         f.write("  <Dependencies>\n")
         f.write('    <Dlc id="%s" minversion="0" maxversion="999" />\n' % BNW_DLC)
-        f.write('    <Mod id="%s" minversion="0" maxversion="999" title="Civ Plugin Host" />\n' % HOST_ID)
+        f.write('    <Mod id="%s" minversion="0" maxversion="999" title="%s" />\n' % (HOST_ID, HOST_NAME))
         f.write("  </Dependencies>\n  <References />\n  <Blocks />\n  <Files>\n")
         f.write('    <File md5="%s" import="0">%s</File>\n' % (md5(os.path.join(folder, dll)), dll))
         f.write('    <File md5="%s" import="0">%s</File>\n' % (md5(os.path.join(folder, sql)), sql))
@@ -198,9 +199,9 @@ def main(args):
             return 1
         print("built", dll_name + ".dll")
     write_dll_mod(
-        "Civ Plugin Host",
+        HOST_NAME,
         HOST_ID,
-        "P0 test build of the plugin host.",
+        "Test build of the %s." % HOST_NAME,
         os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"),
     )
     for _, dll_name, mod_name, mod_id in TOYS:

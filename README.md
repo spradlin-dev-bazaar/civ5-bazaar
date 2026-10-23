@@ -1,4 +1,4 @@
-# Civ5 Plugin Host
+# Bazaar Multi-DLL Mod Loader
 
 A DLL mod for Civilization V: Brave New World that lets you run more than one DLL mod at a time.
 

@@ -108,7 +108,7 @@ void CivHostOnDatabaseReady()
 	}
 	if (!files.empty() && UserFolder().empty())
 	{
-		Notify("Plugins not loaded", "The plugin host could not find your Documents folder, so it could not look for plugins.");
+		Notify("Plugins not loaded", "Bazaar could not find your Documents folder, so it could not look for plugins.");
 		return;
 	}
 
