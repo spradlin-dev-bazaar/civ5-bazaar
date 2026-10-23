@@ -3,6 +3,8 @@
 #include "CivPluginApi.h"
 #include "fake_engine.h"
 
+#include <stdio.h>
+
 #include <string>
 #include <vector>
 
@@ -10,7 +12,6 @@
 
 static const CivHostInfo* s_host = 0;
 static int s_beforeCalls = 0;
-static int s_lastRegisterResult = -1;
 
 static void Describe(CivPluginInfo* info, const char* name, int major, int minor)
 {
@@ -22,18 +23,12 @@ static void Describe(CivPluginInfo* info, const char* name, int major, int minor
 
 static int Register(int hookId, int kind, void* fn)
 {
-	s_lastRegisterResult = s_host->RegisterHook(s_host->pluginIndex, hookId, kind, fn);
-	return s_lastRegisterResult;
+	return s_host->RegisterHook(s_host->pluginIndex, hookId, kind, fn);
 }
 
 TOY_EXPORT int ToyBeforeCalls()
 {
 	return s_beforeCalls;
-}
-
-TOY_EXPORT int ToyLastRegisterResult()
-{
-	return s_lastRegisterResult;
 }
 
 typedef void (*NotifyFn)(FakeUnit*, int);
@@ -151,6 +146,11 @@ static int ReplaceSubtract(int (*original)(const FakeUnit*, int, int), const Fak
 	return original(self, a, b) * 10;
 }
 
+static int ReplaceGrow(int (*original)(const FakeUnit*, int), const FakeUnit* self, int x)
+{
+	return original(self, x) + 100;
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
@@ -158,6 +158,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_REPLACE, (void*)&ReplaceSubtract);
+	Register(CivHooks::FakeUnit_Grow::ID, CIV_HOOK_REPLACE, (void*)&ReplaceGrow);
 	return true;
 }
 
@@ -240,11 +241,25 @@ static void ReplaceNotify(NotifyFn, FakeUnit* self, int amount)
 	self->m_notified -= amount;
 }
 
+static void AfterAdd(const FakeUnit*, int, int, int& result)
+{
+	result += 1000000;
+}
+
+static int ReplaceGrow(int (*)(const FakeUnit*, int), const FakeUnit*, int)
+{
+	return -1;
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Conflict", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	Register(CivHooks::FakeUnit_Grow::ID, CIV_HOOK_REPLACE, (void*)&ReplaceGrow);
+	char line[64];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "replace result %d", Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify));
+	s_host->Log(s_host->pluginIndex, line);
 	return true;
 }
 

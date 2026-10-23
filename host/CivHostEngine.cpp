@@ -2,9 +2,13 @@
 #include "CvNotifications.h"
 
 #include "CivHostEngine.h"
+#include "CivHostOrder.h"
 #include "CivHostRuntime.h"
+#include "CivHostSetup.h"
 
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
 
 // shlobj.h does not compile under the engine's trimmed windows.h, so declare the one call we need.
 extern "C" __declspec(dllimport) HRESULT __stdcall SHGetFolderPathA(HWND, int, HANDLE, DWORD, LPSTR);
@@ -31,6 +35,8 @@ namespace
 
 	void LogLine(const char* line)
 	{
+		if (UserFolder().empty())
+			return;
 		FILE* f = 0;
 		if (fopen_s(&f, (UserFolder() + "\\Logs\\Bazaar.log").c_str(), "a") == 0 && f)
 		{
@@ -69,6 +75,13 @@ namespace
 		s_pendingNotices.push_back(std::make_pair(summary, message));
 	}
 
+	void DropNotices(const std::string& summary)
+	{
+		for (size_t i = s_pendingNotices.size(); i-- > 0;)
+			if (s_pendingNotices[i].first == summary)
+				s_pendingNotices.erase(s_pendingNotices.begin() + i);
+	}
+
 	void OnFault(int, const char* name, int hookId, unsigned int)
 	{
 		if (hookId < 0)
@@ -77,12 +90,15 @@ namespace
 			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
 	}
 
-	const char* const kFileNotFound = "The file was not found in the MODS folder.";
+	const char* const kPluginProblem = "Plugin problem";
+	const char* const kPluginMissing = "Plugin missing";
 	const char* const kNoDocuments = "Bazaar could not find your Documents folder, so it could not look for plugins.";
 	const char* const kListUnreadable = "Bazaar could not read the list of plugins, so any plugins already loaded were left as they were.";
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
+	const char* const kNotSaved = "Bazaar could not save your plugin order, so the old order comes back when a game starts. Details are in Logs\\Bazaar.log.";
 
-	std::vector<CivPluginReportRow> ReportRows(const char* warning, const std::vector<std::string>& missing = std::vector<std::string>())
+	// A row with no file is Bazaar's own note, which the Plugins screen keeps at the top.
+	std::vector<CivPluginReportRow> WithNote(const char* warning, const std::vector<CivPluginReportRow>& plugins)
 	{
 		std::vector<CivPluginReportRow> rows;
 		if (warning)
@@ -93,18 +109,7 @@ namespace
 			note.problems = warning;
 			rows.push_back(note);
 		}
-		const std::vector<CivPluginReportRow> plugins = CivHostReportRows();
 		rows.insert(rows.end(), plugins.begin(), plugins.end());
-		for (size_t i = 0; i < missing.size(); ++i)
-		{
-			CivPluginReportRow row;
-			row.file = missing[i];
-			row.name = missing[i];
-			row.status = CIV_REPORT_NOT_LOADED;
-			row.problems = kFileNotFound;
-			row.failed = true;
-			rows.push_back(row);
-		}
 		return rows;
 	}
 
@@ -112,8 +117,8 @@ namespace
 	{
 		Database::Results insert;
 		if (!DB.Execute("DROP TABLE IF EXISTS BazaarPlugins")
-			|| !DB.Execute("CREATE TABLE BazaarPlugins (Position INTEGER, File TEXT, Name TEXT, Version TEXT, Status TEXT, Problems TEXT, Failed INTEGER)")
-			|| !DB.Execute(insert, "INSERT INTO BazaarPlugins (Position, File, Name, Version, Status, Problems, Failed) VALUES (?, ?, ?, ?, ?, ?, ?)"))
+			|| !DB.Execute("CREATE TABLE BazaarPlugins (Position INTEGER, File TEXT, Name TEXT, Version TEXT, Status TEXT, Problems TEXT, Failed INTEGER, Skipped INTEGER)")
+			|| !DB.Execute(insert, "INSERT INTO BazaarPlugins (Position, File, Name, Version, Status, Problems, Failed, Skipped) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
 			return false;
 		for (size_t i = 0; i < rows.size(); ++i)
 		{
@@ -124,6 +129,7 @@ namespace
 			insert.Bind(5, rows[i].status.c_str());
 			insert.Bind(6, rows[i].problems.c_str());
 			insert.Bind(7, rows[i].failed ? 1 : 0);
+			insert.Bind(8, rows[i].skipped ? 1 : 0);
 			insert.Execute();
 			insert.Reset();
 		}
@@ -131,7 +137,7 @@ namespace
 		return DB.Execute(count, "SELECT COUNT(*) FROM BazaarPlugins") && count.Step() && count.GetInt(0) == (int)rows.size();
 	}
 
-	// Read by the Plugins screen (frontend/BazaarPlugins.lua). Rebuilt on every call, because the game may have rebuilt its database.
+	// Read by the Plugins screen (frontend/AdvancedSetup.lua). Rebuilt on every call, because the game may have rebuilt its database.
 	void WritePluginReport(const std::vector<CivPluginReportRow>& rows)
 	{
 		DB.BeginTransaction();
@@ -162,62 +168,282 @@ namespace
 		}
 		return true;
 	}
-}
 
-void CivHostOnDatabaseReady()
-{
-	std::vector<std::string> files;
-	if (!ListedPluginFiles(&files))
+	std::string OrderFile()
 	{
-		LogLine("Could not read the DllPlugins table, so the plugins were left as they were.");
-		WritePluginReport(ReportRows(kListUnreadable));
-		return;
-	}
-	if (!files.empty() && UserFolder().empty())
-	{
-		Notify("Plugins not loaded", kNoDocuments);
-		WritePluginReport(ReportRows(kNoDocuments));
-		return;
+		return UserFolder() + "\\ModUserData\\Bazaar plugin order.txt";
 	}
 
-	std::vector<std::string> paths;
-	std::vector<std::string> missing;
-	for (size_t i = 0; i < files.size(); ++i)
+	std::vector<CivOrderEntry> SavedOrder()
 	{
-		std::string path;
-		if (FindFile(UserFolder() + "\\MODS", files[i], 3, &path))
-			paths.push_back(path);
-		else
-			missing.push_back(files[i]);
+		if (UserFolder().empty())
+			return std::vector<CivOrderEntry>();
+		FILE* f = 0;
+		const errno_t error = fopen_s(&f, OrderFile().c_str(), "rb");
+		if (error != 0 || !f)
+		{
+			if (error != ENOENT)
+				LogLine(("Could not read " + OrderFile() + ", so the plugins load in the order the mods list them.").c_str());
+			return std::vector<CivOrderEntry>();
+		}
+		std::string text;
+		char buffer[4096];
+		for (size_t n; (n = fread(buffer, 1, sizeof(buffer), f)) > 0;)
+			text.append(buffer, n);
+		fclose(f);
+		return CivParseOrder(text);
 	}
-	if (missing != s_reportedMissing)
+
+	// Written beside the old file and then moved over it, so a failed write never leaves half an order.
+	bool SaveOrder(const std::vector<CivOrderEntry>& order)
 	{
+		if (UserFolder().empty())
+			return false;
+		CreateDirectoryA((UserFolder() + "\\ModUserData").c_str(), NULL);
+		const std::string path = OrderFile();
+		const std::string temp = path + ".new";
+		const std::string text = CivFormatOrder(order);
+		FILE* f = 0;
+		bool saved = fopen_s(&f, temp.c_str(), "wb") == 0 && f;
+		if (saved)
+		{
+			saved = fwrite(text.data(), 1, text.size(), f) == text.size();
+			saved = fclose(f) == 0 && saved;
+		}
+		saved = saved && MoveFileExA(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+		if (!saved)
+			LogLine(("Could not save the plugin order to " + path + ".").c_str());
+		return saved;
+	}
+
+	// Waiting notices about files that were missing before are replaced, so a file still missing is named once.
+	void NotifyMissing(const std::vector<std::string>& missing)
+	{
+		if (missing == s_reportedMissing)
+			return;
+		DropNotices(kPluginMissing);
 		for (size_t i = 0; i < missing.size(); ++i)
 		{
-			const std::string line = missing[i] + ": " + kFileNotFound;
+			const std::string line = missing[i] + ": " + CIV_REPORT_FILE_NOT_FOUND;
 			LogLine(line.c_str());
-			Notify("Plugin missing", line);
+			Notify(kPluginMissing, line);
 		}
 		s_reportedMissing = missing;
 	}
 
-	CivHostSetLogSink(&LogLine);
-	CivHostSetFaultSink(&OnFault);
-	const CivPluginListResult result = CivHostSetPlugins(paths);
-	if (result == CIV_PLUGINS_BUSY)
+	void ResolvePaths(const std::vector<CivOrderEntry>& order, std::vector<std::string>* paths, std::vector<std::string>* missing)
 	{
-		Notify("Plugins not changed", kBusy);
-		WritePluginReport(ReportRows(kBusy));
-		return;
+		for (size_t i = 0; i < order.size(); ++i)
+		{
+			std::string path;
+			if (order[i].skip)
+				continue;
+			if (FindFile(UserFolder() + "\\MODS", order[i].file, 3, &path))
+				paths->push_back(path);
+			else
+				missing->push_back(order[i].file);
+		}
 	}
-	WritePluginReport(ReportRows(NULL, missing));
-	if (result == CIV_PLUGINS_UNCHANGED)
-		return;
 
-	const std::vector<CivPluginRecord>& plugins = CivHostPlugins();
-	for (size_t i = 0; i < plugins.size(); ++i)
-		for (size_t j = 0; j < plugins[i].problems.size(); ++j)
-			Notify("Plugin problem", plugins[i].name + ": " + plugins[i].problems[j]);
+	void NotifyPluginProblems()
+	{
+		DropNotices(kPluginProblem);
+		const std::vector<CivPluginRecord>& plugins = CivHostPlugins();
+		for (size_t i = 0; i < plugins.size(); ++i)
+			for (size_t j = 0; j < plugins[i].problems.size(); ++j)
+				Notify(kPluginProblem, plugins[i].name + ": " + plugins[i].problems[j]);
+	}
+
+	// False when the plugins were left as they were; the Plugins screen's report says why. A warning, if any, heads the
+	// report.
+	bool LoadPlugins(const std::vector<CivOrderEntry>& saved, const char* warning)
+	{
+		std::vector<std::string> files;
+		if (!ListedPluginFiles(&files))
+		{
+			LogLine("Could not read the DllPlugins table, so the plugins were left as they were.");
+			WritePluginReport(WithNote(kListUnreadable, WithNote(warning, CivHostReportRows())));
+			return false;
+		}
+		if (!files.empty() && UserFolder().empty())
+		{
+			Notify("Plugins not loaded", kNoDocuments);
+			WritePluginReport(WithNote(kNoDocuments, CivHostReportRows()));
+			return false;
+		}
+
+		const std::vector<CivOrderEntry> order = CivApplyOrder(files, saved);
+		std::vector<std::string> paths;
+		std::vector<std::string> missing;
+		ResolvePaths(order, &paths, &missing);
+		NotifyMissing(missing);
+
+		CivHostSetLogSink(&LogLine);
+		CivHostSetFaultSink(&OnFault);
+		const CivPluginListResult result = CivHostSetPlugins(paths);
+		if (result == CIV_PLUGINS_BUSY)
+		{
+			Notify("Plugins not changed", kBusy);
+			WritePluginReport(WithNote(kBusy, WithNote(warning, CivHostReportRows())));
+			return false;
+		}
+		WritePluginReport(WithNote(warning, CivOrderReportRows(order, missing, CivHostReportRows())));
+		if (result == CIV_PLUGINS_CHANGED)
+			NotifyPluginProblems();
+		return true;
+	}
+
+	// Raw access only, so no metamethod runs: a Lua error would jump past the destructors of this file's locals.
+	std::string LuaText(lua_State* L, int table, const char* key)
+	{
+		lua_pushstring(L, key);
+		lua_rawget(L, table);
+		const std::string text = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : "";
+		lua_pop(L, 1);
+		return text;
+	}
+
+	bool LuaFlag(lua_State* L, int table, const char* key)
+	{
+		lua_pushstring(L, key);
+		lua_rawget(L, table);
+		const bool flag = lua_toboolean(L, -1) != 0;
+		lua_pop(L, 1);
+		return flag;
+	}
+
+	int LuaNumber(lua_State* L, int table, const char* key)
+	{
+		lua_pushstring(L, key);
+		lua_rawget(L, table);
+		const int number = lua_type(L, -1) == LUA_TNUMBER ? (int)lua_tonumber(L, -1) : 0;
+		lua_pop(L, 1);
+		return number;
+	}
+
+	// The screen sends { { File = ..., Skip = ..., Name = ..., Version = ... }, ... }, top first.
+	std::vector<CivOrderEntry> RequestedOrder(lua_State* L, int arg)
+	{
+		std::vector<CivOrderEntry> order;
+		const int count = (int)lua_objlen(L, arg);
+		for (int i = 1; i <= count; ++i)
+		{
+			lua_rawgeti(L, arg, i);
+			const int row = lua_gettop(L);
+			if (lua_type(L, row) == LUA_TTABLE)
+			{
+				CivOrderEntry entry;
+				entry.file = LuaText(L, row, "File");
+				entry.skip = LuaFlag(L, row, "Skip");
+				entry.name = LuaText(L, row, "Name");
+				entry.version = LuaText(L, row, "Version");
+				if (!entry.file.empty())
+					order.push_back(entry);
+			}
+			lua_pop(L, 1);
+		}
+		return order;
+	}
+
+	// Saved before reloading so a failed save shows on the screen: when a game starts, the plugins reload from the saved order.
+	bool ApplyOrder(lua_State* L)
+	{
+		const std::vector<CivOrderEntry> requested = RequestedOrder(L, 2);
+		const bool saved = SaveOrder(CivKeepUnlisted(requested, SavedOrder()));
+		return LoadPlugins(requested, saved ? NULL : kNotSaved);
+	}
+
+	// The screen sends Modding.GetActivatedMods(): { { ID = ..., Version = ... }, ... }, in the order the game switched them on.
+	std::vector<CivActiveMod> ActiveMods(lua_State* L, int arg)
+	{
+		std::vector<CivActiveMod> mods;
+		const int count = (int)lua_objlen(L, arg);
+		for (int i = 1; i <= count; ++i)
+		{
+			lua_rawgeti(L, arg, i);
+			const int row = lua_gettop(L);
+			if (lua_type(L, row) == LUA_TTABLE)
+			{
+				CivActiveMod mod;
+				mod.id = LuaText(L, row, "ID");
+				mod.version = LuaNumber(L, row, "Version");
+				mods.push_back(mod);
+			}
+			lua_pop(L, 1);
+		}
+		return mods;
+	}
+
+	std::string FolderOf(const char* path)
+	{
+		const std::string full = path;
+		return full.substr(0, full.find_last_of("\\/"));
+	}
+
+	// The DLL sits in the host mod's own folder.
+	std::string OwnFolder()
+	{
+		MEMORY_BASIC_INFORMATION info;
+		char path[MAX_PATH];
+		if (!VirtualQuery((const void*)&CivHostOnFrontEndCall, &info, sizeof(info)) || !GetModuleFileNameA((HMODULE)info.AllocationBase, path, MAX_PATH))
+			return std::string();
+		return FolderOf(path);
+	}
+
+	std::string GameFolder()
+	{
+		char path[MAX_PATH];
+		return GetModuleFileNameA(NULL, path, MAX_PATH) ? FolderOf(path) : std::string();
+	}
+
+	// Pushes the copied screen's path, without extension, for LoadNewContext; nil when it could not be copied.
+	void PushReplacedSetup(lua_State* L)
+	{
+		const std::string own = OwnFolder();
+		const std::string game = GameFolder();
+		CivReplacedSetup setup;
+		setup.problem = "Bazaar could not find its own folder or the game's.";
+		if (!own.empty() && !game.empty())
+			setup = CivCopyReplacedSetup(UserFolder() + "\\MODS", game, own, ActiveMods(L, 2), lua_toboolean(L, 3) != 0);
+		if (setup.copy.empty())
+		{
+			LogLine(("Could not open the Advanced Setup screen that Bazaar replaced: " + setup.problem).c_str());
+			lua_pushnil(L);
+			return;
+		}
+		LogLine(("Continue opened Advanced Setup from " + setup.xmlSource + " and " + setup.luaSource + ".").c_str());
+		lua_pushstring(L, setup.copy.c_str());
+	}
+}
+
+void CivHostOnDatabaseReady()
+{
+	LoadPlugins(SavedOrder(), NULL);
+}
+
+bool CivHostOnFrontEndCall(lua_State* L, int* results)
+{
+	if (lua_type(L, 1) != LUA_TSTRING || strncmp(lua_tostring(L, 1), "bazaar:", 7) != 0)
+		return false;
+	const std::string request = lua_tostring(L, 1);
+	*results = 1;
+	// Any Lua can make this call, and reloading the plugins in the middle of a game would reset them.
+	if (GC.getGame().isFinalInitialized())
+	{
+		LogLine(("Ignored a Plugins screen request during a game: " + request).c_str());
+		lua_pushnil(L);
+		return true;
+	}
+	if (request == "bazaar:apply" && lua_type(L, 2) == LUA_TTABLE)
+		lua_pushboolean(L, ApplyOrder(L));
+	else if (request == "bazaar:nextsetup" && lua_type(L, 2) == LUA_TTABLE)
+		PushReplacedSetup(L);
+	else
+	{
+		LogLine(("The Plugins screen sent a request Bazaar could not use: " + request).c_str());
+		lua_pushnil(L);
+	}
+	return true;
 }
 
 void CivHostOnGameUpdate()

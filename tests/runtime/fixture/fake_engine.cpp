@@ -10,6 +10,16 @@ int FakeUnit::Subtract(int a, int b) const
 	return a - b;
 }
 
+int FakeUnit::Grow(int x) const
+{
+	return x + 1;
+}
+
+int FakeUnit::Grow(int x, int y) const
+{
+	return x + y;
+}
+
 void FakeUnit::notify(int amount)
 {
 	m_notified += amount;

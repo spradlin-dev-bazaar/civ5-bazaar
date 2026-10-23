@@ -1,5 +1,7 @@
 // Runs the host runtime outside the game, against the fixture hooked by the real generator.
+#include "CivHostOrder.h"
 #include "CivHostRuntime.h"
+#include "CivHostSetup.h"
 #include "fake_engine.h"
 
 #include <windows.h>
@@ -134,10 +136,13 @@ static void TestLoading()
 	Check(HasStatus("toy_no_entry.dll", CIV_PLUGIN_NO_ENTRY), "a DLL without the entry point is refused");
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
 	Check(HasStatus("toy_entry_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD) && Find("toy_entry_fault.dll")->quarantined, "a plugin that faults while loading is quarantined");
-	Check(HasStatus("toy_conflict.dll", CIV_PLUGIN_LOADED) && !Find("toy_conflict.dll")->problems.empty(), "a second replace of the same function is refused and recorded");
-	Check(CallInt("toy_conflict.dll", "ToyLastRegisterResult", -1) == CIV_HOOK_REPLACE_TAKEN, "the refused plugin is told why");
-	Check(LogHas("Toy Basic already replaces"), "the refusal names the plugin that holds the replacement");
-	Check(LogHas("Plugin Toy Conflict: Its replacement"), "the refusal names the refused plugin, though it is still loading");
+	Check(HasStatus("toy_conflict.dll", CIV_PLUGIN_REPLACE_CONFLICT) && !GetModuleHandleA(Dll("toy_conflict.dll").c_str()),
+		"a plugin replacing a function another plugin already replaces is turned off and unloaded");
+	char toldWhy[64];
+	_snprintf_s(toldWhy, sizeof(toldWhy), _TRUNCATE, "[Toy Conflict] replace result %d", CIV_HOOK_REPLACE_TAKEN);
+	Check(LogHas(toldWhy), "the refused plugin is told why");
+	Check(LogHas("Toy Basic, higher in the list, already replaces"), "the refusal names the plugin that holds the replacement");
+	Check(LogHas("Plugin Toy Conflict: Toy Basic"), "the refusal names the refused plugin, though it is still loading");
 	Check(LogHas("[Toy Basic] starting"), "a plugin logging from its entry point is named in the log");
 	Check(CallInt("toy_basic.dll", "ToyRegisterLate", -1) == CIV_HOOK_NOT_ALLOWED, "registering after loading is refused");
 
@@ -146,7 +151,12 @@ static void TestLoading()
 	const CivPluginReportRow newer = ReportRow("toy_newer.dll");
 	Check(newer.failed && newer.status == "Not loaded" && newer.problems.find("newer Bazaar") != std::string::npos, "it lists a refused plugin as Not loaded, with the reason");
 	const CivPluginReportRow conflict = ReportRow("toy_conflict.dll");
-	Check(!conflict.failed && conflict.problems.find("Toy Basic already replaces") != std::string::npos, "it keeps a refused replacement as a warning on a loaded plugin");
+	Check(conflict.failed && conflict.status == "Not loaded" && conflict.problems.find("move it above Toy Basic") != std::string::npos,
+		"it lists the turned-off plugin as Not loaded, saying how to use it instead");
+	Check(conflict.problems.find("already replaces FakeUnit::notify(...),") != std::string::npos,
+		"a function no other shares its name with is named without its parameters");
+	Check(conflict.problems.find("already replaces FakeUnit::Grow(int) const,") != std::string::npos,
+		"an overloaded function is named with its parameters, which tell it apart");
 	const CivPluginReportRow entryFault = ReportRow("toy_entry_fault.dll");
 	Check(entryFault.failed && entryFault.status == "Turned off after a crash", "it lists a plugin that crashed while loading as turned off");
 	Check(ReportRow("toy_missing.dll").name == "toy_missing.dll", "it names a plugin by its file until the plugin gives its own name");
@@ -166,7 +176,8 @@ static void TestHooks()
 	Check(unit.m_notified == 10, "a replacement runs instead of the original, and can call the original itself");
 	Check(unit.Subtract(7, 2) == 50, "the original gets the replacement's arguments in order and returns its result");
 	Check(unit.name() == "Hooked Warrior", "an after-hook can change a function's returned reference");
-	Check(unit.add(1, 1) == 104, "hooks from refused plugins never run");
+	Check(unit.add(1, 1) == 104, "hooks from refused plugins never run, including the other hooks of a turned-off plugin");
+	Check(unit.Grow(1) == 102 && unit.Grow(1, 2) == 3, "each overload has its own hooks: replacing one leaves the other alone");
 
 	Load("toy_basic.dll");
 	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_DUPLICATE), "a plugin listed twice is loaded once");
@@ -339,6 +350,21 @@ static void TestPluginList()
 	Check(afterBreak != CIV_PLUGINS_BUSY, "the list can still change after that exception");
 	Check(afterBreak == CIV_PLUGINS_CHANGED, "the same plugins in another order count as a change");
 
+	std::vector<std::string> basicFirst, conflictFirst;
+	basicFirst.push_back(Dll("toy_basic.dll"));
+	basicFirst.push_back(Dll("toy_conflict.dll"));
+	conflictFirst.push_back(Dll("toy_conflict.dll"));
+	conflictFirst.push_back(Dll("toy_basic.dll"));
+	CivHostSetPlugins(basicFirst);
+	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_LOADED) && HasStatus("toy_conflict.dll", CIV_PLUGIN_REPLACE_CONFLICT),
+		"of two plugins replacing one function, the lower one is turned off");
+	CivHostSetPlugins(conflictFirst);
+	FakeUnit swapped;
+	swapped.notify(5);
+	Check(HasStatus("toy_conflict.dll", CIV_PLUGIN_LOADED) && HasStatus("toy_basic.dll", CIV_PLUGIN_REPLACE_CONFLICT) && swapped.m_notified == -5,
+		"moving it above the other turns the other one off, and its replacement runs");
+	CivHostSetPlugins(reversed);
+
 	VoidFn faultOnShutdown = (VoidFn)ToyExport("toy_basic.dll", "ToyFaultOnShutdown");
 	if (faultOnShutdown)
 		faultOnShutdown();
@@ -360,6 +386,183 @@ static void TestPluginList()
 	Check(CallInt("toy_entry_break.dll", "ToyRegisterLate", -1) == CIV_HOOK_NOT_ALLOWED, "after that, the plugin no longer counts as loading");
 	Check(CivHostSetPlugins(withBasic) == CIV_PLUGINS_CHANGED && !GetModuleHandleA(Dll("toy_entry_break.dll").c_str()),
 		"the half-loaded plugin is unloaded at the next list change");
+}
+
+static CivOrderEntry Entry(const char* file, bool skip, const char* name)
+{
+	CivOrderEntry entry;
+	entry.file = file;
+	entry.skip = skip;
+	entry.name = name;
+	return entry;
+}
+
+static void TestOrder()
+{
+	printf("\n-- the player's plugin order\n");
+	std::vector<std::string> listed;
+	listed.push_back("A.dll");
+	listed.push_back("b.dll");
+	listed.push_back("c.dll");
+	listed.push_back("A.dll");
+	std::vector<CivOrderEntry> saved;
+	saved.push_back(Entry("c.dll", true, "Toy C"));
+	saved.push_back(Entry("gone.dll", false, ""));
+	saved.push_back(Entry("a.DLL", false, ""));
+	const std::vector<CivOrderEntry> order = CivApplyOrder(listed, saved);
+	Check(order.size() == 4 && order[0].file == "c.dll" && order[1].file == "A.dll" && order[2].file == "b.dll",
+		"saved plugins come first in the saved order, matched in any case, then the rest in listed order");
+	Check(order.size() == 4 && order[0].skip && !order[1].skip && !order[2].skip, "a saved skip is kept, and a plugin new to the order is not skipped");
+	Check(order.size() == 4 && order[3].file == "A.dll", "a plugin listed twice stays listed twice, so loading can refuse the second");
+
+	std::vector<CivOrderEntry> named = order;
+	named[1].name = "Toy\tA";
+	named[1].version = "1.0";
+	const std::vector<CivOrderEntry> parsed = CivParseOrder(CivFormatOrder(named));
+	Check(parsed.size() == 4 && parsed[0].skip && parsed[0].name == "Toy C" && parsed[1].name == "Toy A" && parsed[1].version == "1.0"
+			&& parsed[3].file == "A.dll",
+		"a saved order reads back the same, with a tab in a name turned into a space");
+	const std::vector<CivOrderEntry> messy = CivParseOrder("junk\nskip\tx.dll\nload\t\nload\ty.dll\r\n");
+	Check(messy.size() == 2 && messy[0].skip && messy[0].file == "x.dll" && messy[1].file == "y.dll",
+		"lines it does not recognise are ignored, and Windows line ends are read");
+	const std::vector<CivOrderEntry> marked = CivParseOrder("\xEF\xBB\xBFskip\tx.dll\n");
+	Check(marked.size() == 1 && marked[0].skip, "a byte-order mark an editor added does not hide the first line");
+
+	std::vector<CivOrderEntry> applied;
+	applied.push_back(Entry("a.dll", false, ""));
+	applied.push_back(Entry("b.dll", false, ""));
+	std::vector<CivOrderEntry> before;
+	before.push_back(Entry("off.dll", true, "Toy Off"));
+	before.push_back(Entry("A.DLL", true, ""));
+	const std::vector<CivOrderEntry> kept = CivKeepUnlisted(applied, before);
+	Check(kept.size() == 3 && kept[0].file == "a.dll" && !kept[0].skip && kept[2].file == "off.dll" && kept[2].skip,
+		"saving keeps a plugin whose mod is off, with its skip, after the plugins listed now");
+
+	std::vector<CivOrderEntry> entries;
+	entries.push_back(Entry("first.dll", false, ""));
+	entries.push_back(Entry("skipped.dll", true, "Toy Skipped"));
+	entries.push_back(Entry("missing.dll", false, ""));
+	entries.push_back(Entry("last.dll", false, ""));
+	entries.push_back(Entry("ghost.dll", false, ""));
+	const std::vector<std::string> missing(1, "MISSING.dll");
+	std::vector<CivPluginReportRow> loaded(2);
+	loaded[0].name = "Toy Last";
+	loaded[0].file = "last.dll";
+	loaded[1].name = "Toy First";
+	loaded[1].file = "FIRST.DLL";
+	const std::vector<CivPluginReportRow> rows = CivOrderReportRows(entries, missing, loaded);
+	Check(rows.size() == 5 && rows[0].name == "Toy First" && rows[3].name == "Toy Last",
+		"each loaded plugin's row is matched by its file name and keeps its place among skipped and missing ones");
+	Check(rows.size() == 5 && rows[1].skipped && !rows[1].failed && rows[1].status == "Skipped" && rows[1].name == "Toy Skipped",
+		"a skipped plugin is listed by its saved name as Skipped");
+	Check(rows.size() == 5 && rows[2].failed && rows[2].status == "Not loaded" && rows[2].problems == CIV_REPORT_FILE_NOT_FOUND
+			&& rows[2].name == "missing.dll",
+		"a missing file is listed in its place as Not loaded");
+	Check(rows.size() == 5 && rows[4].failed && rows[4].status == "Not loaded", "a plugin with no loaded row is listed as Not loaded, not as blank");
+	Check(rows.size() == 5 && rows[0].file == "first.dll", "each row carries the file name as listed, which the screen sends back");
+}
+
+static void WriteText(const std::string& path, const std::string& text)
+{
+	for (size_t slash = path.find('\\', 3); slash != std::string::npos; slash = path.find('\\', slash + 1))
+		CreateDirectoryA(path.substr(0, slash).c_str(), 0);
+	SetFileAttributesA(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+	FILE* f = 0;
+	if (fopen_s(&f, path.c_str(), "wb") == 0 && f)
+	{
+		fwrite(text.data(), 1, text.size(), f);
+		fclose(f);
+	}
+}
+
+static std::string ReadText(const std::string& path)
+{
+	std::string text;
+	FILE* f = 0;
+	if (fopen_s(&f, path.c_str(), "rb") == 0 && f)
+	{
+		char buffer[256];
+		for (size_t n; (n = fread(buffer, 1, sizeof(buffer), f)) > 0;)
+			text.append(buffer, n);
+		fclose(f);
+	}
+	return text;
+}
+
+static std::string ModInfo(const char* id, int version, const char* files)
+{
+	char head[256];
+	_snprintf_s(head, sizeof(head), _TRUNCATE, "\xEF\xBB\xBF<?xml version=\"1.0\"?>\r\n<Mod id=\"%s\" version=\"%d\">\r\n", id, version);
+	return std::string(head) + "  <Dependencies>\r\n    <Mod id=\"dependency\" minversion=\"0\" maxversion=\"999\" title=\"Other\" />\r\n"
+		"  </Dependencies>\r\n  <Files>\r\n" + files + "  </Files>\r\n</Mod>\r\n";
+}
+
+static CivActiveMod Active(const char* id, int version)
+{
+	CivActiveMod mod;
+	mod.id = id;
+	mod.version = version;
+	return mod;
+}
+
+static void TestReplacedSetup()
+{
+	printf("\n-- the Advanced Setup screen the Plugins screen replaced\n");
+	const std::string ras = ModInfo("ras-id", 15,
+		"    <File md5=\"1\" import=\"0\">Unused/AdvancedSetup.xml</File>\r\n"
+		"    <File md5=\"2\" import=\"1\">UI Overrides/AdvancedSetup.xml</File>\r\n"
+		"    <File import=\"1\" md5=\"3\">UI Overrides/AdvancedSetup.lua</File>\r\n");
+	std::string id;
+	int version = 0;
+	Check(CivModIdentity(ras, &id, &version) && id == "ras-id" && version == 15, "a mod description gives its ID and version, not a dependency's");
+	Check(CivImportedFile(ras, "advancedsetup.XML") == "UI Overrides/AdvancedSetup.xml", "it finds a file the mod imports into the game, by name in any case");
+	Check(CivImportedFile(ModInfo("x", 1, "    <File import=\"0\">AdvancedSetup.xml</File>\r\n"), "AdvancedSetup.xml").empty(),
+		"a file the mod does not import is not counted");
+	Check(CivImportedFile(ModInfo("x", 1, "    <File import=\"1\">Fish &amp; Chips/AdvancedSetup.lua</File>\r\n"), "AdvancedSetup.lua")
+			== "Fish & Chips/AdvancedSetup.lua",
+		"an escaped character in a path is read back");
+
+	const std::string root = s_dir + "setup_test";
+	const std::string mods = root + "\\MODS";
+	const std::string own = mods + "\\Bazaar (v 1)";
+	const std::string game = root + "\\Game";
+	const std::string rasXml = mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.xml";
+	WriteText(mods + "\\RAS (v 15)\\RAS (v 15).modinfo", ras);
+	WriteText(rasXml, "ras xml");
+	WriteText(mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua", "ras lua");
+	WriteText(mods + "\\Other (v 1)\\Other (v 1).modinfo", ModInfo("other-id", 1, "    <File import=\"1\">Other.lua</File>\r\n"));
+	WriteText(own + "\\Bazaar (v 1).modinfo", ModInfo("bazaar-id", 1, "    <File import=\"1\">frontend/AdvancedSetup.xml</File>\r\n"));
+	WriteText(own + "\\frontend\\AdvancedSetup.xml", "bazaar xml");
+	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "game xml");
+	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.lua", "game lua");
+	WriteText(game + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "expansion xml");
+
+	std::vector<CivActiveMod> withRas;
+	withRas.push_back(Active("ras-id", 15));
+	withRas.push_back(Active("other-id", 1));
+	withRas.push_back(Active("bazaar-id", 1));
+	const CivReplacedSetup first = CivCopyReplacedSetup(mods, game, own, withRas, true);
+	const std::string copy = own + "\\BazaarNextSetup";
+	Check(first.copy == copy && ReadText(copy + ".xml") == "ras xml" && ReadText(copy + ".lua") == "ras lua",
+		"another active mod's screen is copied beside Bazaar under a name of its own, and Bazaar's own is passed over");
+	Check(first.xmlSource == rasXml, "it says which file it copied");
+
+	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_READONLY);
+	CivCopyReplacedSetup(mods, game, own, withRas, true);
+	Check(!CivCopyReplacedSetup(mods, game, own, withRas, true).copy.empty(), "a read-only source does not stop the next copy");
+	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_NORMAL);
+
+	std::vector<CivActiveMod> withoutRas(withRas.begin() + 1, withRas.end());
+	CivCopyReplacedSetup(mods, game, own, withoutRas, true);
+	Check(ReadText(copy + ".xml") == "expansion xml" && ReadText(copy + ".lua") == "game lua", "with no such mod active, the game's own screen is copied");
+	CivCopyReplacedSetup(mods, game, own, withoutRas, false);
+	Check(ReadText(copy + ".xml") == "game xml", "the game's base layout is used when Gods and Kings is off");
+	withoutRas.push_back(Active("ras-id", 14));
+	CivCopyReplacedSetup(mods, game, own, withoutRas, false);
+	Check(ReadText(copy + ".xml") == "game xml", "an installed mod counts only in the version that is active");
+
+	const CivReplacedSetup failed = CivCopyReplacedSetup(mods, root + "\\NoGame", own, withoutRas, false);
+	Check(failed.copy.empty() && failed.problem.find("Could not copy") == 0, "a screen that cannot be copied gives a reason instead of a path");
 }
 
 static void TestThreads()
@@ -410,6 +613,8 @@ int main(int argc, char** argv)
 	TestStrings();
 	TestUnload();
 	TestPluginList();
+	TestOrder();
+	TestReplacedSetup();
 	TestThreads();
 
 	printf("\n-- cost per call (Square, %d calls each)\n", calls);

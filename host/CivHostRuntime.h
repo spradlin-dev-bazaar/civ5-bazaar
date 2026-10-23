@@ -16,6 +16,7 @@ enum CivPluginStatus
 	CIV_PLUGIN_FAULTED_AT_LOAD,
 	CIV_PLUGIN_DUPLICATE,
 	CIV_PLUGIN_STILL_IN_MEMORY,
+	CIV_PLUGIN_REPLACE_CONFLICT,
 };
 
 struct CivPluginRecord
@@ -41,7 +42,7 @@ struct CivPluginRecord
 
 struct CivPluginReportRow
 {
-	CivPluginReportRow() : failed(false) {}
+	CivPluginReportRow() : failed(false), skipped(false) {}
 
 	std::string file;
 	std::string name;
@@ -50,6 +51,7 @@ struct CivPluginReportRow
 	std::string problems;
 	// The Plugins screen shows a failed row in red; other rows' problems are warnings.
 	bool failed;
+	bool skipped;
 };
 
 enum CivPluginListResult

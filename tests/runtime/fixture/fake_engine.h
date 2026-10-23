@@ -13,6 +13,8 @@ public:
 
 	int add(int a, int b) const;
 	int Subtract(int a, int b) const;
+	int Grow(int x) const;
+	int Grow(int x, int y) const;
 	void notify(int amount);
 	const std::string& name() const;
 	static int Twice(int x);

@@ -6,6 +6,7 @@
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 namespace
 {
@@ -27,6 +28,7 @@ namespace
 	std::vector<KeptPlugin> s_kept;
 	int s_loadingPlugin = -1;
 	const CivPluginInfo* s_loadingInfo = 0;
+	bool s_loadingConflict = false;
 	int s_pluginCallDepth = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
@@ -44,9 +46,33 @@ namespace
 		OutputDebugStringA("\n");
 	}
 
+	std::string Format(const char* format, ...)
+	{
+		char text[1024];
+		va_list args;
+		va_start(args, format);
+		_vsnprintf_s(text, sizeof(text), _TRUNCATE, format, args);
+		va_end(args);
+		return text;
+	}
+
 	const char* HookName(int id)
 	{
 		return (id >= 0 && id < g_CivHookPointCount) ? g_CivHookPointNames[id] : "?";
+	}
+
+	// Players see the name alone, unless an overload shares it and only the parameters tell them apart.
+	std::string ShortHookName(int id)
+	{
+		const std::string full = HookName(id);
+		const size_t open = full.find('(');
+		const std::string name = full.substr(0, open);
+		if (open == std::string::npos || name.empty())
+			return full;
+		for (int i = 0; i < g_CivHookPointCount; ++i)
+			if (i != id && strncmp(g_CivHookPointNames[i], name.c_str(), name.size()) == 0 && g_CivHookPointNames[i][name.size()] == '(')
+				return full;
+		return name + "(...)";
 	}
 
 	bool Alive(int plugin)
@@ -151,6 +177,14 @@ namespace
 		return false;
 	}
 
+	bool PendingReplace(int hookId)
+	{
+		for (size_t i = 0; i < s_pending.size(); ++i)
+			if (s_pending[i].id == hookId && s_pending[i].kind == CIV_HOOK_REPLACE)
+				return true;
+		return false;
+	}
+
 	int RegisterHook(int plugin, int hookId, int kind, void* fn)
 	{
 		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
@@ -161,19 +195,21 @@ namespace
 			return CIV_HOOK_BAD_KIND;
 		if (kind == CIV_HOOK_REPLACE)
 		{
-			const char* owner = 0;
-			if (g_CivHookPoints[hookId].replace)
-				owner = s_plugins[g_CivHookPoints[hookId].replace->plugin].name.c_str();
-			for (size_t i = 0; i < s_pending.size() && !owner; ++i)
-				if (s_pending[i].id == hookId && s_pending[i].kind == CIV_HOOK_REPLACE)
-					owner = "this plugin";
-			if (owner)
+			std::string problem;
+			if (const CivHookEntry* taken = g_CivHookPoints[hookId].replace)
 			{
-				char problem[512];
-				_snprintf_s(problem, sizeof(problem), _TRUNCATE,
-					"Its replacement of %s was refused: %s already replaces it.", HookName(hookId), owner);
+				// Its other hooks may rely on the replacement it lost, so the whole plugin stays off.
+				s_loadingConflict = true;
+				const char* owner = s_plugins[taken->plugin].name.c_str();
+				problem = Format("%s, higher in the list, already replaces %s, and only one plugin can replace a function. To use this one instead, move it above %s.",
+					owner, ShortHookName(hookId).c_str(), owner);
+			}
+			else if (PendingReplace(hookId))
+				problem = Format("Its replacement of %s was refused: this plugin already replaces it.", ShortHookName(hookId).c_str());
+			if (!problem.empty())
+			{
 				s_plugins[plugin].problems.push_back(problem);
-				Log("Plugin %s: %s", DisplayName(plugin), problem);
+				Log("Plugin %s: %s", DisplayName(plugin), problem.c_str());
 				return CIV_HOOK_REPLACE_TAKEN;
 			}
 		}
@@ -493,6 +529,7 @@ namespace
 		CivPluginInfo info = { 0, 0, 0, 0 };
 		EntryCall call = { entry, host, &info, false };
 		s_pending.clear();
+		s_loadingConflict = false;
 		unsigned int code = 0;
 		const bool ran = GuardedEntry(&call, &code);
 
@@ -518,6 +555,13 @@ namespace
 		{
 			s_pending.clear();
 			Refuse(rec, status, problem);
+			Unload(index);
+			return;
+		}
+		if (s_loadingConflict)
+		{
+			s_pending.clear();
+			rec.status = CIV_PLUGIN_REPLACE_CONFLICT;
 			Unload(index);
 			return;
 		}

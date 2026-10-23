@@ -11,6 +11,9 @@
 
 #include "CvMapGenerator.h"
 #include "CvWorldBuilderMapLoader.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 
 
 CvDllWorldBuilderMapLoader::CvDllWorldBuilderMapLoader()
@@ -126,6 +129,12 @@ unsigned int CvDllWorldBuilderMapLoader::PreviewPlayableCivCount(const wchar_t* 
 //------------------------------------------------------------------------------
 int CvDllWorldBuilderMapLoader::GetMapPreview(lua_State* L)
 {
+#if defined(CIV_HOST_API)
+	// The Plugins screen reaches the host through this call; see CivHostEngine.h.
+	int results = 0;
+	if(CivHostOnFrontEndCall(L, &results))
+		return results;
+#endif
 	return CvWorldBuilderMapLoader::GetMapPreview(L);
 }
 //------------------------------------------------------------------------------

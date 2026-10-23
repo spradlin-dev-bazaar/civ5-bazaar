@@ -29,7 +29,6 @@ CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
 PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
 VMC_DIR = os.path.join(common.REPO, "mod", "vmc")
 FRONTEND_DIR = os.path.join(common.REPO, "frontend")
-PLUGINS_DESCRIPTION = "See which plugins Bazaar loaded, and any it refused or turned off."
 
 HOST_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
 HOST_NAME = "Bazaar Multi-DLL Mod Loader"
@@ -39,6 +38,9 @@ BENCH_DLLS = {
     "host": os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"),
 }
 BNW_DLC = "6DA07636-4123-4018-B643-6575B4EC336B"
+# Also replaces Advanced Setup; referencing it makes the game switch the host on after it, so the host's screen wins.
+RAS_ID = "34feb829-33fb-4241-956f-462e6877e070"
+RAS_NAME = "Really Advanced Setup"
 TOYS = [
     ("GOLD", "ToyGold", "Toy Gold Plugin", "c411a905-2f0d-471c-848b-357ccf98ab4b"),
     ("RIVAL", "ToyRival", "Toy Rival Plugin", "bd4f6967-e129-4de5-9ac5-58627909ed43"),
@@ -122,19 +124,23 @@ def new_mod_folder(name):
     return folder
 
 
-def write_modinfo(folder, name, mod_id, teaser, files, updates, entries=(), dll=None):
-    """Write a mod's description file; files are (path, import flag) pairs inside folder.
+def mod_line(mod_id, title):
+    return '    <Mod id=%s minversion="0" maxversion="999" title=%s />\n' % (quoteattr(mod_id), quoteattr(title))
+
+
+def write_modinfo(folder, name, mod_id, teaser, files, updates, entries=(), dll=None, references=()):
+    """Write a mod's description file; files are (path, import flag) pairs inside folder, references (id, title) pairs.
 
     A mod with a DLL is a build of the game core; every other test mod depends on the host."""
     dependencies = ['    <Dlc id=%s minversion="0" maxversion="999" />\n' % quoteattr(BNW_DLC)]
     if not dll:
-        host = (quoteattr(HOST_ID), quoteattr(HOST_NAME))
-        dependencies.append('    <Mod id=%s minversion="0" maxversion="999" title=%s />\n' % host)
+        dependencies.append(mod_line(HOST_ID, HOST_NAME))
     with open(os.path.join(folder, "%s (v 1).modinfo" % name), "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id=%s version="1">\n' % quoteattr(mod_id))
         f.write(PROPERTIES.format(name=name, teaser=teaser, affects=1 if dll else 0))
         f.write("  <Dependencies>\n" + "".join(dependencies) + "  </Dependencies>\n")
-        f.write("  <References />\n  <Blocks />\n  <Files>\n")
+        f.write("  <References>\n" + "".join(mod_line(i, t) for i, t in references) + "  </References>\n")
+        f.write("  <Blocks />\n  <Files>\n")
         for path, vfs in files:
             digest = md5(os.path.join(folder, path))
             f.write("    <File md5=%s import=%s>%s</File>\n" % (quoteattr(digest), quoteattr(str(vfs)), escape(path)))
@@ -155,14 +161,13 @@ def write_modinfo(folder, name, mod_id, teaser, files, updates, entries=(), dll=
 
 
 def copy_plugins_screen(folder):
-    """The Plugins screen's files, and the Custom game entry that opens it: the game builds its Mods menu before any
-    mod is on, so the screen cannot hang off that menu."""
+    """The Plugins screen's files, which replace Advanced Setup."""
     os.makedirs(os.path.join(folder, "frontend"))
     files = []
     for path in sorted(glob.glob(os.path.join(FRONTEND_DIR, "*.lua")) + glob.glob(os.path.join(FRONTEND_DIR, "*.xml"))):
         files.append(("frontend/" + os.path.basename(path), 1))
         shutil.copyfile(path, os.path.join(folder, files[-1][0]))
-    return files, ("Custom", "frontend/BazaarPlugins.xml", "Manage Plugins", PLUGINS_DESCRIPTION)
+    return files
 
 
 def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
@@ -174,11 +179,13 @@ def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
         os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
         shutil.copyfile(os.path.join(VMC_DIR, path), os.path.join(folder, path))
     files = vmc_files + [("CvGameCore_Expansion2.dll", 1)]
+    references = []
     if plugins_screen:
-        screen_files, screen_entry = copy_plugins_screen(folder)
-        files += screen_files
-        entries = entries + [screen_entry]
-    write_modinfo(folder, name, mod_id, teaser, files, updates, entries, dll="CvGameCore_Expansion2.dll")
+        files += copy_plugins_screen(folder)
+        references.append((RAS_ID, RAS_NAME))
+    write_modinfo(
+        folder, name, mod_id, teaser, files, updates, entries, dll="CvGameCore_Expansion2.dll", references=references
+    )
 
 
 def write_toy_mod(dll_name, mod_name, mod_id):
