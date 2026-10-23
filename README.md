@@ -28,7 +28,7 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 2. `build-dll.cmd` builds the plain game DLL from the Firaxis source.
 3. `build-hooked.cmd` generates the hook wrappers and builds the host DLL.
 4. `tests\runtime\run.cmd` runs the automated tests, outside the game.
-5. `tests\ingame\package.py` lays out the host and the test plugins as mod folders in `tests\ingame\out\MODS`, ready to copy into the game's MODS folder.
+5. `tests\ingame\package.py` lays out the host, VMC's files as a mod of their own, and the test plugins as mod folders in `tests\ingame\out\MODS`, ready to copy into the game's MODS folder. `pack.py` packs one of those folders into a package for uploading to the Steam Workshop.
 
 To measure how much the host slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and package with `package.py bench plain` or `package.py bench host`. Issue #3 has the results so far. Until P1 this works only on the `p0` branch, which has the engine's call into the timer.
 
@@ -40,7 +40,7 @@ To measure how much the host slows down the computer players, build with the `be
 ## Credits and licence
 
 - Game source code: Firaxis Games and Take-Two Interactive, from the Civilization V SDK. All rights reserved by them.
-- DLL-VMC: whoward69, used under his terms (credit given, never sold, its own mod ID).
+- DLL-VMC: whoward69, used under his terms (never sold or used to make money).
 - Everything this repository adds: MIT. See [NOTICE](NOTICE) for exactly what that covers.
 
 The mod as a whole may not be sold.

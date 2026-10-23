@@ -157,7 +157,8 @@ namespace
 		std::string modinfo;
 	};
 
-	// Every mod description directly inside a folder of the MODS folder, where the game itself looks for them.
+	// Every mod description directly inside a folder of the MODS folder. The game also finds descriptions in subfolders,
+	// which this does not look in.
 	std::vector<InstalledMod> InstalledMods(const std::string& modsFolder)
 	{
 		std::vector<InstalledMod> mods;

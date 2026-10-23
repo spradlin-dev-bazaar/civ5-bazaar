@@ -24,6 +24,9 @@ Host DLL  (replacement CvGameCore_Expansion2.dll, one per game)
     + a hook point on every engine function + a Plugins screen in the front end
   own GUID, own name, credits VMC, source on GitHub
 
+Bazaar - VMC Bootstrap (required)  (a mod of its own: whoward69's database, text, Lua and art files, no DLL)
+  VMC's mod ID, so mods made for VMC load after it; the host depends on it
+
 Plugin DLLs  (ordinary mods: one folder each, with plugins/<Name>.dll inside)
   MCPServer.dll          the MCP server, its log window Lua, its tools
   <other>.dll            anything else that needs C++; Lua mods use VMC hooks instead
@@ -35,9 +38,11 @@ The host finds plugins through the game's own mod system: each plugin mod insert
 
 VMC already is a hook-provider DLL: about 60 groups of Lua `GameEvents`, Lua API extensions, switchable bug fixes, and the `CustomModOptions` convention that Workshop mods already use. Starting from it means rules changes that only need a hook can be plain Lua mods from day one.
 
-Terms (whoward69's usage page): parts may be incorporated into a greater work that has its own original additions, with credit; no resale or financial gain; derivatives must use their own GUID. No formal licence exists and nothing requires telling him. A courtesy post in his CivFanatics thread at the first release is optional.
+Terms: VMC is used under whoward69's terms: it is never sold or used to make money.
 
 VMC is built from the same 1.0.3.276 SDK source as the MCP DLL, with a VS2015 solution wrapping a vs2010 project. This repository builds with VS2008 through its own build script, modelled on the MCP mod's `build-dll.cmd`, and adds VMC's extra files to the project.
+
+Mods made for VMC list VMC's mod ID as a reference, so that the game switches them on after VMC's database files. The game switches on mods with no live reference or dependency first, in the order of their folder names, and only then the mods that have one; a reference to a mod that is not switched on counts for nothing. So VMC's files ship as a mod of their own, Bazaar - VMC Bootstrap (required), under VMC's mod ID, and the host depends on it: mods made for VMC then load after VMC's files, and a mod that requires VMC can be switched on. It holds no DLL; the host DLL is the one that runs. The Workshop allows one mod per item, so it is a second item, listed under Required Items on the host's page, and Steam offers it to anyone who subscribes to the host. It counts as affecting saved games, because loading a save switches on only the mods the save lists.
 
 ## Host design
 
