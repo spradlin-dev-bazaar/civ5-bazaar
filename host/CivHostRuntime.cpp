@@ -429,14 +429,14 @@ namespace
 		if (info.builtApiMajor != CIV_HOST_API_MAJOR)
 		{
 			*status = CIV_PLUGIN_OTHER_MAJOR;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for host API %d.%d, which this host (API %d.%d) cannot run.",
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for Bazaar API %d.%d, which this Bazaar (API %d.%d) cannot run.",
 				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 			return problem;
 		}
 		if (info.builtApiMinor > CIV_HOST_API_MINOR)
 		{
 			*status = CIV_PLUGIN_NEWER_API;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for a newer host (API %d.%d); this host is API %d.%d.",
+			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for a newer Bazaar (API %d.%d); this Bazaar is API %d.%d.",
 				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 			return problem;
 		}

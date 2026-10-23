@@ -32,7 +32,7 @@ namespace
 	void LogLine(const char* line)
 	{
 		FILE* f = 0;
-		if (fopen_s(&f, (UserFolder() + "\\Logs\\CivHost.log").c_str(), "a") == 0 && f)
+		if (fopen_s(&f, (UserFolder() + "\\Logs\\Bazaar.log").c_str(), "a") == 0 && f)
 		{
 			fprintf(f, "%s\n", line);
 			fclose(f);
@@ -72,9 +72,9 @@ namespace
 	void OnFault(int, const char* name, int hookId, unsigned int)
 	{
 		if (hookId < 0)
-			Notify("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\CivHost.log.");
+			Notify("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\Bazaar.log.");
 		else
-			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\CivHost.log.");
+			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
 	}
 
 	// No DllPlugins table means no plugin mod is active; false means the table could not be read.
