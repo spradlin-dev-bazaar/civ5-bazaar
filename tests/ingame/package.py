@@ -6,11 +6,14 @@ loads with either. Output goes to tests/ingame/out/MODS. Nothing is installed: c
 the game's MODS folder by hand.
 """
 
+import glob
 import hashlib
 import os
 import shutil
 import subprocess
 import sys
+from xml.etree import ElementTree
+from xml.sax.saxutils import escape, quoteattr
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "generator"))
@@ -24,6 +27,7 @@ VSVARS = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsva
 CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
 
 PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
+VMC_DIR = os.path.join(common.REPO, "mod", "vmc")
 
 HOST_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
 HOST_NAME = "Bazaar Multi-DLL Mod Loader"
@@ -40,11 +44,8 @@ TOYS = [
     ("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
 ]
 VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
-# VMC reads its options from a table that only its released mod creates; without it every option is off.
-VMC_CHECK_SQL = """CREATE TABLE IF NOT EXISTS CustomModOptions (Name TEXT NOT NULL UNIQUE, Value INTEGER DEFAULT 0,
-    Class INTEGER DEFAULT 1, DbUpdates INTEGER DEFAULT 0);
-INSERT OR REPLACE INTO CustomModOptions (Name, Value) VALUES ('EVENTS_PLAYER_TURN', 1);
-"""
+# Runs after the host's CustomModOptions.xml has added the row, because this mod depends on the host.
+VMC_CHECK_SQL = "UPDATE CustomModOptions SET Value = 1 WHERE Name = 'EVENTS_PLAYER_TURN';\n"
 VMC_CHECK_LUA = """print("DLL id " .. Game.GetDllGuid())
 print("EVENTS_PLAYER_TURN on: " .. tostring(Game.IsCustomModOption("EVENTS_PLAYER_TURN")))
 GameEvents.PlayerDoneTurn.Add(function(iPlayer) print("PlayerDoneTurn for player " .. iPlayer) end)
@@ -101,76 +102,96 @@ PROPERTIES = """  <Properties>
 """
 
 
-def write_dll_mod(name, mod_id, teaser, dll):
+def vmc_mod_parts():
+    """VMC's files without its DLL, its database updates in its order, and its entry points, from its modinfo."""
+    (modinfo,) = glob.glob(os.path.join(VMC_DIR, "*.modinfo"))
+    root = ElementTree.parse(modinfo).getroot()
+    files = [(f.text, f.get("import")) for f in root.find("Files") if not f.text.lower().endswith(".dll")]
+    updates = [u.text for u in root.find("Actions/OnModActivated")]
+    entries = [
+        (e.get("type"), e.get("file"), e.findtext("Name"), e.findtext("Description")) for e in root.find("EntryPoints")
+    ]
+    return files, updates, entries
+
+
+def new_mod_folder(name):
     folder = os.path.join(OUT, "MODS", "%s (v 1)" % name)
     os.makedirs(folder)
-    shutil.copyfile(dll, os.path.join(folder, "CvGameCore_Expansion2.dll"))
+    return folder
+
+
+def write_modinfo(folder, name, mod_id, teaser, files, updates, entries=(), dll=None):
+    """Write a mod's description file; files are (path, import flag) pairs inside folder.
+
+    A mod with a DLL is a build of the game core; every other test mod depends on the host."""
+    dependencies = ['    <Dlc id=%s minversion="0" maxversion="999" />\n' % quoteattr(BNW_DLC)]
+    if not dll:
+        host = (quoteattr(HOST_ID), quoteattr(HOST_NAME))
+        dependencies.append('    <Mod id=%s minversion="0" maxversion="999" title=%s />\n' % host)
     with open(os.path.join(folder, "%s (v 1).modinfo" % name), "w", encoding="utf-8") as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % mod_id)
-        f.write(PROPERTIES.format(name=name, teaser=teaser, affects=1))
-        f.write('  <Dependencies>\n    <Dlc id="%s" minversion="0" maxversion="999" />\n  </Dependencies>\n' % BNW_DLC)
+        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id=%s version="1">\n' % quoteattr(mod_id))
+        f.write(PROPERTIES.format(name=name, teaser=teaser, affects=1 if dll else 0))
+        f.write("  <Dependencies>\n" + "".join(dependencies) + "  </Dependencies>\n")
         f.write("  <References />\n  <Blocks />\n  <Files>\n")
-        f.write(
-            '    <File md5="%s" import="1">CvGameCore_Expansion2.dll</File>\n'
-            % md5(os.path.join(folder, "CvGameCore_Expansion2.dll"))
-        )
-        f.write(
-            "  </Files>\n  <Actions>\n    <OnGetDLLPath>\n      <SetDllPath>CvGameCore_Expansion2.dll</SetDllPath>\n"
-        )
-        f.write("    </OnGetDLLPath>\n  </Actions>\n</Mod>\n")
+        for path, vfs in files:
+            digest = md5(os.path.join(folder, path))
+            f.write("    <File md5=%s import=%s>%s</File>\n" % (quoteattr(digest), quoteattr(str(vfs)), escape(path)))
+        f.write("  </Files>\n  <Actions>\n")
+        if dll:
+            f.write("    <OnGetDLLPath>\n      <SetDllPath>%s</SetDllPath>\n    </OnGetDLLPath>\n" % escape(dll))
+        f.write("    <OnModActivated>\n")
+        f.writelines("      <UpdateDatabase>%s</UpdateDatabase>\n" % escape(u) for u in updates)
+        f.write("    </OnModActivated>\n  </Actions>\n")
+        if entries:
+            f.write("  <EntryPoints>\n")
+            for kind, path, entry_name, description in entries:
+                f.write("    <EntryPoint type=%s file=%s>\n" % (quoteattr(kind), quoteattr(path)))
+                f.write("      <Name>%s</Name>\n" % escape(entry_name))
+                f.write("      <Description>%s</Description>\n    </EntryPoint>\n" % escape(description))
+            f.write("  </EntryPoints>\n")
+        f.write("</Mod>\n")
 
 
-def host_dependencies():
-    return (
-        "  <Dependencies>\n"
-        '    <Dlc id="%s" minversion="0" maxversion="999" />\n'
-        '    <Mod id="%s" minversion="0" maxversion="999" title="%s" />\n'
-        "  </Dependencies>\n" % (BNW_DLC, HOST_ID, HOST_NAME)
-    )
+def write_dll_mod(name, mod_id, teaser, dll):
+    """A mod holding the DLL and VMC's own mod files, which the DLL needs: it reads tables and columns they add."""
+    folder = new_mod_folder(name)
+    shutil.copyfile(dll, os.path.join(folder, "CvGameCore_Expansion2.dll"))
+    vmc_files, updates, entries = vmc_mod_parts()
+    for path, _ in vmc_files:
+        os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
+        shutil.copyfile(os.path.join(VMC_DIR, path), os.path.join(folder, path))
+    files = vmc_files + [("CvGameCore_Expansion2.dll", 1)]
+    write_modinfo(folder, name, mod_id, teaser, files, updates, entries, dll="CvGameCore_Expansion2.dll")
 
 
 def write_toy_mod(dll_name, mod_name, mod_id):
-    folder = os.path.join(OUT, "MODS", "%s (v 1)" % mod_name)
-    os.makedirs(folder)
+    folder = new_mod_folder(mod_name)
     dll = dll_name + ".dll"
     sql = dll_name + ".sql"
     shutil.copyfile(os.path.join(OUT, "build", dll), os.path.join(folder, dll))
     with open(os.path.join(folder, sql), "w") as f:
         f.write("CREATE TABLE IF NOT EXISTS DllPlugins (File TEXT NOT NULL, ApiMajor INTEGER, ApiMinor INTEGER);\n")
         f.write("INSERT INTO DllPlugins (File, ApiMajor, ApiMinor) VALUES ('%s', 0, 1);\n" % dll)
-    with open(os.path.join(folder, "%s (v 1).modinfo" % mod_name), "w", encoding="utf-8") as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % mod_id)
-        f.write(PROPERTIES.format(name=mod_name, teaser="Test plugin for the %s." % HOST_NAME, affects=0))
-        f.write(host_dependencies())
-        f.write("  <References />\n  <Blocks />\n  <Files>\n")
-        f.write('    <File md5="%s" import="0">%s</File>\n' % (md5(os.path.join(folder, dll)), dll))
-        f.write('    <File md5="%s" import="0">%s</File>\n' % (md5(os.path.join(folder, sql)), sql))
-        f.write("  </Files>\n  <Actions>\n    <OnModActivated>\n      <UpdateDatabase>%s</UpdateDatabase>\n" % sql)
-        f.write("    </OnModActivated>\n  </Actions>\n</Mod>\n")
+    write_modinfo(folder, mod_name, mod_id, "Test plugin for the %s." % HOST_NAME, [(dll, 0), (sql, 0)], [sql])
 
 
 def write_vmc_check_mod():
     name = "Toy VMC Check"
-    folder = os.path.join(OUT, "MODS", "%s (v 1)" % name)
-    os.makedirs(folder)
+    folder = new_mod_folder(name)
     files = [("VmcCheck.sql", VMC_CHECK_SQL, 0), ("VmcCheck.lua", VMC_CHECK_LUA, 1), ("VmcCheck.xml", VMC_CHECK_XML, 1)]
     for file_name, content, _ in files:
         with open(os.path.join(folder, file_name), "w") as f:
             f.write(content)
-    with open(os.path.join(folder, "%s (v 1).modinfo" % name), "w", encoding="utf-8") as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % VMC_CHECK_ID)
-        teaser = "Test mod for the %s: switches on one VMC event and writes it to Lua.log." % HOST_NAME
-        f.write(PROPERTIES.format(name=name, teaser=teaser, affects=0))
-        f.write(host_dependencies())
-        f.write("  <References />\n  <Blocks />\n  <Files>\n")
-        for file_name, _, vfs in files:
-            digest = md5(os.path.join(folder, file_name))
-            f.write('    <File md5="%s" import="%d">%s</File>\n' % (digest, vfs, file_name))
-        f.write("  </Files>\n  <Actions>\n    <OnModActivated>\n      <UpdateDatabase>VmcCheck.sql</UpdateDatabase>\n")
-        f.write("    </OnModActivated>\n  </Actions>\n  <EntryPoints>\n")
-        f.write('    <EntryPoint type="InGameUIAddin" file="VmcCheck.xml">\n')
-        f.write("      <Name>VMC check</Name>\n      <Description>%s</Description>\n" % teaser)
-        f.write("    </EntryPoint>\n  </EntryPoints>\n</Mod>\n")
+    teaser = "Test mod for the %s: switches on one VMC event and writes it to Lua.log." % HOST_NAME
+    write_modinfo(
+        folder,
+        name,
+        VMC_CHECK_ID,
+        teaser,
+        [(file_name, vfs) for file_name, _, vfs in files],
+        ["VmcCheck.sql"],
+        [("InGameUIAddin", "VmcCheck.xml", "VMC check", teaser)],
+    )
 
 
 def write_bench_mod(build):
