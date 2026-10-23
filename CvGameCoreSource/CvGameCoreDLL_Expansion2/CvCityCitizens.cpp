@@ -6,6 +6,9 @@
 	All rights reserved. 
 	------------------------------------------------------------------------------------------------------- */
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "ICvDLLUserInterface.h"
 #include "CvGameCoreUtils.h"
 #include "CvCitySpecializationAI.h"
@@ -2765,6 +2768,9 @@ void CvCityCitizens::DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, b
 	if (eUnit == NO_UNIT)
 		return;	// Better than crashing.
 
+#if defined(CIV_HOST_API)
+	CivHandPopupRaised(GetCity()->getOwner(), BUTTONPOPUP_GREAT_PERSON_REWARD, eUnit, GetCity()->GetID(), -1, false, false, "");
+#endif
 	// If it's the active player then show the popup
 	if(GetCity()->getOwner() == GC.getGame().getActivePlayer())
 	{

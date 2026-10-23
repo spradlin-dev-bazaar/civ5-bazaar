@@ -32,6 +32,8 @@ public:
 #if defined(FAKE_MOD_OPTION)
 	int Reach() const;
 #endif
+	void CancelOrders(int reason);
+	bool PlayedByPlugin(int player) const;
 
 	int m_notified;
 	std::string m_name;

@@ -47,6 +47,24 @@ namespace
 		return field;
 	}
 
+	// A choice is saved on one plugin's line but holds for both, so each of the two rows lists the other.
+	std::vector<std::string> UseBothPartners(const std::vector<CivOrderEntry>& order, const std::string& file)
+	{
+		std::vector<std::string> partners;
+		for (size_t i = 0; i < order.size(); ++i)
+		{
+			for (size_t j = 0; j < order[i].useBothWith.size(); ++j)
+			{
+				const std::string& a = order[i].file;
+				const std::string& b = order[i].useBothWith[j];
+				const std::string partner = SameFile(a, file) ? b : (SameFile(b, file) ? a : std::string());
+				if (!partner.empty() && !Contains(partners, partner))
+					partners.push_back(partner);
+			}
+		}
+		return partners;
+	}
+
 	bool TakeLoadedRow(const std::vector<CivPluginReportRow>& loaded, const std::string& file, std::vector<bool>* taken,
 		CivPluginReportRow* row)
 	{
@@ -110,7 +128,10 @@ std::string CivFormatOrder(const std::vector<CivOrderEntry>& order)
 	for (size_t i = 0; i < order.size(); ++i)
 	{
 		const CivOrderEntry& e = order[i];
-		text += std::string(e.skip ? kSkip : kLoad) + "\t" + Field(e.file) + "\t" + Field(e.name) + "\t" + Field(e.version) + "\r\n";
+		text += std::string(e.skip ? kSkip : kLoad) + "\t" + Field(e.file) + "\t" + Field(e.name) + "\t" + Field(e.version);
+		for (size_t j = 0; j < e.useBothWith.size(); ++j)
+			text += "\t" + Field(e.useBothWith[j]);
+		text += "\r\n";
 	}
 	return text;
 }
@@ -133,9 +154,21 @@ std::vector<CivOrderEntry> CivParseOrder(const std::string& text)
 		entry.file = fields[1];
 		entry.name = fields.size() > 2 ? fields[2] : "";
 		entry.version = fields.size() > 3 ? fields[3] : "";
+		for (size_t j = 4; j < fields.size(); ++j)
+			if (!fields[j].empty())
+				entry.useBothWith.push_back(fields[j]);
 		order.push_back(entry);
 	}
 	return order;
+}
+
+CivFilePairs CivUseBothPairs(const std::vector<CivOrderEntry>& order)
+{
+	CivFilePairs pairs;
+	for (size_t i = 0; i < order.size(); ++i)
+		for (size_t j = 0; j < order[i].useBothWith.size(); ++j)
+			pairs.push_back(CivFilePair(order[i].file, order[i].useBothWith[j]));
+	return pairs;
 }
 
 std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEntry>& order, const std::vector<std::string>& missing,
@@ -166,6 +199,7 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 			row.failed = true;
 		}
 		row.file = e.file;
+		row.useBothWith = UseBothPartners(order, e.file);
 		rows.push_back(row);
 	}
 	return rows;

@@ -13,9 +13,9 @@ if errorlevel 1 (type "%OUT%\generate.log" & exit /b 1)
 
 rem The two layout defines must match common.LAYOUT_DEFINES, or strings and vectors differ across DLLs.
 set FLAGS=/nologo /O2 /Oy /Ob2 /GS- /MD /EHsc /W3 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0 /DCIV_HOST_API= /I"%HERE%..\..\host" /I"%GEN%\src\fixture" /I"%GEN%\sdk"
-cl %FLAGS% /Fo"%OUT%\\" /Fe"%OUT%\harness.exe" "%HERE%harness.cpp" "%HERE%test_plugins.cpp" "%HERE%test_lifecycle.cpp" "%HERE%test_plugins_screen.cpp" "%GEN%\src\fixture\fake_engine.cpp" "%GEN%\src\fixture\CivHookTable.cpp" "%HERE%..\..\host\CivHostRuntime.cpp" "%HERE%..\..\host\CivHostOrder.cpp" "%HERE%..\..\host\CivHostSetup.cpp" >"%OUT%\build.log"
+cl %FLAGS% /Fo"%OUT%\\" /Fe"%OUT%\harness.exe" "%HERE%harness.cpp" "%HERE%test_plugins.cpp" "%HERE%test_lifecycle.cpp" "%HERE%test_plugins_screen.cpp" "%HERE%test_hand_hooks.cpp" "%GEN%\src\fixture\fake_engine.cpp" "%GEN%\src\fixture\CivHookTable.cpp" "%HERE%..\..\host\CivHostRuntime.cpp" "%HERE%..\..\host\CivHostHand.cpp" "%HERE%..\..\host\CivHostOrder.cpp" "%HERE%..\..\host\CivHostSetup.cpp" >"%OUT%\build.log"
 if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
-for %%T in (BASIC SECOND SHAPES CONFLICT NEWER MAJOR FAULT FAULT_REPLACE FAULT_BEFORE FAULT_KEPT KEPT ENTRY_FAULT ENTRY_BREAK BENCH REENTRANT THREADS NO_ENTRY DECLINE LATE_FAULT BAD_HOOKS THROW VETO NO_SHUTDOWN) do (
+for %%T in (BASIC SECOND SHAPES CONFLICT NEWER MAJOR FAULT FAULT_REPLACE FAULT_BEFORE FAULT_KEPT KEPT ENTRY_FAULT ENTRY_BREAK BENCH REENTRANT THREADS NO_ENTRY DECLINE LATE_FAULT BAD_HOOKS THROW VETO NO_SHUTDOWN HAND HAND_SECOND HAND_FAULT HAND_REPLACE) do (
 	cl %FLAGS% /LD /DTOY_%%T /Fo"%OUT%\toy_%%T.obj" /Fe"%OUT%\toy_%%T.dll" "%HERE%toy_plugins.cpp" >>"%OUT%\build.log"
 	if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
 )

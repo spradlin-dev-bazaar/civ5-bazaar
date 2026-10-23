@@ -6,6 +6,9 @@
 	All rights reserved. 
 	------------------------------------------------------------------------------------------------------- */
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvNotifications.h"
 #include "CvPlayer.h"
 #include "CvDiplomacyAI.h"
@@ -490,6 +493,9 @@ int CvNotifications::Add(NotificationTypes eNotificationType, const char* strMes
 
 	m_iCurrentLookupIndex++;
 
+#if defined(CIV_HOST_API)
+	CivHandNotificationAdded(m_ePlayer, eNotificationType, strMessage, strSummary, iX, iY, iGameDataIndex, iExtraGameData);
+#endif
 	return newNotification.m_iLookupIndex;
 }
 

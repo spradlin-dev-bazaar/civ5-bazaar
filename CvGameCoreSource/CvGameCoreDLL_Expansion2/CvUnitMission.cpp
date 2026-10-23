@@ -18,6 +18,9 @@
 #include "CvPlayerAI.h"
 #include "ICvDLLUserInterface.h"
 #include "CvUnitMission.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvUnitCombat.h"
 #include "CvDllUnit.h"
 #include "CvTypes.h"
@@ -531,7 +534,11 @@ void CvUnitMission::ContinueMission(UnitHandle hUnit, int iSteps, int iETA)
 				{
 					bool bCityAttackInterrupt = gDLL->GetAdvisorCityAttackInterrupt();
 					bool bBadAttackInterrupt = gDLL->GetAdvisorBadAttackInterrupt();
-					if(hUnit->isHuman() && !CvPreGame::isNetworkMultiplayerGame() && !GC.getGame().IsCombatWarned() && (bCityAttackInterrupt || bBadAttackInterrupt))
+					if(hUnit->isHuman() && !CvPreGame::isNetworkMultiplayerGame() && !GC.getGame().IsCombatWarned() && (bCityAttackInterrupt || bBadAttackInterrupt)
+#if defined(CIV_HOST_API)
+						&& !CivHandIsPluginControlledPlayer(hUnit->getOwner())
+#endif
+						)
 					{
 						if(hUnit->canMoveInto(*pPlot, CvUnit::MOVEFLAG_ATTACK) && pPlot->isVisible(hUnit->getTeam()))
 						{

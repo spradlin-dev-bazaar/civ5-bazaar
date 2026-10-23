@@ -1,6 +1,7 @@
 // Loading plugins, running their hooks, catching their crashes, and sharing memory with them.
 #include "harness.h"
 #include "CivHooks.h"
+#include "CivHostHand.h"
 #include "CivHostHooks.h"
 #include "fake_engine.h"
 
@@ -37,6 +38,7 @@ namespace
 		const std::string name = toy;
 		Check(unit.add(2, 3) == 10, (name + ": its hook never runs, and the next plugin's hooks do").c_str());
 		Check(AfterHookCount(CivHooks::FakeUnit_add::ID) == 1, (name + ": only the next plugin's hook is registered").c_str());
+		Check(!CivHandKeepDeadSlotOpen(1), (name + ": its hand-placed hook never runs").c_str());
 	}
 }
 
@@ -63,6 +65,7 @@ void TestLoading()
 	Check(LogHas("Plugin Toy Conflict: Toy Basic"), "the refusal names the refused plugin, though it is still loading");
 	Check(LogHas("[Toy Basic] starting"), "a plugin logging from its entry point is named in the log");
 	Check(Call(TOY_FUNCTION("toy_basic.dll", ToyRegisterLate), -1) == CIV_HOOK_NOT_ALLOWED, "registering after loading is refused");
+	Check(Call(TOY_FUNCTION("toy_basic.dll", ToyRegisterHandLate), -1) == CIV_HOOK_NOT_ALLOWED, "registering a hand-placed hook after loading is refused");
 
 	const CivPluginReportRow basic = ReportRow("toy_basic.dll");
 	Check(!basic.failed && basic.status == "Loaded", "the Plugins screen lists a loaded plugin as Loaded");
@@ -191,6 +194,10 @@ void TestRegistration()
 	FakeUnit unit;
 	Check(unit.Range() == 500, "a plugin's first replacement of a function still runs after its second was refused");
 	Check(unit.add(2, 3) == 5, "refused registrations add no hooks");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "hand-placed hook past the last", CIV_HOOK_BAD_ID).c_str()), "registering a hand-placed hook past the last is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "negative hand-placed hook", CIV_HOOK_BAD_ID).c_str()), "registering a negative hand-placed hook is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "hand-placed hook with no function", CIV_HOOK_BAD_ID).c_str()), "registering a hand-placed hook with no function is refused");
+	Check(!CivHandKeepDeadSlotOpen(1), "refused hand-placed hook registrations add nothing");
 }
 
 void TestTurnedAwayAfterRegistering()

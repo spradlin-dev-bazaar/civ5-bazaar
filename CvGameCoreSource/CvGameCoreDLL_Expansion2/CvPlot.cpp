@@ -7,6 +7,9 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvPlot.h"
 #include "CvCity.h"
 #include "CvUnit.h"
@@ -9338,6 +9341,10 @@ bool CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
 #endif
 						}
 					}
+
+#if defined(CIV_HOST_API)
+					CivHandPopupRaised(CivHostTeamPlayers(eTeam), BUTTONPOPUP_NATURAL_WONDER_REWARD, getX(), getY(), iFinderGold, bFirstFinder, false, "");
+#endif
 
 					// If it's the active team then tell them they found something
 					if(eTeam == eActiveTeam)

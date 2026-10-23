@@ -7,6 +7,9 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvUnit.h"
 #include "CvArea.h"
 #include "CvPlot.h"
@@ -16215,6 +16218,9 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 							}
 						}
 
+#if defined(CIV_HOST_API)
+						CivHandPopupRaised(getOwner(), BUTTONPOPUP_BARBARIAN_CAMP_REWARD, iNumGold, -1, -1, false, false, "");
+#endif
 						// If it's the active player then show the popup
 						if(getOwner() == GC.getGame().getActivePlayer())
 						{
@@ -19483,6 +19489,9 @@ void CvUnit::setPromotionReady(bool bNewValue)
 			SetAutomateType(NO_AUTOMATE);
 			ClearMissionQueue();
 			SetActivityType(ACTIVITY_AWAKE);
+#if defined(CIV_HOST_API)
+			CivHandUnitOrdersCancelled(this, CIV_ORDERS_PROMOTION_READY);
+#endif
 		}
 
 		if(bNewValue)
@@ -23011,6 +23020,9 @@ int CvUnit::UnitPathTo(int iX, int iY, int iFlags, int iPrevETA, bool bBuildingR
 	{
 		if(!canMoveInto(*pDestPlot))
 		{
+#if defined(CIV_HOST_API)
+			CivHandUnitOrdersCancelled(this, CIV_ORDERS_CANNOT_LAND);
+#endif
 			return 0;
 		}
 
@@ -23024,6 +23036,9 @@ int CvUnit::UnitPathTo(int iX, int iY, int iFlags, int iPrevETA, bool bBuildingR
 			if(!GC.GetBuildRouteFinder().GeneratePath(getX(), getY(), iX, iY, getOwner()))
 			{
 				LOG_UNIT_MOVES_MESSAGE("Unable to generate path with BuildRouteFinder");
+#if defined(CIV_HOST_API)
+				CivHandUnitOrdersCancelled(this, CIV_ORDERS_NO_ROUTE_TO_BUILD);
+#endif
 				return 0;
 			}
 
@@ -23041,6 +23056,9 @@ int CvUnit::UnitPathTo(int iX, int iY, int iFlags, int iPrevETA, bool bBuildingR
 
 			if(!pPathPlot || !canMoveInto(*pPathPlot, iFlags | MOVEFLAG_DESTINATION))
 			{
+#if defined(CIV_HOST_API)
+				CivHandUnitOrdersCancelled(this, CIV_ORDERS_ROUTE_BLOCKED);
+#endif
 				// add route interrupted
 				CvNotifications* pNotifications = GET_PLAYER(getOwner()).GetNotifications();
 				if(pNotifications)
@@ -23066,6 +23084,9 @@ int CvUnit::UnitPathTo(int iX, int iY, int iFlags, int iPrevETA, bool bBuildingR
 			if (!bPathGenerated)
 			{
 				LOG_UNIT_MOVES_MESSAGE("Unable to Generate path");
+#if defined(CIV_HOST_API)
+				CivHandUnitOrdersCancelled(this, CIV_ORDERS_NO_PATH);
+#endif
 				return 0;
 			}
 
@@ -23084,6 +23105,9 @@ int CvUnit::UnitPathTo(int iX, int iY, int iFlags, int iPrevETA, bool bBuildingR
 		if(iPrevETA >= 0 && kNode.m_iData2 > iPrevETA + 2)
 		{
 			LOG_UNIT_MOVES_MESSAGE_OSTR(std::string("Rejecting move iPrevETA=") << iPrevETA << std::string(", m_iData2=") << kNode.m_iData2);
+#if defined(CIV_HOST_API)
+			CivHandUnitOrdersCancelled(this, CIV_ORDERS_PATH_LONGER);
+#endif
 			bRejectMove = true;
 		}
 
@@ -23106,6 +23130,9 @@ int CvUnit::UnitPathTo(int iX, int iY, int iFlags, int iPrevETA, bool bBuildingR
 			if(pkMissionData != NULL && pkMissionData->iPushTurn != GC.getGame().getGameTurn())
 			{
 				LOG_UNIT_MOVES_MESSAGE_OSTR(std::string("Rejecting move pkMissionData->iPushTurn=") << pkMissionData->iPushTurn << std::string(", GC.getGame().getGameTurn()=") << GC.getGame().getGameTurn());
+#if defined(CIV_HOST_API)
+				CivHandUnitOrdersCancelled(this, CIV_ORDERS_DESTINATION_BLOCKED);
+#endif
 				bRejectMove = true;
 			}
 		}

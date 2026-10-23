@@ -68,8 +68,26 @@ def naming_problems():
     return ["%s, expected %s" % pair for pair in expected if pair[0] != pair[1]]
 
 
+def hand_hook_problems():
+    """Calls inside a hooked function's body count once per hand-placed hook and function; calls outside do not."""
+    data = (
+        b"void A() { CivHandPopupRaised(1); CivHandPopupRaised (2); }\n"
+        b"int x = CivHandDealResolved(4);\n"
+        b"void B() { CivHandIsPluginControlledPlayer(3); }\n"
+    )
+    a_start, a_end = data.index(b"{"), data.index(b"}") + 1
+    b_start = data.index(b"{", a_end)
+    hooks = [
+        {"file": "f.cpp", "body_start": a_start, "def_end": a_end, "hook_id": 9},
+        {"file": "f.cpp", "body_start": b_start, "def_end": len(data), "hook_id": 7},
+    ]
+    sites = generate.hand_hook_sites(hooks, {os.path.join("root", "f.cpp"): data}, "root")
+    expected = [("CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER", 7), ("CIV_HAND_POPUP_RAISED", 9)]
+    return [] if sites == expected else ["hand-placed hook sites %s, expected %s" % (sites, expected)]
+
+
 if __name__ == "__main__":
-    problems = naming_problems() + duplicate_problems()
+    problems = naming_problems() + duplicate_problems() + hand_hook_problems()
     registry = os.path.join(BUILD, "hook-ids.txt")
     if os.path.exists(registry):
         os.remove(registry)

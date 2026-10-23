@@ -14,6 +14,9 @@
         <Button ID="DownButton" Anchor="R,C" Offset="4,0" Style="ScrollBarDown" />
       </Box>
       <Label ID="Status" Anchor="L,T" Offset="40,0" WrapWidth="760" LeadingOffset="-5" Font="TwCenMT18" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
+      <Box ID="UseBothRow" Anchor="L,T" Size="800,30" Color="White.0" Hidden="1">
+        <CheckBox ID="UseBothBox" ButtonTexture="assets/UI/Art/Controls/CheckBox2TheBox.dds" Anchor="L,C" Offset="40,0" TextAnchorSide="Right" TextOffset="40,0" Font="TwCenMT18" String="Use both anyway" IsChecked="0" ConsumeMouse="1" />
+      </Box>
     </Stack>
   </Instance>
 

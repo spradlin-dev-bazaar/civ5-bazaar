@@ -6,6 +6,9 @@
 	All rights reserved. 
 	------------------------------------------------------------------------------------------------------- */
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvMinorCivAI.h"
 #include "ICvDLLUserInterface.h"
 #include "CvGameCoreUtils.h"
@@ -2746,6 +2749,18 @@ void CvMinorCivAI::DoFirstContactWithMajor(TeamTypes eTeam, bool bSuppressMessag
 
 					// See if there are any quests you can join now
 					DoTestQuestsOnFirstContact(ePlayer);
+
+#if defined(CIV_HOST_API)
+					if(!bSuppressMessages)
+					{
+#if defined(MOD_GLOBAL_CS_GIFTS)
+						if (MOD_GLOBAL_CS_GIFTS)
+							CivHandPopupRaised(ePlayer, BUTTONPOPUP_CITY_STATE_GREETING, GetPlayer()->GetID(), iGift, iFriendshipBoost, bFirstMajorCiv, false, szTxtKeySuffix);
+						else
+#endif
+							CivHandPopupRaised(ePlayer, BUTTONPOPUP_CITY_STATE_GREETING, GetPlayer()->GetID(), iGoldGift, iFaithGift, bFirstMajorCiv, false, "");
+					}
+#endif
 
 					// Greeting for active human player
 					if(ePlayer == GC.getGame().getActivePlayer() && !bSuppressMessages)

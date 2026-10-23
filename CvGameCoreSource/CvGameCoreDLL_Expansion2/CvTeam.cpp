@@ -7,6 +7,9 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvPlayerAI.h"
 #include "CvDefines.h"
 #include "CvGameCoreUtils.h"
@@ -6091,6 +6094,9 @@ void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, b
 			{
 				bool bDontShowRewardPopup = DLLUI->IsOptionNoRewardPopups();
 
+#if defined(CIV_HOST_API)
+				CivHandPopupRaised(CivHostTeamPlayers(GetID()), BUTTONPOPUP_TECH_AWARD, -1, 0, eIndex, false, false, "");
+#endif
 				// Notification in MP games
 #if defined(MOD_API_EXTENSIONS)
 				if(bDontShowRewardPopup || GC.getGame().isReallyNetworkMultiPlayer())
@@ -6993,6 +6999,9 @@ void CvTeam::SetCurrentEra(EraTypes eNewValue)
 
 				
 				if(!isBarbarian() && (eNewValue != GC.getGame().getStartEra())){
+#if defined(CIV_HOST_API)
+					CivHandPopupRaised(CivHostTeamPlayers(GetID()), BUTTONPOPUP_NEW_ERA, eNewValue, -1, -1, false, false, "");
+#endif
 					//Era Popup
 #if defined(MOD_API_EXTENSIONS)
 					if (!GC.getGame().isReallyNetworkMultiPlayer() && isHuman() && GetID() == GC.getGame().getActiveTeam()){

@@ -8442,6 +8442,10 @@ void CvGame::updateMoves()
 
 									if(player.isLocalPlayer() && gDLL->sendTurnUnready())
 										player.setEndTurn(false);
+#if defined(CIV_HOST_API)
+									else if(!player.isLocalPlayer() && CivHandIsPluginControlledPlayer(player.GetID()))
+										player.setEndTurn(false);
+#endif
 								}
 							}
 
@@ -8473,6 +8477,10 @@ void CvGame::updateMoves()
 										CvAssertMsg(GC.getGame().getActivePlayer() == player.GetID(), "slewis - We should not need to resolve ambiguous end turns for the AI or remotely.");
 										if(player.isLocalPlayer() && gDLL->sendTurnUnready())
 											player.setEndTurn(false);
+#if defined(CIV_HOST_API)
+										else if(!player.isLocalPlayer() && CivHandIsPluginControlledPlayer(player.GetID()))
+											player.setEndTurn(false);
+#endif
 									}
 								}
 							}

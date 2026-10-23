@@ -1,5 +1,7 @@
 #include "fake_engine.h"
 
+#include "CivHostHand.h"
+
 int FakeUnit::add(int a, int b) const
 {
 	return a + b;
@@ -81,6 +83,17 @@ int FakeUnit::Reach() const
 #endif
 {
 	return 3;
+}
+
+void FakeUnit::CancelOrders(int reason)
+{
+	CivHandUnitOrdersCancelled(reinterpret_cast<CvUnit*>(this), reason);
+	m_notified = reason;
+}
+
+bool FakeUnit::PlayedByPlugin(int player) const
+{
+	return CivHandIsPluginControlledPlayer(player);
 }
 
 int FakeRules::Bonus(int x)

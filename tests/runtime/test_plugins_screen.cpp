@@ -138,6 +138,36 @@ namespace
 		Check(rows[4].failed && rows[4].status == "Not loaded", "a plugin with no loaded row is listed as Not loaded, not as blank");
 		Check(rows[0].file == "first.dll", "each row carries the file name as listed, which the screen sends back");
 	}
+
+	void TestUseBoth()
+	{
+		std::vector<CivOrderEntry> order;
+		order.push_back(Entry("a.dll", false, "Toy A"));
+		order.push_back(Entry("b.dll", false, "Toy B"));
+		order[1].version = "2.0";
+		order[1].useBothWith.push_back("a.dll");
+		order[1].useBothWith.push_back("c.dll");
+		const std::vector<CivOrderEntry> parsed = CivParseOrder(CivFormatOrder(order));
+		Check(parsed.size() == 2 && parsed[0].useBothWith.empty(), "a plugin with no Use both anyway choice reads back with none");
+		Check(parsed.size() == 2 && parsed[1].useBothWith == order[1].useBothWith && parsed[1].name == "Toy B" && parsed[1].version == "2.0",
+			"a plugin's Use both anyway choices read back, after its name and version");
+		const std::vector<CivOrderEntry> gap = CivParseOrder("load\tx.dll\tToy X\t1.0\t\ty.dll\n");
+		Check(gap.size() == 1 && gap[0].useBothWith == std::vector<std::string>(1, "y.dll"), "an empty choice in a saved line is ignored");
+
+		const CivFilePairs pairs = CivUseBothPairs(order);
+		Check(pairs.size() == 2 && pairs[0] == CivFilePair("b.dll", "a.dll") && pairs[1] == CivFilePair("b.dll", "c.dll"),
+			"each choice pairs the plugin with the one it is used with");
+		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(order, std::vector<std::string>(), std::vector<CivPluginReportRow>());
+		Check(rows.size() == 2 && rows[1].useBothWith == order[1].useBothWith, "the Plugins screen gets each plugin's choices");
+		Check(rows.size() == 2 && rows[0].useBothWith == std::vector<std::string>(1, "b.dll"), "a choice saved on one plugin's line also shows on the other plugin's row");
+		std::vector<CivOrderEntry> bothLines = order;
+		bothLines[0].useBothWith.push_back("B.DLL");
+		const std::vector<CivPluginReportRow> bothRows = CivOrderReportRows(bothLines, std::vector<std::string>(), std::vector<CivPluginReportRow>());
+		Check(bothRows.size() == 2 && bothRows[0].useBothWith.size() == 1 && bothRows[1].useBothWith.size() == 2,
+			"a choice saved on both plugins' lines is listed once on each row");
+		const std::vector<CivOrderEntry> kept = CivKeepUnlisted(std::vector<CivOrderEntry>(1, order[0]), order);
+		Check(kept.size() == 2 && kept[1].useBothWith == order[1].useBothWith, "a plugin whose mod is off keeps its choices when the order is saved");
+	}
 }
 
 void TestOrder()
@@ -145,6 +175,7 @@ void TestOrder()
 	TestApplyOrder();
 	TestOrderText();
 	TestOrderRows();
+	TestUseBoth();
 }
 
 void TestReplacedSetup()

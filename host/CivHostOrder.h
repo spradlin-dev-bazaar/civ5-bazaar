@@ -17,6 +17,7 @@ struct CivOrderEntry
 	// A skipped plugin is never loaded to ask, so the name it had when last listed is kept.
 	std::string name;
 	std::string version;
+	std::vector<std::string> useBothWith;
 };
 
 // The listed plugin files in the saved order; files the saved order lacks follow, in listed order.
@@ -26,6 +27,9 @@ std::vector<CivOrderEntry> CivKeepUnlisted(const std::vector<CivOrderEntry>& ord
 std::string CivFormatOrder(const std::vector<CivOrderEntry>& order);
 // Lines it does not recognise are ignored.
 std::vector<CivOrderEntry> CivParseOrder(const std::string& text);
-// One row per entry. Each entry neither skipped nor missing takes the loaded plugin row with its file name.
+// Each plugin with each one in its useBothWith.
+CivFilePairs CivUseBothPairs(const std::vector<CivOrderEntry>& order);
+// One row per entry. Each entry neither skipped nor missing takes the loaded plugin row with its file name. A row's
+// useBothWith lists every plugin paired with it, whichever of the two lines holds the choice.
 std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEntry>& order, const std::vector<std::string>& missing,
 	const std::vector<CivPluginReportRow>& loaded);

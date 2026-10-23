@@ -46,6 +46,8 @@ TOYS = [
     ("RIVAL", "ToyRival", "Toy Rival Plugin", "bd4f6967-e129-4de5-9ac5-58627909ed43"),
     ("CRASH", "ToyCrash", "Toy Crash Plugin", "6172647d-3bcb-41fa-9cde-870a7723518f"),
     ("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
+    ("HAND", "ToyHand", "Toy Hand Plugin", "d6d32c6a-5f13-49b5-ab37-505f39e88adc"),
+    ("HAND_REPLACE", "ToyHandReplace", "Toy Hand Replace Plugin", "2df335dd-943f-40dd-86a9-241903d92043"),
 ]
 VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
 # Runs after the host's CustomModOptions.xml has added the row, because this mod depends on the host.
@@ -53,6 +55,7 @@ VMC_CHECK_SQL = "UPDATE CustomModOptions SET Value = 1 WHERE Name = 'EVENTS_PLAY
 VMC_CHECK_LUA = """print("DLL id " .. Game.GetDllGuid())
 print("EVENTS_PLAYER_TURN on: " .. tostring(Game.IsCustomModOption("EVENTS_PLAYER_TURN")))
 GameEvents.PlayerDoneTurn.Add(function(iPlayer) print("PlayerDoneTurn for player " .. iPlayer) end)
+print("Game.ToyHandPing: " .. (Game.ToyHandPing and Game.ToyHandPing() or "missing"))
 """
 VMC_CHECK_XML = '<?xml version="1.0" encoding="utf-8"?>\n<Context>\n</Context>\n'
 

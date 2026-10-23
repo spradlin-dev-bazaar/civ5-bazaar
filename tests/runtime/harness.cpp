@@ -25,6 +25,10 @@ void TestEntryBreak();
 void TestThreads();
 void TestOrder();
 void TestReplacedSetup();
+void TestHandHooks();
+void TestHandHookFaults();
+void TestPossibleConflicts();
+void TestSkippedOriginal();
 
 namespace
 {
@@ -71,6 +75,10 @@ namespace
 		{"threads", &TestThreads},
 		{"order", &TestOrder},
 		{"replaced setup", &TestReplacedSetup},
+		{"hand-placed hooks", &TestHandHooks},
+		{"hand-placed hook faults", &TestHandHookFaults},
+		{"possible conflicts", &TestPossibleConflicts},
+		{"skipped original", &TestSkippedOriginal},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 

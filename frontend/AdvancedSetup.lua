@@ -16,6 +16,23 @@ local g_Plugins = {};
 -- The order and skips Bazaar last loaded.
 local g_Loaded = {};
 
+local function Lines(text)
+	local lines = {};
+	for line in string.gmatch(text or "", "[^\n]+") do
+		table.insert(lines, line);
+	end
+	return lines;
+end
+
+local function HasFile(files, file)
+	for _, f in ipairs(files) do
+		if string.lower(f) == string.lower(file) then
+			return true;
+		end
+	end
+	return false;
+end
+
 -- Rows come from WritePluginReport in host/CivHostEngine.cpp; nil means the table is missing or unreadable.
 local function PluginRows()
 	local rows = nil;
@@ -24,9 +41,9 @@ local function PluginRows()
 			rows = {};
 		end
 		if rows then
-			for row in DB.Query("SELECT File, Name, Version, Status, Problems, Failed, Skipped FROM BazaarPlugins ORDER BY Position") do
+			for row in DB.Query("SELECT File, Name, Version, Status, Problems, Failed, Skipped, ConflictsWith, UseBothWith FROM BazaarPlugins ORDER BY Position") do
 				table.insert(rows, { File = row.File or "", Name = row.Name, Version = row.Version, Status = row.Status, Problems = row.Problems,
-					Failed = row.Failed == 1, Skip = row.Skipped == 1 });
+					Failed = row.Failed == 1, Skip = row.Skipped == 1, ConflictsWith = Lines(row.ConflictsWith), UseBothWith = Lines(row.UseBothWith) });
 			end
 		end
 	end);
@@ -52,11 +69,53 @@ local function Changed()
 		return true;
 	end
 	for i, row in ipairs(g_Plugins) do
-		if row.File ~= g_Loaded[i].File or row.Skip ~= g_Loaded[i].Skip then
+		if row.File ~= g_Loaded[i].File or row.Skip ~= g_Loaded[i].Skip or table.concat(row.UseBothWith, "\n") ~= g_Loaded[i].UseBothWith then
 			return true;
 		end
 	end
 	return false;
+end
+
+local function UsesBoth(row)
+	for _, file in ipairs(row.ConflictsWith) do
+		if not HasFile(row.UseBothWith, file) then
+			return false;
+		end
+	end
+	return true;
+end
+
+local function PluginRow(file)
+	for _, row in ipairs(g_Plugins) do
+		if string.lower(row.File) == string.lower(file) then
+			return row;
+		end
+	end
+	return nil;
+end
+
+local function SetPair(row, file, useBoth)
+	local kept = {};
+	for _, f in ipairs(row.UseBothWith) do
+		if string.lower(f) ~= string.lower(file) then
+			table.insert(kept, f);
+		end
+	end
+	if useBoth then
+		table.insert(kept, file);
+	end
+	row.UseBothWith = kept;
+end
+
+-- A choice holds for both plugins, so it is set on both rows; the host would otherwise keep a pair the other row still lists.
+local function SetUseBoth(row, useBoth)
+	for _, file in ipairs(row.ConflictsWith) do
+		SetPair(row, file, useBoth);
+		local partner = PluginRow(file);
+		if partner then
+			SetPair(partner, row.File, useBoth);
+		end
+	end
 end
 
 local Render;
@@ -79,10 +138,16 @@ local function ShowRow(row, isFirst, index)
 	entry.UseBox:SetHide(index == nil);
 	entry.UpButton:SetHide(index == nil);
 	entry.DownButton:SetHide(index == nil);
+	entry.UseBothRow:SetHide(index == nil or #row.ConflictsWith == 0);
 	if index then
 		entry.UseBox:SetCheck(not row.Skip);
 		entry.UseBox:RegisterCheckHandler(function(checked)
 			row.Skip = not checked;
+			Render();
+		end);
+		entry.UseBothBox:SetCheck(UsesBoth(row));
+		entry.UseBothBox:RegisterCheckHandler(function(checked)
+			SetUseBoth(row, checked);
 			Render();
 		end);
 		entry.UpButton:SetDisabled(index == 1);
@@ -123,7 +188,7 @@ local function Refresh()
 			table.insert(g_Notes, row);
 		else
 			table.insert(g_Plugins, row);
-			table.insert(g_Loaded, { File = row.File, Skip = row.Skip });
+			table.insert(g_Loaded, { File = row.File, Skip = row.Skip, UseBothWith = table.concat(row.UseBothWith, "\n") });
 		end
 	end
 	Render();
@@ -132,7 +197,7 @@ end
 local function Apply()
 	local order = {};
 	for i, row in ipairs(g_Plugins) do
-		order[i] = { File = row.File, Skip = row.Skip, Name = row.Name, Version = row.Version };
+		order[i] = { File = row.File, Skip = row.Skip, Name = row.Name, Version = row.Version, UseBothWith = row.UseBothWith };
 	end
 	-- Front-end Lua has no other way into Bazaar's DLL; see host/CivHostEngine.h.
 	local ok, applied = pcall(UI.GetMapPreview, "bazaar:apply", order);

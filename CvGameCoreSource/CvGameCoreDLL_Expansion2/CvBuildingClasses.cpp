@@ -6,6 +6,9 @@
 	All rights reserved. 
 	------------------------------------------------------------------------------------------------------- */
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "ICvDLLUserInterface.h"
 #include "CvGameCoreUtils.h"
 #include "CvInternalGameCoreUtils.h"
@@ -2812,6 +2815,9 @@ void CvCityBuildings::SetNumRealBuildingTimed(BuildingTypes eIndex, int iNewValu
 
 						bool bDontShowRewardPopup = GC.GetEngineUserInterface()->IsOptionNoRewardPopups();
 
+#if defined(CIV_HOST_API)
+						CivHandPopupRaised(m_pCity->getOwner(), BUTTONPOPUP_WONDER_COMPLETED_ACTIVE_PLAYER, eIndex, -1, -1, false, false, "");
+#endif
 						// Notification in MP games
 #if defined(MOD_API_EXTENSIONS)
 						if(bDontShowRewardPopup || GC.getGame().isReallyNetworkMultiPlayer())

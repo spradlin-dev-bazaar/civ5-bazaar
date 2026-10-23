@@ -1,6 +1,6 @@
 # Bazaar Multi-DLL Mod Loader: one DLL, many plugin DLLs
 
-Status: planned 2026-10-19, reworked 2026-10-21. P0, the proof of concept, was finished on 2026-10-22: the generator, the hooked host, plugin loading and unloading and crash handling all work in the game with small test plugins. P1 is under way on the p1 branch: VMC is in, the engine calls are back, and the Plugins screen lists, reorders and skips plugins. The rest of P1 is not built yet. Anything else in this document is a plan unless a section says otherwise.
+Status: planned 2026-10-19, reworked 2026-10-21. P0, the proof of concept, was finished on 2026-10-22: the generator, the hooked host, plugin loading and unloading and crash handling all work in the game with small test plugins. P1 is under way on the p1 branch: VMC is in, the engine calls are back, the Plugins screen lists, reorders and skips plugins, and the hand-placed hooks are in. The rest of P1 is not built yet. Anything else in this document is a plan unless a section says otherwise.
 
 ## Goal
 
@@ -83,26 +83,25 @@ The generator reads the headers and writes one wrapper per function with that fu
 
 Raw detouring is not used on host functions. It remains only for the closed executable, where the seat playback code already patches by pattern; that stays in the MCP plugin.
 
-**Hand-placed hooks.** A function boundary is not every interesting spot. The MCP server needs a few mid-function points, listed below. These are ordinary hooks with declared signatures and a declared combination rule (first answer wins, or any veto blocks). Adding one later is additive.
+**Hand-placed hooks.** A function boundary is not every interesting spot. Where the MCP server needs a spot inside a function, the engine source calls the host there, and plugins register for the spot by its number. Each has a fixed signature and one of two rules: a question stops at the first plugin that answers yes, and an announcement reaches every plugin that registered. Numbers only grow at the end, so adding one later is additive. Where the MCP server's change sits at the start or end of a function, a generated hook on that function does the job instead. docs/hand-placed-hooks.md describes each one.
 
 | Today's engine edit | Becomes |
 |---|---|
-| `CvGame.cpp` turn loop: a seat is activated like the local player | query `IsPluginControlledPlayer(player)` |
-| `CvDllPlayer::IsHuman`, `CvDllPreGame::isHuman` | query `EngineSeesAsHuman(player, default)` |
-| `CvPlayer::setAlive` → keep the dead slot open | query `KeepDeadSlotOpen(player)` |
-| `CvUnit::UnitPathTo` six cancellation sites | notify `UnitOrdersCancelled(unit, reason)` |
-| `CvNotifications::Add` | notify `NotificationAdded(player, message, summary)` |
-| popup sites (wonder, great person, city captured, goody, golden age, natural wonder, tech, era, barbarian camp, city-state greeting) | notify `PopupRaised(player/team, type, data…)` |
-| `CvDiplomacyRequests` request and deal interception | query `InterceptDiploRequest(...)`, `InterceptDealRequest(...)` |
-| `CvDealClasses` deal resolved | notify `DealResolved(...)` |
-| `CvUnitMission` skip for seats | query `IsPluginControlledPlayer` (same as above) |
-| `CvGame::update` → `ClaudeBridge::Tick()` | notify `GameCoreUpdate()` (VMC has one already) |
+| `CvGame.cpp` turn loop and `CvUnitMission` advisor warning: a seat is treated like the local player | question `IsPluginControlledPlayer(player)` |
+| `CvDllPlayer::IsHuman`, `CvDllPreGame::isHuman` | generated after-hooks on both |
+| `CvPlayer::setAlive` → keep the dead slot open | question `KeepDeadSlotOpen(player)` |
+| `CvUnit::UnitPathTo` six cancellation sites and `CvUnit::setPromotionReady` | announcement `UnitOrdersCancelled(unit, reason)`, with a reason number in place of the MCP server's text |
+| `CvNotifications::Add` | announcement `NotificationAdded(player, type, message, summary, x, y, data1, data2)` |
+| popup sites (wonder, great person, city captured, goody, golden age, natural wonder, tech, era, barbarian camp, city-state greeting) | announcement `PopupRaised(player, type, data1, data2, data3, option1, option2, text)` |
+| `CvDiplomacyRequests` request and deal interception | generated before-hooks on both versions of `SendRequest` and `SendDealRequest`, which can veto |
+| deal resolved (`CvDealClasses` in the MCP server's DLL, `CvDllNetMessageHandler` in VMC) | announcement `DealResolved(from, to, actingPlayer, accepted, finalized)` |
+| `CvGame::update` → `ClaudeBridge::Tick()` | generated before-hook on `CvGame::update` |
 | `CvDllContext` shutdown, `DllMain` crash-handler removal | plugin `Shutdown()` lifecycle call |
-| `CvLuaGame.cpp`: a dozen `Game.*` methods for the log window | `RegisterLuaMethods(lua_State*, table)` called when the host registers its own |
+| `CvLuaGame.cpp`: a dozen `Game.*` methods for the log window | generated after-hook on `CvLuaGame::RegisterMembers`, which can add methods to the `Game` table |
 
 **Replacements and the hooks inside them.** A replacement that does not call the original skips everything the original would have done: the hand-placed hooks inside it, and the hooks on every function it would have called. Replacing stays allowed, because turning an existing DLL mod into a plugin and fixing a bug inside a function both need it, and a veto skips the original in the same way. Instead, the host makes the skipping visible:
 
-- When one plugin replaces a function that contains a hand-placed hook another plugin uses, the host treats it as a possible conflict. The plugin that loads second is held back, and the log and the Plugins screen say why. The Plugins screen offers "use both anyway" for that pair, for when the replacement is known to call the original, and saves the choice with the load order.
+- When one plugin replaces a function that contains a hand-placed hook another plugin uses, the host treats it as a possible conflict. The plugin that loads second is held back, and the log and the Plugins screen say why. The Plugins screen offers a Use both anyway checkbox for that plugin, for when the replacement is known to run the original, and saves the choice with the load order. The build finds which functions contain each hand-placed hook by reading the engine source. Vetoes are not checked: a before-hook decides to veto only while the game runs.
 - The first time a replacement returns without calling the original, the host writes one line to its log naming the plugin and the function, so a developer looking for a hook that did not fire knows where to start.
 
 Rules fixes currently inside the DLL that are **not** MCP:
@@ -131,7 +130,7 @@ When the player presses Next on the Mods browser, the game switches on the enabl
 
 When two mods import files with the same name, the one the game switches on later wins. The host mod lists Really Advanced Setup as a reference, which makes the game switch the host on after it, so the host's screen wins over that mod's. Another mod that replaces Advanced Setup and is switched on after the host would win instead, and its screen would show in place of the Plugins screen; such a mod gets added to the references once it is known. The plugins still load in the saved order either way. The game also finds screens by file name, so the screen the host replaced cannot be opened under its own name. Continue asks the host's DLL to copy it, from the last active mod that imports it or else from the game, into the host mod's folder under a name of its own, and opens the copy. Nothing in the other mod is changed.
 
-The Plugins screen is front-end Lua. After loading the plugins, the host writes a `BazaarPlugins` table with one row per plugin (its file, name, version, a status, its problems, and whether it failed or was skipped), and the screen lists those rows. Handshake refusals, replace conflicts and crashes show beside the plugin, so the player can see what to move or skip without reading a log; possible conflicts with hand-placed hooks will show there too, with the "use both anyway" choice. Arrows move a plugin up or down, and a checkbox skips it without turning off its mod. Once anything has changed, a Reload Plugins button appears. Reload, Back and Continue all send the new order to the host, which saves it to `ModUserData\Bazaar plugin order.txt`, reloads the plugins and rewrites the table. The host reads that file whenever it loads plugins.
+The Plugins screen is front-end Lua. After loading the plugins, the host writes a `BazaarPlugins` table with one row per plugin (its file, name, version, a status, its problems, whether it failed or was skipped, the plugins it may conflict with, and the ones the player chose to use it with anyway), and the screen lists those rows. Handshake refusals, replace conflicts and crashes show beside the plugin, so the player can see what to move or skip without reading a log; possible conflicts with hand-placed hooks show there too, with a Use both anyway checkbox. Arrows move a plugin up or down, and a checkbox skips it without turning off its mod. Once anything has changed, a Reload Plugins button appears. Reload, Back and Continue all send the new order to the host, which saves it, with the Use both anyway choices, to `ModUserData\Bazaar plugin order.txt`, reloads the plugins and rewrites the table. The host reads that file whenever it loads plugins.
 
 Front-end Lua cannot call the DLL's own Lua functions, because the game only gives those to Lua running in a game. The screen reaches the host through `UI.GetMapPreview`, a front-end call the game passes straight to the DLL: the host answers names that start with `bazaar:` itself and passes every other call to the game's own code.
 

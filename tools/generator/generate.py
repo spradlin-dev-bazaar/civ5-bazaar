@@ -20,6 +20,7 @@ ID_PLACEHOLDER = "\0HOOK_ID\0"
 INCLUDE_LINE = re.compile(rb"^[ \t]*#[ \t]*(?:include\b|pragma[ \t]+once\b)[^\n]*", re.MULTILINE)
 QUOTED_INCLUDE = re.compile(rb'^([ \t]*#[ \t]*include[ \t]*")([^"\r\n]+)"', re.MULTILINE)
 DIRECTIVE = re.compile(r"^[ \t]*#[ \t]*(\w+)")
+HAND_HOOK_CALL = re.compile(rb"\bCivHand([A-Z][A-Za-z0-9]*)\s*\(")
 CALLING_CONVENTIONS = {"__stdcall", "__cdecl", "__thiscall", "__fastcall", "DLLCALL", "WINAPI", "CALLBACK", "APIENTRY"}
 LEADING_SPECIFIERS = {"static", "inline", "__inline", "__forceinline", "extern", "virtual", "explicit"}
 OPERATOR_NAMES = {
@@ -259,7 +260,7 @@ def original_line(fn, self_type, types, result):
     ]
     call = "%s%s(%s)" % ("s->" if self_type else "", orig_name(fn), ", ".join("o%d" % i for i in range(len(types))))
     body = call if result == "void" else "return " + call
-    return "\t\tstatic %s Original(%s) { %s; }" % (result, ", ".join(params), body)
+    return "\t\tstatic %s Original(%s) { CivHookOriginalCalled(); %s; }" % (result, ", ".join(params), body)
 
 
 def hooked_lines(is_void, self_type, types, names, call):
@@ -588,10 +589,26 @@ def write_mirror(project, files, edits, wrappers):
                 f.write(out)
 
 
-def write_table(project, registry):
+def hand_hook_enum(name):
+    """A call to CivHand<Name> runs the hand-placed hook CIV_HAND_<NAME> of CivPluginApi.h."""
+    return "CIV_HAND_" + re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).upper()
+
+
+def hand_hook_sites(hooks, files, root):
+    """(hand-placed hook, hook id) once for each hooked function whose body calls that hand-placed hook."""
+    sites = set()
+    for fn in hooks:
+        data = files[os.path.join(root, fn["file"])]
+        for m in HAND_HOOK_CALL.finditer(data, fn["body_start"], fn["def_end"]):
+            sites.add((hand_hook_enum(m.group(1).decode("ascii")), fn["hook_id"]))
+    return sorted(sites, key=lambda site: (site[1], site[0]))
+
+
+def write_table(project, registry, sites):
     by_id = dict((hook_id, key) for key, (hook_id, _) in registry.entries.items())
     lines = [
         '#include "CivHostHooks.h"',
+        '#include "CivPluginApi.h"',
         "",
         "CivHookPoint g_CivHookPoints[%d];" % max(1, registry.count()),
         "unsigned char g_CivHookActive[%d];" % max(1, registry.count()),
@@ -603,7 +620,9 @@ def write_table(project, registry):
     lines += ['\t"%s",' % by_id.get(i, "(unused)").replace("\\", "\\\\") for i in range(registry.count())]
     if not registry.count():
         lines.append('\t"",')
-    lines.append("};")
+    lines += ["};", "", "extern const CivHandHookSite g_CivHandHookSites[] =", "{"]
+    lines += ["\t{ %s, %d }," % site for site in sites] or ["\t{ -1, -1 },"]
+    lines += ["};", "const int g_CivHandHookSiteCount = %d;" % len(sites)]
     with open(os.path.join(project.mirror_dir, "CivHookTable.cpp"), "w", newline="\r\n") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -661,6 +680,7 @@ def write_engine_build_files(project):
     extra = []
     for path in [
         os.path.join(common.HOST_DIR, "CivHostRuntime.cpp"),
+        os.path.join(common.HOST_DIR, "CivHostHand.cpp"),
         os.path.join(common.HOST_DIR, "CivHostOrder.cpp"),
         os.path.join(common.HOST_DIR, "CivHostSetup.cpp"),
         os.path.join(common.HOST_DIR, "CivHostEngine.cpp"),
@@ -714,7 +734,7 @@ def run(project):
     marked, missed = mark_exports(functions, files, edits)
     write_mirror(project, files, edits, wrappers)
     registry.save()
-    write_table(project, registry)
+    write_table(project, registry, hand_hook_sites(hooks, files, project.root))
     write_plugin_header(project, registry)
     write_hook_list(project, hooks)
     if project.vcproj:

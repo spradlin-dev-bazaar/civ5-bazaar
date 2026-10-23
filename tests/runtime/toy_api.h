@@ -10,6 +10,7 @@ typedef bool ToyHostCallFn();
 
 typedef int ToyBeforeCallsFn();
 typedef int ToyRegisterLateFn();
+typedef int ToyRegisterHandLateFn();
 typedef void ToyFaultOnShutdownFn();
 typedef void ToySetShutdownProbeFn(ToyActionFn* probe);
 typedef void ToyFillStringsFn(std::string& s, std::vector<std::string>& v);

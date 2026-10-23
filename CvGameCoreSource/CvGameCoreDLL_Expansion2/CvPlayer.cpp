@@ -7,6 +7,9 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvGlobals.h"
 #include "CvArea.h"
 #include "CvMap.h"
@@ -3051,6 +3054,9 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bGift)
 				}
 				else if (pNewCity->getOriginalOwner() != GetID() || GetPlayerTraits()->IsNoAnnexing() || bIsMinorCivBuyout)
 				{
+#if defined(CIV_HOST_API)
+					CivHandPopupRaised(GetID(), BUTTONPOPUP_CITY_CAPTURED, pNewCity->GetID(), iCaptureGold, iCaptureCulture, bIsMinorCivBuyout, bConquest, "");
+#endif
 					if(GC.getGame().getActivePlayer() == GetID())
 					{
 						int iTemp[5] = { pNewCity->GetID(), iCaptureGold, iCaptureCulture, iCaptureGreatWorks, eLiberatedPlayer };
@@ -7279,6 +7285,9 @@ void CvPlayer::receiveGoody(CvPlot* pPlot, GoodyTypes eGoody, CvUnit* pUnit)
 		GC.GetEngineUserInterface()->AddPlotMessage(0, pPlot->GetPlotIndex(), GetID(), true, GC.getEVENT_MESSAGE_TIME(), strBuffer);
 	}
 
+#if defined(CIV_HOST_API)
+	CivHandPopupRaised(GetID(), BUTTONPOPUP_GOODY_HUT_REWARD, eGoody, iGold > 0 ? iGold : (iCulture > 0 ? iCulture : (iFaith > 0 ? iFaith : 0)), -1, false, false, strBuffer.c_str());
+#endif
 	// If it's the active player then show the popup
 	if(GetID() == GC.getGame().getActivePlayer())
 	{
@@ -13595,6 +13604,9 @@ void CvPlayer::DoProcessGoldenAge()
 				int iLength = getGoldenAgeLength();
 				changeGoldenAgeTurns(iLength);
 
+#if defined(CIV_HOST_API)
+				CivHandPopupRaised(GetID(), BUTTONPOPUP_GOLDEN_AGE_REWARD, -1, -1, -1, false, false, "");
+#endif
 				// If it's the active player then show the popup
 				if(GetID() == GC.getGame().getActivePlayer())
 				{
@@ -17701,6 +17713,9 @@ void CvPlayer::setAlive(bool bNewValue, bool bNotify)
 
 			setTurnActive(false);
 
+#if defined(CIV_HOST_API)
+			if(!CivHandKeepDeadSlotOpen(GetID()))
+#endif
 			gDLL->closeSlot(GetID());
 
 			if(bNotify && !isBarbarian())

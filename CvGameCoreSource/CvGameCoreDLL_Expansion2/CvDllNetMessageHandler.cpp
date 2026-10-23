@@ -6,6 +6,9 @@
 	All rights reserved. 
 	------------------------------------------------------------------------------------------------------- */
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvDllNetMessageHandler.h"
 #include "CvDllContext.h"
 
@@ -653,10 +656,14 @@ void CvDllNetMessageHandler::ResponsePlayerDealFinalized(PlayerTypes eFromPlayer
 
 	// is the deal valid?
 #if defined(MOD_AI_MP_DIPLOMACY)
-	if(!game.GetGameDeals()->FinalizeDeal(eFromPlayer, eToPlayer, bAccepted, true))
+	const bool bFinalized = game.GetGameDeals()->FinalizeDeal(eFromPlayer, eToPlayer, bAccepted, true);
 #else
-	if(!game.GetGameDeals()->FinalizeDeal(eFromPlayer, eToPlayer, bAccepted))
+	const bool bFinalized = game.GetGameDeals()->FinalizeDeal(eFromPlayer, eToPlayer, bAccepted);
 #endif
+#if defined(CIV_HOST_API)
+	CivHandDealResolved(eFromPlayer, eToPlayer, eActBy, bAccepted, bFinalized);
+#endif
+	if(!bFinalized)
 	{
 		Localization::String strMessage;
 		Localization::String strSummary = Localization::Lookup("TXT_KEY_DEAL_EXPIRED");

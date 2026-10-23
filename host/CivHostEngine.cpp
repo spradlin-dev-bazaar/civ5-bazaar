@@ -97,6 +97,14 @@ namespace
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
 	const char* const kNotSaved = "Bazaar could not save your plugin order, so the old order comes back when a game starts. Details are in Logs\\Bazaar.log.";
 
+	std::string Lines(const std::vector<std::string>& lines)
+	{
+		std::string text;
+		for (size_t i = 0; i < lines.size(); ++i)
+			text += (i ? "\n" : "") + lines[i];
+		return text;
+	}
+
 	// A row with no file is Bazaar's own note, which the Plugins screen keeps at the top.
 	std::vector<CivPluginReportRow> WithNote(const char* warning, const std::vector<CivPluginReportRow>& plugins)
 	{
@@ -117,8 +125,8 @@ namespace
 	{
 		Database::Results insert;
 		if (!DB.Execute("DROP TABLE IF EXISTS BazaarPlugins")
-			|| !DB.Execute("CREATE TABLE BazaarPlugins (Position INTEGER, File TEXT, Name TEXT, Version TEXT, Status TEXT, Problems TEXT, Failed INTEGER, Skipped INTEGER)")
-			|| !DB.Execute(insert, "INSERT INTO BazaarPlugins (Position, File, Name, Version, Status, Problems, Failed, Skipped) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
+			|| !DB.Execute("CREATE TABLE BazaarPlugins (Position INTEGER, File TEXT, Name TEXT, Version TEXT, Status TEXT, Problems TEXT, Failed INTEGER, Skipped INTEGER, ConflictsWith TEXT, UseBothWith TEXT)")
+			|| !DB.Execute(insert, "INSERT INTO BazaarPlugins (Position, File, Name, Version, Status, Problems, Failed, Skipped, ConflictsWith, UseBothWith) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))
 			return false;
 		for (size_t i = 0; i < rows.size(); ++i)
 		{
@@ -130,6 +138,8 @@ namespace
 			insert.Bind(6, rows[i].problems.c_str());
 			insert.Bind(7, rows[i].failed ? 1 : 0);
 			insert.Bind(8, rows[i].skipped ? 1 : 0);
+			insert.Bind(9, Lines(rows[i].conflictsWith).c_str());
+			insert.Bind(10, Lines(rows[i].useBothWith).c_str());
 			insert.Execute();
 			insert.Reset();
 		}
@@ -280,7 +290,7 @@ namespace
 
 		CivHostSetLogSink(&LogLine);
 		CivHostSetFaultSink(&OnFault);
-		const CivPluginListResult result = CivHostSetPlugins(paths);
+		const CivPluginListResult result = CivHostSetPlugins(paths, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{
 			Notify("Plugins not changed", kBusy);
@@ -321,7 +331,25 @@ namespace
 		return number;
 	}
 
-	// The screen sends { { File = ..., Skip = ..., Name = ..., Version = ... }, ... }, top first.
+	std::vector<std::string> LuaTexts(lua_State* L, int table, const char* key)
+	{
+		std::vector<std::string> texts;
+		lua_pushstring(L, key);
+		lua_rawget(L, table);
+		const int list = lua_gettop(L);
+		const int count = lua_type(L, list) == LUA_TTABLE ? (int)lua_objlen(L, list) : 0;
+		for (int i = 1; i <= count; ++i)
+		{
+			lua_rawgeti(L, list, i);
+			if (lua_type(L, -1) == LUA_TSTRING)
+				texts.push_back(lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+		lua_pop(L, 1);
+		return texts;
+	}
+
+	// The screen sends { { File = ..., Skip = ..., Name = ..., Version = ..., UseBothWith = { file, ... } }, ... }, top first.
 	std::vector<CivOrderEntry> RequestedOrder(lua_State* L, int arg)
 	{
 		std::vector<CivOrderEntry> order;
@@ -337,6 +365,7 @@ namespace
 				entry.skip = LuaFlag(L, row, "Skip");
 				entry.name = LuaText(L, row, "Name");
 				entry.version = LuaText(L, row, "Version");
+				entry.useBothWith = LuaTexts(L, row, "UseBothWith");
 				if (!entry.file.empty())
 					order.push_back(entry);
 			}
@@ -414,6 +443,15 @@ namespace
 		LogLine(("Continue opened Advanced Setup from " + setup.xmlSource + " and " + setup.luaSource + ".").c_str());
 		lua_pushstring(L, setup.copy.c_str());
 	}
+}
+
+std::vector<int> CivHostTeamPlayers(int team)
+{
+	std::vector<int> players;
+	for (int i = 0; i < MAX_CIV_PLAYERS; ++i)
+		if (GET_PLAYER((PlayerTypes)i).isAlive() && GET_PLAYER((PlayerTypes)i).getTeam() == (TeamTypes)team)
+			players.push_back(i);
+	return players;
 }
 
 void CivHostOnDatabaseReady()

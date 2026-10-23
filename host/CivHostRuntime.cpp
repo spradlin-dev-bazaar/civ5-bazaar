@@ -23,13 +23,24 @@ namespace
 		std::string name;
 	};
 
+	struct PossibleConflict
+	{
+		int other;
+		int hookPoint;
+		int handHook;
+		bool pluginReplaces;
+	};
+
 	std::vector<CivPluginRecord> s_plugins;
 	std::vector<PendingHook> s_pending;
+	std::vector<PossibleConflict> s_possibleConflicts;
 	std::vector<KeptPlugin> s_kept;
+	CivFilePairs s_useBoth;
 	int s_loadingPlugin = -1;
 	const CivPluginInfo* s_loadingInfo = 0;
 	bool s_loadingConflict = false;
 	int s_pluginCallDepth = 0;
+	bool* s_originalCalled = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
 
@@ -58,7 +69,14 @@ namespace
 
 	const char* HookName(int id)
 	{
-		return (id >= 0 && id < g_CivHookPointCount) ? g_CivHookPointNames[id] : "?";
+		if (id >= 0 && id < g_CivHookPointCount)
+			return g_CivHookPointNames[id];
+		return id >= g_CivHookPointCount ? CivHandHookName(id - g_CivHookPointCount) : "?";
+	}
+
+	CivHookPoint& Point(int id)
+	{
+		return id < g_CivHookPointCount ? g_CivHookPoints[id] : g_CivHandHookPoints[id - g_CivHookPointCount];
 	}
 
 	// Players see the name alone, unless an overload shares it and only the parameters tell them apart.
@@ -185,6 +203,112 @@ namespace
 		return false;
 	}
 
+	bool HasText(const std::vector<std::string>& texts, const std::string& text)
+	{
+		for (size_t i = 0; i < texts.size(); ++i)
+			if (texts[i] == text)
+				return true;
+		return false;
+	}
+
+	bool UseBoth(const std::string& a, const std::string& b)
+	{
+		for (size_t i = 0; i < s_useBoth.size(); ++i)
+		{
+			const CivFilePair& pair = s_useBoth[i];
+			if ((SamePath(pair.first, a) && SamePath(pair.second, b)) || (SamePath(pair.first, b) && SamePath(pair.second, a)))
+				return true;
+		}
+		return false;
+	}
+
+	void NotePossibleConflict(int other, int hookPoint, int handHook, bool pluginReplaces)
+	{
+		PossibleConflict conflict = { other, hookPoint, handHook, pluginReplaces };
+		s_possibleConflicts.push_back(conflict);
+	}
+
+	void AddOnce(std::vector<std::string>& texts, const std::string& text)
+	{
+		if (!HasText(texts, text))
+			texts.push_back(text);
+	}
+
+	void AddAndLog(int plugin, std::vector<std::string>& texts, const std::string& text)
+	{
+		if (HasText(texts, text))
+			return;
+		texts.push_back(text);
+		Log("Plugin %s: %s", s_plugins[plugin].name.c_str(), text.c_str());
+	}
+
+	// A replacement that never calls the original skips the hand-placed hooks inside it, so the plugin lower in the list
+	// is held back unless the player chose to use both. True when it is held back.
+	bool ReportPossibleConflicts(int plugin)
+	{
+		CivPluginRecord& rec = s_plugins[plugin];
+		bool heldBack = false;
+		for (size_t i = 0; i < s_possibleConflicts.size(); ++i)
+		{
+			const PossibleConflict& c = s_possibleConflicts[i];
+			const std::string otherFile = FileName(s_plugins[c.other].path);
+			const char* otherName = s_plugins[c.other].name.c_str();
+			const std::string function = ShortHookName(c.hookPoint);
+			const char* hook = CivHandHookName(c.handHook);
+			AddOnce(rec.conflictsWith, otherFile);
+			if (UseBoth(FileName(rec.path), otherFile))
+			{
+				AddAndLog(plugin, rec.notes, Format("You chose to use this plugin with %s anyway, although one of them replaces %s, which runs the %s hook the other uses.",
+					otherName, function.c_str(), hook));
+				continue;
+			}
+			heldBack = true;
+			if (c.pluginReplaces)
+				AddAndLog(plugin, rec.problems, Format("This plugin replaces %s, which runs the %s hook that %s, higher in the list, uses. If the version in this plugin does not run the game's own, %s never gets that hook, so this plugin was held back. If you know the two work together, tick Use both anyway.",
+					function.c_str(), hook, otherName, otherName));
+			else
+				AddAndLog(plugin, rec.problems, Format("%s, higher in the list, replaces %s, which runs the %s hook this plugin uses. If the version in %s does not run the game's own, this plugin never gets that hook, so it was held back. If you know the two work together, tick Use both anyway.",
+					otherName, function.c_str(), hook, otherName));
+		}
+		s_possibleConflicts.clear();
+		return heldBack;
+	}
+
+	void NoteHandHookUsers(int hookId)
+	{
+		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
+		{
+			const CivHandHookSite& site = g_CivHandHookSites[i];
+			if (site.hookPoint != hookId)
+				continue;
+			for (const CivHookEntry* e = g_CivHandHookPoints[site.handHook].before; e; e = e->next)
+				NotePossibleConflict(e->plugin, hookId, site.handHook, true);
+		}
+	}
+
+	void NoteReplacements(int handHook)
+	{
+		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
+		{
+			const CivHandHookSite& site = g_CivHandHookSites[i];
+			const CivHookEntry* replacement = g_CivHookPoints[site.hookPoint].replace;
+			if (site.handHook == handHook && replacement)
+				NotePossibleConflict(replacement->plugin, site.hookPoint, handHook, false);
+		}
+	}
+
+	int RegisterHandHook(int plugin, int handHook, void* fn)
+	{
+		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
+			return CIV_HOOK_NOT_ALLOWED;
+		if (handHook < 0 || handHook >= g_CivHandHookCount || !fn)
+			return CIV_HOOK_BAD_ID;
+		NoteReplacements(handHook);
+		PendingHook p = { CivHandHookId(handHook), CIV_HOOK_BEFORE, fn };
+		s_pending.push_back(p);
+		return CIV_HOOK_OK;
+	}
+
 	int RegisterHook(int plugin, int hookId, int kind, void* fn)
 	{
 		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
@@ -212,6 +336,7 @@ namespace
 				Log("Plugin %s: %s", DisplayName(plugin), problem.c_str());
 				return CIV_HOOK_REPLACE_TAKEN;
 			}
+			NoteHandHookUsers(hookId);
 		}
 		PendingHook p = { hookId, kind, fn };
 		s_pending.push_back(p);
@@ -223,11 +348,12 @@ namespace
 		for (size_t i = 0; i < s_pending.size(); ++i)
 		{
 			const PendingHook& p = s_pending[i];
-			CivHookPoint& hp = g_CivHookPoints[p.id];
+			CivHookPoint& hp = Point(p.id);
 			CivHookEntry* e = new CivHookEntry;
 			e->fn = p.fn;
 			e->plugin = plugin;
 			e->next = 0;
+			e->loggedSkippedOriginal = false;
 			if (p.kind == CIV_HOOK_BEFORE)
 			{
 				CivHookEntry** tail = &hp.before;
@@ -244,9 +370,16 @@ namespace
 			{
 				hp.replace = e;
 			}
-			g_CivHookActive[p.id] = 1;
+			if (p.id < g_CivHookPointCount)
+				g_CivHookActive[p.id] = 1;
 		}
 		s_pending.clear();
+	}
+
+	void DiscardPending()
+	{
+		s_pending.clear();
+		s_possibleConflicts.clear();
 	}
 
 	void PluginLog(int plugin, const char* message)
@@ -524,11 +657,12 @@ namespace
 		host->pluginIndex = index;
 		host->RegisterHook = &RegisterHook;
 		host->Log = &PluginLog;
+		host->RegisterHandHook = &RegisterHandHook;
 		s_plugins[index].module = module;
 		s_plugins[index].host = host;
 		CivPluginInfo info = { 0, 0, 0, 0 };
 		EntryCall call = { entry, host, &info, false };
-		s_pending.clear();
+		DiscardPending();
 		s_loadingConflict = false;
 		unsigned int code = 0;
 		const bool ran = GuardedEntry(&call, &code);
@@ -544,7 +678,7 @@ namespace
 		{
 			char problem[256];
 			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "It stopped working while loading (code 0x%08X) and was turned off until you return to the main menu.", code);
-			s_pending.clear();
+			DiscardPending();
 			rec.quarantined = true;
 			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
 			return;
@@ -553,15 +687,16 @@ namespace
 		const std::string problem = RefusalReason(call.accepted, info, &status);
 		if (!problem.empty())
 		{
-			s_pending.clear();
+			DiscardPending();
 			Refuse(rec, status, problem);
 			Unload(index);
 			return;
 		}
-		if (s_loadingConflict)
+		const bool heldBack = !s_loadingConflict && ReportPossibleConflicts(index);
+		if (s_loadingConflict || heldBack)
 		{
-			s_pending.clear();
-			rec.status = CIV_PLUGIN_REPLACE_CONFLICT;
+			DiscardPending();
+			rec.status = heldBack ? CIV_PLUGIN_POSSIBLE_CONFLICT : CIV_PLUGIN_REPLACE_CONFLICT;
 			Unload(index);
 			return;
 		}
@@ -580,19 +715,31 @@ namespace
 		}
 	}
 
+	void RemoveHooks(CivHookPoint& hp)
+	{
+		DeleteEntries(hp.before);
+		DeleteEntries(hp.after);
+		delete hp.replace;
+		hp.before = hp.after = hp.replace = 0;
+	}
+
 	void RemoveAllHooks()
 	{
 		for (int i = 0; i < g_CivHookPointCount; ++i)
 		{
 			if (!g_CivHookActive[i])
 				continue;
-			CivHookPoint& hp = g_CivHookPoints[i];
-			DeleteEntries(hp.before);
-			DeleteEntries(hp.after);
-			delete hp.replace;
-			hp.before = hp.after = hp.replace = 0;
+			RemoveHooks(g_CivHookPoints[i]);
 			g_CivHookActive[i] = 0;
 		}
+		for (int i = 0; i < g_CivHandHookCount; ++i)
+			RemoveHooks(g_CivHandHookPoints[i]);
+	}
+
+	void LogSkippedOriginal(int plugin, int hookId)
+	{
+		Log("Plugin %s: its replacement of %s returned without running the original, so no hook inside the original ran. This is logged only once.",
+			s_plugins[plugin].name.c_str(), HookName(hookId));
 	}
 
 	bool SameAsListed(const std::vector<std::string>& paths)
@@ -620,10 +767,38 @@ bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* 
 	return false;
 }
 
+// No C++ objects may live in this frame, or __try is not allowed.
 bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
 {
-	const CivHookEntry* e = hp.replace;
-	return e && Alive(e->plugin) && CallPlugin(e, id, thunk, ctx);
+	CivHookEntry* e = hp.replace;
+	if (!e || !Alive(e->plugin))
+		return false;
+	// The original may run other replacements before this one returns, and an exception nobody here handles may pass
+	// through, so the outer replacement's flag is always put back.
+	bool* const outer = s_originalCalled;
+	bool called = false;
+	bool ran = false;
+	s_originalCalled = &called;
+	__try
+	{
+		ran = CallPlugin(e, id, thunk, ctx);
+	}
+	__finally
+	{
+		s_originalCalled = outer;
+	}
+	if (ran && !called && !e->loggedSkippedOriginal)
+	{
+		e->loggedSkippedOriginal = true;
+		LogSkippedOriginal(e->plugin, id);
+	}
+	return ran;
+}
+
+void CivHookOriginalCalled()
+{
+	if (s_originalCalled)
+		*s_originalCalled = true;
 }
 
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
@@ -667,6 +842,9 @@ std::vector<CivPluginReportRow> CivHostReportRows()
 			row.status = "Loaded";
 		for (size_t j = 0; j < p.problems.size(); ++j)
 			row.problems += (j ? "\n" : "") + p.problems[j];
+		for (size_t j = 0; j < p.notes.size(); ++j)
+			row.problems += (row.problems.empty() ? "" : "\n") + p.notes[j];
+		row.conflictsWith = p.conflictsWith;
 		rows.push_back(row);
 	}
 	return rows;
@@ -678,12 +856,13 @@ void CivHostLoadPlugins(const std::vector<std::string>& paths)
 		LoadOne(paths[i]);
 }
 
-CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths)
+CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths, const CivFilePairs& useBoth)
 {
-	if (SameAsListed(paths))
+	if (SameAsListed(paths) && useBoth == s_useBoth)
 		return CIV_PLUGINS_UNCHANGED;
 	if (!CivHostUnloadPlugins())
 		return CIV_PLUGINS_BUSY;
+	s_useBoth = useBoth;
 	if (!paths.empty())
 		Log("---- Loading plugins");
 	CivHostLoadPlugins(paths);
@@ -700,5 +879,6 @@ bool CivHostUnloadPlugins()
 		if (s_plugins[i].module)
 			Unload((int)i);
 	s_plugins.clear();
+	s_useBoth.clear();
 	return true;
 }

@@ -12,6 +12,7 @@
 
 TOY_EXPORT ToyBeforeCallsFn ToyBeforeCalls;
 TOY_EXPORT ToyRegisterLateFn ToyRegisterLate;
+TOY_EXPORT ToyRegisterHandLateFn ToyRegisterHandLate;
 TOY_EXPORT ToyFaultOnShutdownFn ToyFaultOnShutdown;
 TOY_EXPORT ToySetShutdownProbeFn ToySetShutdownProbe;
 TOY_EXPORT ToyFillStringsFn ToyFillStrings;
@@ -38,6 +39,16 @@ static int Register(int hookId, int kind, void* fn)
 	return s_host->RegisterHook(s_host->pluginIndex, hookId, kind, fn);
 }
 
+static int RegisterHand(int handHook, void* fn)
+{
+	return s_host->RegisterHandHook(s_host->pluginIndex, handHook, fn);
+}
+
+static bool SayYes(int)
+{
+	return true;
+}
+
 TOY_EXPORT int ToyBeforeCalls()
 {
 	return s_beforeCalls;
@@ -52,6 +63,11 @@ static void ReplaceNothing(NotifyFn, FakeUnit*, int)
 TOY_EXPORT int ToyRegisterLate()
 {
 	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
+}
+
+TOY_EXPORT int ToyRegisterHandLate()
+{
+	return RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 }
 
 static ToyActionFn* s_ownShutdown = 0;
@@ -297,6 +313,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Describe(info, "Toy Major", CIV_HOST_API_MAJOR + 1, 0);
 #endif
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	return true;
 }
 
@@ -503,10 +520,12 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 #if defined(TOY_DECLINE)
 	Describe(info, "Toy Decline", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	return false;
 #else
 	Describe(info, "Toy Late Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	volatile int zero = 0;
 	return 10 / zero == 1;
 #endif
@@ -540,6 +559,9 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	LogResult("no function", Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, 0));
 	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeFirst);
 	LogResult("second replace", Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeSecond));
+	LogResult("hand-placed hook past the last", RegisterHand(CIV_HAND_HOOK_COUNT, (void*)&SayYes));
+	LogResult("negative hand-placed hook", RegisterHand(-1, (void*)&SayYes));
+	LogResult("hand-placed hook with no function", RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, 0));
 	return true;
 }
 
@@ -582,6 +604,123 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy No Shutdown", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	return true;
+}
+
+#elif defined(TOY_HAND) || defined(TOY_HAND_SECOND)
+
+#if defined(TOY_HAND)
+static const int kPlayedPlayer = 3;
+#else
+static const int kPlayedPlayer = 5;
+#endif
+
+static bool PlaysPlayer(int player)
+{
+	LogResult("asked about player", player);
+	return player == kPlayedPlayer;
+}
+
+static void HeardNotification(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
+{
+	char line[256];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "notification %d %d [%s] [%s] %d %d %d %d", player, notificationType, message, summary, x, y, data1, data2);
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+#if defined(TOY_HAND)
+static bool KeepsSlot(int player)
+{
+	return player == 4;
+}
+
+static void HeardPopup(int player, int popupType, int data1, int data2, int data3, bool option1, bool option2, const char* text)
+{
+	char line[256];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "popup %d %d %d %d %d %d %d [%s]", player, popupType, data1, data2, data3, option1, option2, text);
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+static void HeardDeal(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized)
+{
+	char line[128];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "deal %d %d %d %d %d", fromPlayer, toPlayer, actingPlayer, accepted, finalized);
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+// The fake engine hands its own unit through the hook's CvUnit pointer.
+static void HeardOrdersCancelled(CvUnit* unit, int reason)
+{
+	char line[128];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "orders cancelled %s %d", reinterpret_cast<FakeUnit*>(unit)->m_name.c_str(), reason);
+	s_host->Log(s_host->pluginIndex, line);
+}
+#endif
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+#if defined(TOY_HAND)
+	Describe(info, "Toy Hand", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&KeepsSlot);
+	RegisterHand(CIV_HAND_POPUP_RAISED, (void*)&HeardPopup);
+	RegisterHand(CIV_HAND_DEAL_RESOLVED, (void*)&HeardDeal);
+	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
+#else
+	Describe(info, "Toy Hand Second", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+#endif
+	RegisterHand(CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER, (void*)&PlaysPlayer);
+	RegisterHand(CIV_HAND_NOTIFICATION_ADDED, (void*)&HeardNotification);
+	return true;
+}
+
+#elif defined(TOY_HAND_FAULT)
+
+static bool FaultWhenAsked(int)
+{
+	int* volatile nowhere = 0;
+	*nowhere = 1;
+	return true;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Hand Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	RegisterHand(CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER, (void*)&FaultWhenAsked);
+	return true;
+}
+
+#elif defined(TOY_HAND_REPLACE)
+
+static void ReplaceCancelOrders(void (*)(FakeUnit*, int), FakeUnit* self, int)
+{
+	self->m_notified = -1;
+}
+
+static int ReplaceRange(int (*original)(const FakeUnit*), const FakeUnit* self)
+{
+	return original(self) + 100;
+}
+
+static int ReplaceReach(int (*)(const FakeUnit*), const FakeUnit*)
+{
+	return 30;
+}
+
+static void HeardOrdersCancelled(CvUnit*, int reason)
+{
+	LogResult("heard its own cancelled orders", reason);
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Hand Replace", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_CancelOrders::ID, CIV_HOOK_REPLACE, (void*)&ReplaceCancelOrders);
+	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRange);
+	Register(CivHooks::FakeUnit_Reach::ID, CIV_HOOK_REPLACE, (void*)&ReplaceReach);
+	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
 	return true;
 }
 
