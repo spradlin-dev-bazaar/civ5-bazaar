@@ -1,4 +1,4 @@
-"""Build the in-game toy plugins and lay out mod folders for the host and each toy.
+"""Build the in-game toy plugins and lay out mod folders for the host, each toy and a check of VMC's events.
 
 With "bench plain" or "bench host", lay out the benchmark mod instead, holding the build made by
 build-dll.cmd bench or build-hooked.cmd bench. Both share one mod id, so a save made with either
@@ -39,6 +39,17 @@ TOYS = [
     ("CRASH", "ToyCrash", "Toy Crash Plugin", "6172647d-3bcb-41fa-9cde-870a7723518f"),
     ("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
 ]
+VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
+# VMC reads its options from a table that only its released mod creates; without it every option is off.
+VMC_CHECK_SQL = """CREATE TABLE IF NOT EXISTS CustomModOptions (Name TEXT NOT NULL UNIQUE, Value INTEGER DEFAULT 0,
+    Class INTEGER DEFAULT 1, DbUpdates INTEGER DEFAULT 0);
+INSERT OR REPLACE INTO CustomModOptions (Name, Value) VALUES ('EVENTS_PLAYER_TURN', 1);
+"""
+VMC_CHECK_LUA = """print("DLL id " .. Game.GetDllGuid())
+print("EVENTS_PLAYER_TURN on: " .. tostring(Game.IsCustomModOption("EVENTS_PLAYER_TURN")))
+GameEvents.PlayerDoneTurn.Add(function(iPlayer) print("PlayerDoneTurn for player " .. iPlayer) end)
+"""
+VMC_CHECK_XML = '<?xml version="1.0" encoding="utf-8"?>\n<Context>\n</Context>\n'
 
 
 def vs_env():
@@ -109,6 +120,15 @@ def write_dll_mod(name, mod_id, teaser, dll):
         f.write("    </OnGetDLLPath>\n  </Actions>\n</Mod>\n")
 
 
+def host_dependencies():
+    return (
+        "  <Dependencies>\n"
+        '    <Dlc id="%s" minversion="0" maxversion="999" />\n'
+        '    <Mod id="%s" minversion="0" maxversion="999" title="%s" />\n'
+        "  </Dependencies>\n" % (BNW_DLC, HOST_ID, HOST_NAME)
+    )
+
+
 def write_toy_mod(dll_name, mod_name, mod_id):
     folder = os.path.join(OUT, "MODS", "%s (v 1)" % mod_name)
     os.makedirs(folder)
@@ -121,14 +141,36 @@ def write_toy_mod(dll_name, mod_name, mod_id):
     with open(os.path.join(folder, "%s (v 1).modinfo" % mod_name), "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % mod_id)
         f.write(PROPERTIES.format(name=mod_name, teaser="Test plugin for the %s." % HOST_NAME, affects=0))
-        f.write("  <Dependencies>\n")
-        f.write('    <Dlc id="%s" minversion="0" maxversion="999" />\n' % BNW_DLC)
-        f.write('    <Mod id="%s" minversion="0" maxversion="999" title="%s" />\n' % (HOST_ID, HOST_NAME))
-        f.write("  </Dependencies>\n  <References />\n  <Blocks />\n  <Files>\n")
+        f.write(host_dependencies())
+        f.write("  <References />\n  <Blocks />\n  <Files>\n")
         f.write('    <File md5="%s" import="0">%s</File>\n' % (md5(os.path.join(folder, dll)), dll))
         f.write('    <File md5="%s" import="0">%s</File>\n' % (md5(os.path.join(folder, sql)), sql))
         f.write("  </Files>\n  <Actions>\n    <OnModActivated>\n      <UpdateDatabase>%s</UpdateDatabase>\n" % sql)
         f.write("    </OnModActivated>\n  </Actions>\n</Mod>\n")
+
+
+def write_vmc_check_mod():
+    name = "Toy VMC Check"
+    folder = os.path.join(OUT, "MODS", "%s (v 1)" % name)
+    os.makedirs(folder)
+    files = [("VmcCheck.sql", VMC_CHECK_SQL, 0), ("VmcCheck.lua", VMC_CHECK_LUA, 1), ("VmcCheck.xml", VMC_CHECK_XML, 1)]
+    for file_name, content, _ in files:
+        with open(os.path.join(folder, file_name), "w") as f:
+            f.write(content)
+    with open(os.path.join(folder, "%s (v 1).modinfo" % name), "w", encoding="utf-8") as f:
+        f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id="%s" version="1">\n' % VMC_CHECK_ID)
+        teaser = "Test mod for the %s: switches on one VMC event and writes it to Lua.log." % HOST_NAME
+        f.write(PROPERTIES.format(name=name, teaser=teaser, affects=0))
+        f.write(host_dependencies())
+        f.write("  <References />\n  <Blocks />\n  <Files>\n")
+        for file_name, _, vfs in files:
+            digest = md5(os.path.join(folder, file_name))
+            f.write('    <File md5="%s" import="%d">%s</File>\n' % (digest, vfs, file_name))
+        f.write("  </Files>\n  <Actions>\n    <OnModActivated>\n      <UpdateDatabase>VmcCheck.sql</UpdateDatabase>\n")
+        f.write("    </OnModActivated>\n  </Actions>\n  <EntryPoints>\n")
+        f.write('    <EntryPoint type="InGameUIAddin" file="VmcCheck.xml">\n')
+        f.write("      <Name>VMC check</Name>\n      <Description>%s</Description>\n" % teaser)
+        f.write("    </EntryPoint>\n  </EntryPoints>\n</Mod>\n")
 
 
 def write_bench_mod(build):
@@ -206,6 +248,7 @@ def main(args):
     )
     for _, dll_name, mod_name, mod_id in TOYS:
         write_toy_mod(dll_name, mod_name, mod_id)
+    write_vmc_check_mod()
     print("mod folders in", os.path.join(OUT, "MODS"))
     return 0
 
