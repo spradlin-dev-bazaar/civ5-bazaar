@@ -165,7 +165,10 @@ static void TestShapes()
 	Check(!(unit == unit), "an operator");
 	unit.Ignore(1);
 	Check(CallInt("toy_shapes.dll", "ToyBeforeCalls", 0) == 1, "an unnamed parameter");
+	Check(unit.Heal(5) == 1005, "a signature written in two versions, the first one active");
+	Check(unit.Range() == 1004, "a signature whose #if closes after another function's signature");
 	Check(FakeRules::Bonus(1) == 1002, "a namespace function defined with a qualified name");
+	Check(FakeRules::Penalty(1) == 1000, "a qualified signature written in two versions, the second one active");
 	Check(UsesHelper(1) == 1011, "a file-local static function");
 	Check(CallsUnannounced(1) == 1004, "a function with no earlier declaration and a default argument");
 }

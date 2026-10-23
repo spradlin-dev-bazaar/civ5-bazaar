@@ -13814,3 +13814,882 @@
 13813	cvStopWatch_EndPerfTest	cvStopWatch::EndPerfTest()
 13814	cvStopWatch_GetDeltaInSeconds	cvStopWatch::GetDeltaInSeconds() const
 13815	cvStopWatch_PerfLog	cvStopWatch::PerfLog(const char *, double)
+13816	CustomMods_eventHook	CustomMods::eventHook(const char *, CvLuaArgsHandle &)
+13817	CustomMods_eventTestAll	CustomMods::eventTestAll(const char *, CvLuaArgsHandle &)
+13818	CustomMods_eventTestAny	CustomMods::eventTestAny(const char *, CvLuaArgsHandle &)
+13819	CustomMods_eventAccumulator	CustomMods::eventAccumulator(int &, const char *, CvLuaArgsHandle &)
+13820	CustomMods_prefetchCache	CustomMods::prefetchCache()
+13821	CustomMods_preloadCache	CustomMods::preloadCache()
+13822	CustomMods_reloadCache	CustomMods::reloadCache()
+13823	CustomMods_getOption	CustomMods::getOption(const char *, int)
+13824	CustomMods_getOption_with_string_int	CustomMods::getOption(string, int)
+13825	CustomMods_getCivOption	CustomMods::getCivOption(const char *, const char *, int)
+13826	CvAchievementInfo_isBroken	CvAchievementInfo::isBroken() const
+13827	CvAchievementInfo_isAchieved	CvAchievementInfo::isAchieved() const
+13828	CvAchievementInfo_CacheResults	CvAchievementInfo::CacheResults(Database::Results &, CvDatabaseUtility &)
+13829	CvAchievementXMLEntries_GetAchievementEntries	CvAchievementXMLEntries::GetAchievementEntries()
+13830	CvAchievementXMLEntries_GetNumAchievements	CvAchievementXMLEntries::GetNumAchievements()
+13831	CvAchievementXMLEntries_DeleteArray	CvAchievementXMLEntries::DeleteArray()
+13832	CvAchievementXMLEntries_GetEntry	CvAchievementXMLEntries::GetEntry(EAchievement)
+13833	CvBarbarians_GetRandomBarbarianUnitType_with_CvPlot_UnitAITypes	CvBarbarians::GetRandomBarbarianUnitType(CvPlot *, UnitAITypes)
+13834	CvBeliefEntry_GetYieldPerFollowingCity	CvBeliefEntry::GetYieldPerFollowingCity(int) const
+13835	CvBeliefEntry_GetYieldPerXFollowers	CvBeliefEntry::GetYieldPerXFollowers(int) const
+13836	CvBeliefEntry_GetYieldPerOtherReligionFollower	CvBeliefEntry::GetYieldPerOtherReligionFollower(int) const
+13837	CvBeliefEntry_GetCityYieldFromUnimprovedFeature	CvBeliefEntry::GetCityYieldFromUnimprovedFeature(int, int) const
+13838	CvBeliefEntry_GetUnimprovedFeatureYieldChange	CvBeliefEntry::GetUnimprovedFeatureYieldChange(int, int) const
+13839	CvBeliefEntry_GetTradeRouteYieldChange	CvBeliefEntry::GetTradeRouteYieldChange(int, int) const
+13840	CvBeliefEntry_GetSpecialistYieldChange	CvBeliefEntry::GetSpecialistYieldChange(int, int) const
+13841	CvBeliefEntry_GetGreatPersonExpendedYield	CvBeliefEntry::GetGreatPersonExpendedYield(int, int) const
+13842	CvBeliefEntry_GetGoldenAgeGreatPersonRateModifier	CvBeliefEntry::GetGoldenAgeGreatPersonRateModifier(int) const
+13843	CvBeliefEntry_GetCapitalYieldChange	CvBeliefEntry::GetCapitalYieldChange(int) const
+13844	CvBeliefEntry_GetCoastalCityYieldChange	CvBeliefEntry::GetCoastalCityYieldChange(int) const
+13845	CvBeliefEntry_GetGreatWorkYieldChange	CvBeliefEntry::GetGreatWorkYieldChange(int) const
+13846	CvBeliefEntry_GetYieldFromKills	CvBeliefEntry::GetYieldFromKills(YieldTypes) const
+13847	CvBeliefEntry_GetYieldFromBarbarianKills	CvBeliefEntry::GetYieldFromBarbarianKills(YieldTypes) const
+13848	CvBeliefEntry_GetPlotYieldChange	CvBeliefEntry::GetPlotYieldChange(int, int) const
+13849	CvReligionBeliefs_GetYieldPerFollowingCity	CvReligionBeliefs::GetYieldPerFollowingCity(YieldTypes) const
+13850	CvReligionBeliefs_GetYieldPerXFollowers	CvReligionBeliefs::GetYieldPerXFollowers(YieldTypes) const
+13851	CvReligionBeliefs_GetYieldPerOtherReligionFollower	CvReligionBeliefs::GetYieldPerOtherReligionFollower(YieldTypes) const
+13852	CvReligionBeliefs_GetCityYieldFromUnimprovedFeature	CvReligionBeliefs::GetCityYieldFromUnimprovedFeature(FeatureTypes, YieldTypes) const
+13853	CvReligionBeliefs_GetUnimprovedFeatureYieldChange	CvReligionBeliefs::GetUnimprovedFeatureYieldChange(FeatureTypes, YieldTypes) const
+13854	CvReligionBeliefs_GetTradeRouteYieldChange	CvReligionBeliefs::GetTradeRouteYieldChange(DomainTypes, YieldTypes) const
+13855	CvReligionBeliefs_GetSpecialistYieldChange	CvReligionBeliefs::GetSpecialistYieldChange(SpecialistTypes, YieldTypes) const
+13856	CvReligionBeliefs_GetGreatPersonExpendedYield	CvReligionBeliefs::GetGreatPersonExpendedYield(GreatPersonTypes, YieldTypes) const
+13857	CvReligionBeliefs_GetGoldenAgeGreatPersonRateModifier	CvReligionBeliefs::GetGoldenAgeGreatPersonRateModifier(GreatPersonTypes) const
+13858	CvReligionBeliefs_GetCapitalYieldChange	CvReligionBeliefs::GetCapitalYieldChange(int, YieldTypes) const
+13859	CvReligionBeliefs_GetCoastalCityYieldChange	CvReligionBeliefs::GetCoastalCityYieldChange(int, YieldTypes) const
+13860	CvReligionBeliefs_GetGreatWorkYieldChange	CvReligionBeliefs::GetGreatWorkYieldChange(int, YieldTypes) const
+13861	CvReligionBeliefs_GetYieldFromKills	CvReligionBeliefs::GetYieldFromKills(YieldTypes) const
+13862	CvReligionBeliefs_GetYieldFromBarbarianKills	CvReligionBeliefs::GetYieldFromBarbarianKills(YieldTypes) const
+13863	CvReligionBeliefs_GetPlotYieldChange	CvReligionBeliefs::GetPlotYieldChange(PlotTypes, YieldTypes) const
+13864	CvBeliefHelpers_ConvertBarbarianUnit_with_const_CvUnit_UnitHandle	CvBeliefHelpers::ConvertBarbarianUnit(const CvUnit *, UnitHandle)
+13865	CvBuilderTaskingAI_EvaluateBuilder_with_CvUnit_BuilderDirective_UINT_bool_bool_bool	CvBuilderTaskingAI::EvaluateBuilder(CvUnit *, BuilderDirective *, UINT, bool, bool, bool)
+13866	CvBuilderTaskingAI_FindTurnsAway_with_CvUnit_CvPlot_bool	CvBuilderTaskingAI::FindTurnsAway(CvUnit *, CvPlot *, bool)
+13867	CvBuildingEntry_GetGreatWorkYieldType	CvBuildingEntry::GetGreatWorkYieldType() const
+13868	CvBuildingEntry_GetCityWorkingChange	CvBuildingEntry::GetCityWorkingChange() const
+13869	CvBuildingEntry_GetGlobalCityWorkingChange	CvBuildingEntry::GetGlobalCityWorkingChange() const
+13870	CvBuildingEntry_GetCityAutomatonWorkersChange	CvBuildingEntry::GetCityAutomatonWorkersChange() const
+13871	CvBuildingEntry_GetGlobalCityAutomatonWorkersChange	CvBuildingEntry::GetGlobalCityAutomatonWorkersChange() const
+13872	CvBuildingEntry_GetConversionModifier	CvBuildingEntry::GetConversionModifier() const
+13873	CvBuildingEntry_GetGlobalConversionModifier	CvBuildingEntry::GetGlobalConversionModifier() const
+13874	CvBuildingEntry_IsAddsFreshWater	CvBuildingEntry::IsAddsFreshWater() const
+13875	CvBuildingEntry_IsPurchaseOnly	CvBuildingEntry::IsPurchaseOnly() const
+13876	CvBuildingEntry_GetPlotYieldChange	CvBuildingEntry::GetPlotYieldChange(int, int) const
+13877	CvBuildingEntry_GetPlotYieldChangeArray	CvBuildingEntry::GetPlotYieldChangeArray(int) const
+13878	CvCityBuildings_GetYieldFromGreatWorks	CvCityBuildings::GetYieldFromGreatWorks(YieldTypes) const
+13879	CvCityBuildings_GetNumGreatWorks_with_bool_const	CvCityBuildings::GetNumGreatWorks(bool) const
+13880	CvCityBuildings_GetThemingBonuses_with_YieldTypes_const	CvCityBuildings::GetThemingBonuses(YieldTypes) const
+13881	CvCity_init_with_int_PlayerTypes_int_int_bool_bool_ReligionTypes_const_char	CvCity::init(int, PlayerTypes, int, int, bool, bool, ReligionTypes, const char *)
+13882	CvCity_PreKill_with_bool	CvCity::PreKill(bool)
+13883	CvCity_kill_with_bool	CvCity::kill(bool)
+13884	CvCity_IsRouteToCapitalConnected_with_void_const	CvCity::IsRouteToCapitalConnected() const
+13885	CvCity_createGreatGeneral_with_UnitTypes_bool	CvCity::createGreatGeneral(UnitTypes, bool)
+13886	CvCity_createGreatAdmiral_with_UnitTypes_bool	CvCity::createGreatAdmiral(UnitTypes, bool)
+13887	CvCity_getBuyPlotDistance	CvCity::getBuyPlotDistance() const
+13888	CvCity_getWorkPlotDistance	CvCity::getWorkPlotDistance(int) const
+13889	CvCity_GetNumWorkablePlots	CvCity::GetNumWorkablePlots(int) const
+13890	CvCity_canConstruct_with_BuildingTypes_bool_bool_bool_bool_CvString_const	CvCity::canConstruct(BuildingTypes, bool, bool, bool, bool, CvString *) const
+13891	CvCity_GetPlotExtraYield	CvCity::GetPlotExtraYield(PlotTypes, YieldTypes) const
+13892	CvCity_ChangePlotExtraYield	CvCity::ChangePlotExtraYield(PlotTypes, YieldTypes, int)
+13893	CvCity_GetNumResourceLocal	CvCity::GetNumResourceLocal(ResourceTypes, bool)
+13894	CvCity_getProductionNeeded_with_ProcessTypes_const	CvCity::getProductionNeeded(ProcessTypes) const
+13895	CvCity_getProductionTurnsLeft_with_ProcessTypes_int_const	CvCity::getProductionTurnsLeft(ProcessTypes, int) const
+13896	CvCity_isAddsFreshWater	CvCity::isAddsFreshWater() const
+13897	CvCity_getPopulation_with_bool_const	CvCity::getPopulation(bool) const
+13898	CvCity_getAutomatons	CvCity::getAutomatons() const
+13899	CvCity_setAutomatons	CvCity::setAutomatons(int, bool)
+13900	CvCity_changeAutomatons	CvCity::changeAutomatons(int, bool)
+13901	CvCity_GetYieldPerTurnFromUnimprovedFeatures	CvCity::GetYieldPerTurnFromUnimprovedFeatures(YieldTypes) const
+13902	CvCity_getTourismRateModifier	CvCity::getTourismRateModifier() const
+13903	CvCity_changeTourismRateModifier	CvCity::changeTourismRateModifier(int)
+13904	CvCity_GetCityWorkingChange	CvCity::GetCityWorkingChange() const
+13905	CvCity_changeCityWorkingChange	CvCity::changeCityWorkingChange(int)
+13906	CvCity_GetCityAutomatonWorkersChange	CvCity::GetCityAutomatonWorkersChange() const
+13907	CvCity_changeCityAutomatonWorkersChange	CvCity::changeCityAutomatonWorkersChange(int)
+13908	CvCity_GetConversionModifier	CvCity::GetConversionModifier() const
+13909	CvCity_ChangeConversionModifier	CvCity::ChangeConversionModifier(int)
+13910	CvCity_IsOwedFoodBuilding	CvCity::IsOwedFoodBuilding() const
+13911	CvCity_SetOwedFoodBuilding	CvCity::SetOwedFoodBuilding(bool)
+13912	CvCity_GetYieldPerTurnFromReligion	CvCity::GetYieldPerTurnFromReligion(ReligionTypes, YieldTypes) const
+13913	CvCity_getBasicYieldRateTimes100	CvCity::getBasicYieldRateTimes100(YieldTypes, bool) const
+13914	CvCity_GetBaseYieldRateFromGreatWorks	CvCity::GetBaseYieldRateFromGreatWorks(YieldTypes) const
+13915	CvCity_getProcessProduction	CvCity::getProcessProduction(ProcessTypes) const
+13916	CvCity_getProcessProductionTimes100	CvCity::getProcessProductionTimes100(ProcessTypes) const
+13917	CvCity_IsCanGoldPurchase	CvCity::IsCanGoldPurchase(OrderData *)
+13918	CvCity_PurchaseCurrentOrder	CvCity::PurchaseCurrentOrder()
+13919	CvCity_getBombardRange	CvCity::getBombardRange() const
+13920	CvCity_getBombardRange_with_bool_const	CvCity::getBombardRange(bool &) const
+13921	CvCity_HasBelief	CvCity::HasBelief(BeliefTypes) const
+13922	CvCity_HasBuilding	CvCity::HasBuilding(BuildingTypes) const
+13923	CvCity_HasBuildingClass	CvCity::HasBuildingClass(BuildingClassTypes) const
+13924	CvCity_HasAnyWonder	CvCity::HasAnyWonder() const
+13925	CvCity_HasWonder	CvCity::HasWonder(BuildingTypes) const
+13926	CvCity_IsCivilization	CvCity::IsCivilization(CivilizationTypes) const
+13927	CvCity_HasFeature	CvCity::HasFeature(FeatureTypes) const
+13928	CvCity_HasWorkedFeature	CvCity::HasWorkedFeature(FeatureTypes) const
+13929	CvCity_HasAnyNaturalWonder	CvCity::HasAnyNaturalWonder() const
+13930	CvCity_HasNaturalWonder	CvCity::HasNaturalWonder(FeatureTypes) const
+13931	CvCity_HasImprovement	CvCity::HasImprovement(ImprovementTypes) const
+13932	CvCity_HasWorkedImprovement	CvCity::HasWorkedImprovement(ImprovementTypes) const
+13933	CvCity_HasPlotType	CvCity::HasPlotType(PlotTypes) const
+13934	CvCity_HasWorkedPlotType	CvCity::HasWorkedPlotType(PlotTypes) const
+13935	CvCity_HasAnyReligion	CvCity::HasAnyReligion() const
+13936	CvCity_HasReligion	CvCity::HasReligion(ReligionTypes) const
+13937	CvCity_HasResource	CvCity::HasResource(ResourceTypes) const
+13938	CvCity_HasWorkedResource	CvCity::HasWorkedResource(ResourceTypes) const
+13939	CvCity_IsConnectedToCapital	CvCity::IsConnectedToCapital() const
+13940	CvCity_IsConnectedTo	CvCity::IsConnectedTo(CvCity *) const
+13941	CvCity_HasSpecialistSlot	CvCity::HasSpecialistSlot(SpecialistTypes) const
+13942	CvCity_HasSpecialist	CvCity::HasSpecialist(SpecialistTypes) const
+13943	CvCity_HasTerrain	CvCity::HasTerrain(TerrainTypes) const
+13944	CvCity_HasWorkedTerrain	CvCity::HasWorkedTerrain(TerrainTypes) const
+13945	CvCity_HasAnyDomesticTradeRoute	CvCity::HasAnyDomesticTradeRoute() const
+13946	CvCity_HasAnyInternationalTradeRoute	CvCity::HasAnyInternationalTradeRoute() const
+13947	CvCity_HasTradeRouteToAnyCity	CvCity::HasTradeRouteToAnyCity() const
+13948	CvCity_HasTradeRouteTo	CvCity::HasTradeRouteTo(CvCity *) const
+13949	CvCity_HasTradeRouteFromAnyCity	CvCity::HasTradeRouteFromAnyCity() const
+13950	CvCity_HasTradeRouteFrom	CvCity::HasTradeRouteFrom(CvCity *) const
+13951	CvCity_IsOnFeature	CvCity::IsOnFeature(FeatureTypes) const
+13952	CvCity_IsAdjacentToFeature	CvCity::IsAdjacentToFeature(FeatureTypes) const
+13953	CvCity_IsWithinDistanceOfFeature	CvCity::IsWithinDistanceOfFeature(FeatureTypes, int) const
+13954	CvCity_IsOnImprovement	CvCity::IsOnImprovement(ImprovementTypes) const
+13955	CvCity_IsAdjacentToImprovement	CvCity::IsAdjacentToImprovement(ImprovementTypes) const
+13956	CvCity_IsWithinDistanceOfImprovement	CvCity::IsWithinDistanceOfImprovement(ImprovementTypes, int) const
+13957	CvCity_IsOnPlotType	CvCity::IsOnPlotType(PlotTypes) const
+13958	CvCity_IsAdjacentToPlotType	CvCity::IsAdjacentToPlotType(PlotTypes) const
+13959	CvCity_IsWithinDistanceOfPlotType	CvCity::IsWithinDistanceOfPlotType(PlotTypes, int) const
+13960	CvCity_IsOnResource	CvCity::IsOnResource(ResourceTypes) const
+13961	CvCity_IsAdjacentToResource	CvCity::IsAdjacentToResource(ResourceTypes) const
+13962	CvCity_IsWithinDistanceOfResource	CvCity::IsWithinDistanceOfResource(ResourceTypes, int) const
+13963	CvCity_IsOnTerrain	CvCity::IsOnTerrain(TerrainTypes) const
+13964	CvCity_IsAdjacentToTerrain	CvCity::IsAdjacentToTerrain(TerrainTypes) const
+13965	CvCity_IsWithinDistanceOfTerrain	CvCity::IsWithinDistanceOfTerrain(TerrainTypes, int) const
+13966	CvCity_CountFeature	CvCity::CountFeature(FeatureTypes) const
+13967	CvCity_CountWorkedFeature	CvCity::CountWorkedFeature(FeatureTypes) const
+13968	CvCity_CountImprovement	CvCity::CountImprovement(ImprovementTypes) const
+13969	CvCity_CountWorkedImprovement	CvCity::CountWorkedImprovement(ImprovementTypes) const
+13970	CvCity_CountPlotType	CvCity::CountPlotType(PlotTypes) const
+13971	CvCity_CountWorkedPlotType	CvCity::CountWorkedPlotType(PlotTypes) const
+13972	CvCity_CountResource	CvCity::CountResource(ResourceTypes) const
+13973	CvCity_CountWorkedResource	CvCity::CountWorkedResource(ResourceTypes) const
+13974	CvCity_CountTerrain	CvCity::CountTerrain(TerrainTypes) const
+13975	CvCity_CountWorkedTerrain	CvCity::CountWorkedTerrain(TerrainTypes) const
+13976	CvCityCitizens_DoSpawnGreatPerson_with_UnitTypes_bool_bool_bool	CvCityCitizens::DoSpawnGreatPerson(UnitTypes, bool, bool, bool)
+13977	CvGameCulture_IsGreatWorkCreated	CvGameCulture::IsGreatWorkCreated(GreatWorkType) const
+13978	CvGameCulture_GetGreatWorkCity	CvGameCulture::GetGreatWorkCity(int) const
+13979	CvPlayerCulture_DoSwapGreatWorks_with_YieldTypes	CvPlayerCulture::DoSwapGreatWorks(YieldTypes)
+13980	CvPlayerCulture_MoveWorks_with_GreatWorkSlotType_vector_CvGreatWorkBuildingInMyEmpire_vector_CvGreatWorkInMyEmpire_vector_CvGreatWorkInMyEmpire_YieldTypes	CvPlayerCulture::MoveWorks(GreatWorkSlotType, vector<CvGreatWorkBuildingInMyEmpire> &, vector<CvGreatWorkInMyEmpire> &, vector<CvGreatWorkInMyEmpire> &, YieldTypes)
+13981	CvPlayerCulture_MoveSingleWorks	CvPlayerCulture::MoveSingleWorks(vector<CvGreatWorkBuildingInMyEmpire> &, vector<CvGreatWorkInMyEmpire> &, vector<CvGreatWorkInMyEmpire> &, YieldTypes)
+13982	CvPlayerCulture_ChangeInfluenceOn_with_PlayerTypes_int_bool_bool	CvPlayerCulture::ChangeInfluenceOn(PlayerTypes, int, bool, bool)
+13983	CvCityCulture_GetNumGreatWorks_with_bool_const	CvCityCulture::GetNumGreatWorks(bool) const
+13984	CvCityCulture_GetYieldFromImprovements	CvCityCulture::GetYieldFromImprovements(YieldTypes) const
+13985	CvGameDeals_RemoveProposedDeal	CvGameDeals::RemoveProposedDeal(PlayerTypes, PlayerTypes, CvDeal *, bool)
+13986	CvDeal_AreAllTradeItemsValid	CvDeal::AreAllTradeItemsValid()
+13987	CvGameDeals_FinalizeDeal_with_PlayerTypes_PlayerTypes_bool_bool	CvGameDeals::FinalizeDeal(PlayerTypes, PlayerTypes, bool, bool)
+13988	CvGameDeals_FinalizeDeal_with_CvDeal_bool	CvGameDeals::FinalizeDeal(CvDeal, bool)
+13989	CvGameDeals_FinalizeDealValidAndAccepted	CvGameDeals::FinalizeDealValidAndAccepted(PlayerTypes, PlayerTypes, CvDeal &, bool, CvWeightedVector<TeamTypes, ((63)), true> &)
+13990	CvGameDeals_FinalizeDealNotify	CvGameDeals::FinalizeDealNotify(PlayerTypes, PlayerTypes, CvWeightedVector<TeamTypes, ((63)), true> &)
+13991	CvGameDeals_GetProposedDeal_with_PlayerTypes_PlayerTypes_bool	CvGameDeals::GetProposedDeal(PlayerTypes, PlayerTypes, bool)
+13992	CvGameDeals_DoCancelAllProposedDealsWithPlayer_with_PlayerTypes_DiplomacyPlayerType	CvGameDeals::DoCancelAllProposedDealsWithPlayer(PlayerTypes, DiplomacyPlayerType)
+13993	CvGameDeals_LogDealFailed	CvGameDeals::LogDealFailed(CvDeal *, bool, bool, bool)
+13994	CvDiplomacyAI_DoTurn_with_PlayerTypes_DiplomacyPlayerType	CvDiplomacyAI::DoTurn(PlayerTypes, DiplomacyPlayerType)
+13995	CvDiplomacyAI_DoUpdateHumanTradePriority	CvDiplomacyAI::DoUpdateHumanTradePriority(PlayerTypes, int)
+13996	CvDiplomacyAI_GetTeamNumTurnsAtWar	CvDiplomacyAI::GetTeamNumTurnsAtWar(TeamTypes) const
+13997	CvDiplomacyAI_ChangeOtherPlayerWarmongerAmountTimes100	CvDiplomacyAI::ChangeOtherPlayerWarmongerAmountTimes100(PlayerTypes, int)
+13998	GetResponseKeyForMessage	GetResponseKeyForMessage(DiploMessageTypes)
+13999	CvDiplomacyAI_GetDiploModifiers	CvDiplomacyAI::GetDiploModifiers(PlayerTypes, std::vector<Opinion> &)
+14000	CvDiplomacyAI_GetNumTurnsSinceSomethingSent	CvDiplomacyAI::GetNumTurnsSinceSomethingSent(PlayerTypes)
+14001	CvDiplomacyAIHelpers_GetWarmongerOffset_with_PlayerTypes_bool	CvDiplomacyAIHelpers::GetWarmongerOffset(PlayerTypes, bool)
+14002	CvDiplomacyAIHelpers_GetWarmongerPreviewString_with_PlayerTypes_bool	CvDiplomacyAIHelpers::GetWarmongerPreviewString(PlayerTypes, bool)
+14003	CvDiplomacyAIHelpers_GetLiberationPreviewString_with_PlayerTypes_bool	CvDiplomacyAIHelpers::GetLiberationPreviewString(PlayerTypes, bool)
+14004	CvDiplomacyAIHelpers_ApplyWarmongerPenalties_with_PlayerTypes_PlayerTypes_bool	CvDiplomacyAIHelpers::ApplyWarmongerPenalties(PlayerTypes, PlayerTypes, bool)
+14005	CvDiplomacyAI_WantAILeaderMessage	CvDiplomacyAI::WantAILeaderMessage(DiploMessageTypes, PlayerTypes, DiploUIStateTypes, LeaderheadAnimationTypes, int)
+14006	CvDiplomacyAI_DisplayAILeaderMessage	CvDiplomacyAI::DisplayAILeaderMessage(PlayerTypes, DiploUIStateTypes, DiploMessageTypes, LeaderheadAnimationTypes, int)
+14007	CvDiplomacyAI_DisplayAILeaderMessage_with_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_PlayerTypes_LeaderheadAnimationTypes_int	CvDiplomacyAI::DisplayAILeaderMessage(PlayerTypes, DiploUIStateTypes, DiploMessageTypes, PlayerTypes, LeaderheadAnimationTypes, int)
+14008	CvDiplomacyAI_DisplayAILeaderMessage_with_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_PlayerTypes_const_Localization_String_LeaderheadAnimationTypes_int	CvDiplomacyAI::DisplayAILeaderMessage(PlayerTypes, DiploUIStateTypes, DiploMessageTypes, PlayerTypes, const Localization::String &, LeaderheadAnimationTypes, int)
+14009	CvDiplomacyAI_SendAILeaderMessage	CvDiplomacyAI::SendAILeaderMessage(PlayerTypes, PlayerTypes, DiploUIStateTypes, DiploMessageTypes, LeaderheadAnimationTypes, int)
+14010	CvDiplomacyAI_SendAILeaderMessage_with_PlayerTypes_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_PlayerTypes_LeaderheadAnimationTypes_int	CvDiplomacyAI::SendAILeaderMessage(PlayerTypes, PlayerTypes, DiploUIStateTypes, DiploMessageTypes, PlayerTypes, LeaderheadAnimationTypes, int)
+14011	CvDiplomacyAI_SendAILeaderMessage_with_PlayerTypes_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_PlayerTypes_const_Localization_String_LeaderheadAnimationTypes_int	CvDiplomacyAI::SendAILeaderMessage(PlayerTypes, PlayerTypes, DiploUIStateTypes, DiploMessageTypes, PlayerTypes, const Localization::String &, LeaderheadAnimationTypes, int)
+14012	CvDiplomacyAI_SendAILeaderMessage_with_PlayerTypes_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_PlayerTypes_const_Localization_String_const_Localization_String_LeaderheadAnimationTypes_int	CvDiplomacyAI::SendAILeaderMessage(PlayerTypes, PlayerTypes, DiploUIStateTypes, DiploMessageTypes, PlayerTypes, const Localization::String &, const Localization::String &, LeaderheadAnimationTypes, int)
+14013	CvDiplomacyAI_SendAIDealRequest	CvDiplomacyAI::SendAIDealRequest(PlayerTypes, PlayerTypes, CvDeal *, DiploUIStateTypes, DiploMessageTypes, LeaderheadAnimationTypes)
+14014	CvDiplomacyRequests_Add_with_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_const_char_LeaderheadAnimationTypes_int	CvDiplomacyRequests::Add(PlayerTypes, DiploUIStateTypes, DiploMessageTypes, const char *, LeaderheadAnimationTypes, int)
+14015	CvDiplomacyRequests_ActivateNext	CvDiplomacyRequests::ActivateNext()
+14016	CvDiplomacyRequests_ActivateAllFrom	CvDiplomacyRequests::ActivateAllFrom(PlayerTypes)
+14017	CvDiplomacyRequests_Send_with_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_const_char_LeaderheadAnimationTypes_int	CvDiplomacyRequests::Send(PlayerTypes, DiploUIStateTypes, DiploMessageTypes, const char *, LeaderheadAnimationTypes, int)
+14018	CvDiplomacyRequests_HasRequestFrom	CvDiplomacyRequests::HasRequestFrom(PlayerTypes) const
+14019	CvDiplomacyRequests_SendRequest_with_PlayerTypes_PlayerTypes_DiploUIStateTypes_DiploMessageTypes_const_char_LeaderheadAnimationTypes_int	CvDiplomacyRequests::SendRequest(PlayerTypes, PlayerTypes, DiploUIStateTypes, DiploMessageTypes, const char *, LeaderheadAnimationTypes, int)
+14020	CvDiplomacyRequests_SendDealRequest_with_PlayerTypes_PlayerTypes_CvDeal_DiploUIStateTypes_DiploMessageTypes_const_char_LeaderheadAnimationTypes	CvDiplomacyRequests::SendDealRequest(PlayerTypes, PlayerTypes, CvDeal *, DiploUIStateTypes, DiploMessageTypes, const char *, LeaderheadAnimationTypes)
+14021	CvDiplomacyRequests_DoAIDiplomacyWithHumans	CvDiplomacyRequests::DoAIDiplomacyWithHumans()
+14022	CvEconomicAI_UseStrategy	CvEconomicAI::UseStrategy(EconomicAIStrategyTypes, bool)
+14023	CvEconomicAI_DisbandLongObsoleteUnits	CvEconomicAI::DisbandLongObsoleteUnits()
+14024	CvEspionageSpy_GetSpyName	CvEspionageSpy::GetSpyName(CvPlayer *)
+14025	CvEspionageSpy_SetSpyState	CvEspionageSpy::SetSpyState(PlayerTypes, int, CvSpyState)
+14026	isSpyNameInUse	isSpyNameInUse(CvPlayer *, const char *)
+14027	isSpyNameInUse_with_const_char	isSpyNameInUse(const char *)
+14028	pickSpyName	pickSpyName(CvCivilizationInfo *, CvEspionageSpy *)
+14029	isCivInPlay	isCivInPlay(const CivilizationTypes)
+14030	CvPlayerEspionage_GetNextSpyName_with_CvEspionageSpy	CvPlayerEspionage::GetNextSpyName(CvEspionageSpy *)
+14031	CvPlayerEspionage_SetPassive	CvPlayerEspionage::SetPassive(uint, bool)
+14032	CvPlayerEspionage_SetOutcome	CvPlayerEspionage::SetOutcome(uint, uint, bool)
+14033	CvCityEspionage_SetSpyResult_with_PlayerTypes_int_int	CvCityEspionage::SetSpyResult(PlayerTypes, int, int)
+14034	op_shr_with_FDataStream_CvEventLog_EventLogEntry	operator>>(FDataStream &, CvEventLog::EventLogEntry &)
+14035	op_shl_with_FDataStream_const_CvEventLog_EventLogEntry	operator<<(FDataStream &, const CvEventLog::EventLogEntry &)
+14036	CvEventLog_EventLogEntry_Clear	CvEventLog::EventLogEntry::Clear()
+14037	CvEventLog_Init	CvEventLog::Init(PlayerTypes)
+14038	CvEventLog_Uninit	CvEventLog::Uninit()
+14039	CvEventLog_Read	CvEventLog::Read(FDataStream &)
+14040	CvEventLog_Write	CvEventLog::Write(FDataStream &) const
+14041	CvEventLog_Add	CvEventLog::Add(const char *, PlayerTypes, int, int, int, int, int, int)
+14042	CvEventLog_GetNumEvents	CvEventLog::GetNumEvents() const
+14043	CvEventLog_GetTurn	CvEventLog::GetTurn(int) const
+14044	CvEventLog_GetMessage	CvEventLog::GetMessage(int) const
+14045	CvEventLog_GetOtherPlayer	CvEventLog::GetOtherPlayer(int) const
+14046	CvEventLog_GetPlot	CvEventLog::GetPlot(int) const
+14047	CvEventLog_GetData1	CvEventLog::GetData1(int) const
+14048	CvEventLog_GetData2	CvEventLog::GetData2(int) const
+14049	CvEventLog_GetData3	CvEventLog::GetData3(int) const
+14050	CvEventLog_GetData4	CvEventLog::GetData4(int) const
+14051	CvEventLog_IsLogFull	CvEventLog::IsLogFull()
+14052	CvEventLog_RemoveOldestEvent	CvEventLog::RemoveOldestEvent()
+14053	CvEventLog_IncrementBeginIndex	CvEventLog::IncrementBeginIndex()
+14054	CvEventLog_IncrementEndIndex	CvEventLog::IncrementEndIndex()
+14055	CvFlavorManager_ChangeLeader	CvFlavorManager::ChangeLeader(LeaderHeadTypes, LeaderHeadTypes)
+14056	CvGame_isReallyNetworkMultiPlayer	CvGame::isReallyNetworkMultiPlayer() const
+14057	CvGame_removeGreatPersonBornName	CvGame::removeGreatPersonBornName(const CvString &)
+14058	CvGame_GetCompetitiveSpawnUnitType_with_PlayerTypes_bool_bool_bool	CvGame::GetCompetitiveSpawnUnitType(PlayerTypes, bool, bool, bool)
+14059	CvGame_GetCsGiftSpawnUnitType	CvGame::GetCsGiftSpawnUnitType(PlayerTypes, bool)
+14060	CvGame_getDllGuid	CvGame::getDllGuid() const
+14061	CvGame_AnyoneHasBelief	CvGame::AnyoneHasBelief(BeliefTypes) const
+14062	CvGame_AnyoneHasBuilding	CvGame::AnyoneHasBuilding(BuildingTypes) const
+14063	CvGame_AnyoneHasBuildingClass	CvGame::AnyoneHasBuildingClass(BuildingClassTypes) const
+14064	CvGame_AnyoneHasAnyWonder	CvGame::AnyoneHasAnyWonder() const
+14065	CvGame_AnyoneHasWonder	CvGame::AnyoneHasWonder(BuildingTypes) const
+14066	CvGame_GetCivilizationPlayer	CvGame::GetCivilizationPlayer(CivilizationTypes) const
+14067	CvGame_AnyoneIsInEra	CvGame::AnyoneIsInEra(EraTypes) const
+14068	CvGame_AnyoneHasReachedEra	CvGame::AnyoneHasReachedEra(EraTypes) const
+14069	CvGame_AnyoneHasAnyNaturalWonder	CvGame::AnyoneHasAnyNaturalWonder() const
+14070	CvGame_AnyoneHasNaturalWonder	CvGame::AnyoneHasNaturalWonder(FeatureTypes) const
+14071	CvGame_AnyoneHasPolicy	CvGame::AnyoneHasPolicy(PolicyTypes) const
+14072	CvGame_AnyoneHasTenet	CvGame::AnyoneHasTenet(PolicyTypes) const
+14073	CvGame_AnyoneHasPolicyBranch	CvGame::AnyoneHasPolicyBranch(PolicyBranchTypes) const
+14074	CvGame_AnyoneHasIdeology	CvGame::AnyoneHasIdeology(PolicyBranchTypes) const
+14075	CvGame_AnyoneHasProject	CvGame::AnyoneHasProject(ProjectTypes) const
+14076	CvGame_AnyoneHasPantheon	CvGame::AnyoneHasPantheon() const
+14077	CvGame_AnyoneHasAnyReligion	CvGame::AnyoneHasAnyReligion() const
+14078	CvGame_AnyoneHasReligion	CvGame::AnyoneHasReligion(ReligionTypes) const
+14079	CvGame_IsResolutionPassed	CvGame::IsResolutionPassed(ResolutionTypes, int) const
+14080	CvGame_AnyoneHasTech	CvGame::AnyoneHasTech(TechTypes) const
+14081	CvGame_AnyoneHasUnit	CvGame::AnyoneHasUnit(UnitTypes) const
+14082	CvGame_AnyoneHasUnitClass	CvGame::AnyoneHasUnitClass(UnitClassTypes) const
+14083	CreateMiniDump	CreateMiniDump(EXCEPTION_POINTERS *)
+14084	CustomFilter	CustomFilter(EXCEPTION_POINTERS *)
+14085	CvGlobals_getNumPlotInfos	CvGlobals::getNumPlotInfos()
+14086	CvGlobals_getPlotInfo	CvGlobals::getPlotInfo()
+14087	CvGlobals_getPlotInfo_with_PlotTypes	CvGlobals::getPlotInfo(PlotTypes)
+14088	CvGlobals_getNumGreatPersonInfos	CvGlobals::getNumGreatPersonInfos()
+14089	CvGlobals_getGreatPersonInfo	CvGlobals::getGreatPersonInfo()
+14090	CvGlobals_getGreatPersonInfo_with_GreatPersonTypes	CvGlobals::getGreatPersonInfo(GreatPersonTypes)
+14091	CvGlobals_getNumQuestInfos	CvGlobals::getNumQuestInfos()
+14092	CvGlobals_getQuestInfo	CvGlobals::getQuestInfo()
+14093	CvGlobals_getQuestInfo_with_int	CvGlobals::getQuestInfo(int)
+14094	CvGlobals_getNumDiploModifierInfos	CvGlobals::getNumDiploModifierInfos()
+14095	CvGlobals_getDiploModifierInfo	CvGlobals::getDiploModifierInfo()
+14096	CvGlobals_getDiploModifierInfo_with_DiploModifierTypes	CvGlobals::getDiploModifierInfo(DiploModifierTypes)
+14097	CvGlobals_getNumAchievementInfos	CvGlobals::getNumAchievementInfos()
+14098	CvGlobals_getAchievementInfo	CvGlobals::getAchievementInfo()
+14099	CvGlobals_getAchievementInfo_with_EAchievement	CvGlobals::getAchievementInfo(EAchievement)
+14100	CvGlobals_GetGameAchievements	CvGlobals::GetGameAchievements() const
+14101	CvGrandStrategyAI_GetPersonalityAndGrandStrategy_with_FlavorTypes_bool	CvGrandStrategyAI::GetPersonalityAndGrandStrategy(FlavorTypes, bool)
+14102	CvGreatPersonInfo_GetUnitClassType	CvGreatPersonInfo::GetUnitClassType() const
+14103	CvGreatPersonInfo_GetSpecialistType	CvGreatPersonInfo::GetSpecialistType() const
+14104	CvGreatPersonInfo_CacheResults	CvGreatPersonInfo::CacheResults(Database::Results &, CvDatabaseUtility &)
+14105	GetGreatPersonFromUnitClass	GetGreatPersonFromUnitClass(UnitClassTypes)
+14106	GetGreatPersonFromSpecialist	GetGreatPersonFromSpecialist(SpecialistTypes)
+14107	CvHomelandAI_PlotOpportunisticSettlementMoves	CvHomelandAI::PlotOpportunisticSettlementMoves()
+14108	CvHomelandAI_PlotWorkerMoves_with_bool	CvHomelandAI::PlotWorkerMoves(bool)
+14109	CvHomelandAI_ExecuteWorkerMoves_with_bool	CvHomelandAI::ExecuteWorkerMoves(bool)
+14110	CvHomelandAI_ExecuteAircraftInterceptions	CvHomelandAI::ExecuteAircraftInterceptions()
+14111	CvHomelandAI_MoveCivilianToSafety_with_CvUnit_bool_bool	CvHomelandAI::MoveCivilianToSafety(CvUnit *, bool, bool)
+14112	CvHomelandAI_ExecuteWorkerMove_with_CvUnit_bool	CvHomelandAI::ExecuteWorkerMove(CvUnit *, bool)
+14113	CvImprovementEntry_GetRequiresXAdjacentWater	CvImprovementEntry::GetRequiresXAdjacentWater() const
+14114	CvImprovementEntry_GetAdditionalUnits	CvImprovementEntry::GetAdditionalUnits() const
+14115	CvImprovementEntry_GetYieldAdjacentSameType	CvImprovementEntry::GetYieldAdjacentSameType(YieldTypes) const
+14116	CvImprovementEntry_IsAllowsRebaseTo	CvImprovementEntry::IsAllowsRebaseTo() const
+14117	CvImprovementEntry_IsAllowsAirliftFrom	CvImprovementEntry::IsAllowsAirliftFrom() const
+14118	CvImprovementEntry_IsAllowsAirliftTo	CvImprovementEntry::IsAllowsAirliftTo() const
+14119	CvImprovementEntry_IsMountainsMakesValid	CvImprovementEntry::IsMountainsMakesValid() const
+14120	CvImprovementEntry_IsMakesPassable	CvImprovementEntry::IsMakesPassable() const
+14121	CvImprovementEntry_IsNegatesTerrainDamage	CvImprovementEntry::IsNegatesTerrainDamage() const
+14122	CvImprovementEntry_IsNegatesFeatureDamage	CvImprovementEntry::IsNegatesFeatureDamage() const
+14123	CvImprovementEntry_IsNoFollowup	CvImprovementEntry::IsNoFollowup() const
+14124	CvImprovementEntry_IsAddsFreshWater	CvImprovementEntry::IsAddsFreshWater() const
+14125	CvImprovementEntry_GetAdjacentSameTypeYield	CvImprovementEntry::GetAdjacentSameTypeYield(int) const
+14126	CvGameSpeedInfo_getTradeRouteSpeedMod	CvGameSpeedInfo::getTradeRouteSpeedMod() const
+14127	CvDiploModifierInfo_isForFromCiv	CvDiploModifierInfo::isForFromCiv(CivilizationTypes)
+14128	CvDiploModifierInfo_isForToCiv	CvDiploModifierInfo::isForToCiv(CivilizationTypes)
+14129	CvDiploModifierInfo_CacheResults	CvDiploModifierInfo::CacheResults(Database::Results &, CvDatabaseUtility &)
+14130	CvDiploModifierInfo_op_eq	CvDiploModifierInfo::operator==(const CvDiploModifierInfo &) const
+14131	CvDiploModifierInfo_writeTo	CvDiploModifierInfo::writeTo(FDataStream &) const
+14132	CvDiploModifierInfo_readFrom	CvDiploModifierInfo::readFrom(FDataStream &)
+14133	op_shl_with_FDataStream_const_CvDiploModifierInfo	operator<<(FDataStream &, const CvDiploModifierInfo &)
+14134	op_shr_with_FDataStream_CvDiploModifierInfo	operator>>(FDataStream &, CvDiploModifierInfo &)
+14135	CvBuildInfo_getFeatureObsoleteTech	CvBuildInfo::getFeatureObsoleteTech(int) const
+14136	CvBuildInfo_isFeatureRemoveOnly	CvBuildInfo::isFeatureRemoveOnly(int) const
+14137	CvFeatureInfo_getExtraTurnDamage	CvFeatureInfo::getExtraTurnDamage() const
+14138	CvFeatureInfo_getCoastalLandYieldChange	CvFeatureInfo::getCoastalLandYieldChange(int) const
+14139	CvFeatureInfo_getFreshWaterYieldChange	CvFeatureInfo::getFreshWaterYieldChange(int) const
+14140	CvFeatureInfo_GetTechYieldChanges	CvFeatureInfo::GetTechYieldChanges(int, int) const
+14141	CvYieldInfo_getIconString	CvYieldInfo::getIconString() const
+14142	CvYieldInfo_getColorString	CvYieldInfo::getColorString() const
+14143	CvTerrainInfo_getTurnDamage	CvTerrainInfo::getTurnDamage() const
+14144	CvTerrainInfo_getExtraTurnDamage	CvTerrainInfo::getExtraTurnDamage() const
+14145	CvTerrainInfo_getCoastalLandYieldChange	CvTerrainInfo::getCoastalLandYieldChange(int) const
+14146	CvTerrainInfo_getFreshWaterYieldChange	CvTerrainInfo::getFreshWaterYieldChange(int) const
+14147	CvTerrainInfo_GetTechYieldChanges	CvTerrainInfo::GetTechYieldChanges(int, int) const
+14148	CvWorldInfo_getTradeRouteDistanceMod	CvWorldInfo::getTradeRouteDistanceMod() const
+14149	FeatureArrayHelpers_Read	FeatureArrayHelpers::Read(FDataStream &, int *)
+14150	FeatureArrayHelpers_Write	FeatureArrayHelpers::Write(FDataStream &, int *, int)
+14151	FeatureArrayHelpers_ReadYieldArray	FeatureArrayHelpers::ReadYieldArray(FDataStream &, int **, int)
+14152	FeatureArrayHelpers_WriteYieldArray	FeatureArrayHelpers::WriteYieldArray(FDataStream &, int **, int)
+14153	TerrainArrayHelpers_Read	TerrainArrayHelpers::Read(FDataStream &, int *)
+14154	TerrainArrayHelpers_Write	TerrainArrayHelpers::Write(FDataStream &, int *, int)
+14155	TerrainArrayHelpers_ReadYieldArray	TerrainArrayHelpers::ReadYieldArray(FDataStream &, int **, int)
+14156	TerrainArrayHelpers_WriteYieldArray	TerrainArrayHelpers::WriteYieldArray(FDataStream &, int **, int)
+14157	getWonderResource	getWonderResource()
+14158	CvMilitaryAI_UseStrategy	CvMilitaryAI::UseStrategy(MilitaryAIStrategyTypes, bool)
+14159	CvMilitaryAI_GetMaxPossibleInterceptions	CvMilitaryAI::GetMaxPossibleInterceptions(CvPlot *, bool) const
+14160	CvMinorCivQuest_UseEvents	CvMinorCivQuest::UseEvents() const
+14161	CvMinorCivQuest_IsInternal	CvMinorCivQuest::IsInternal() const
+14162	CvMinorCivQuest_GetTurnsDuration	CvMinorCivQuest::GetTurnsDuration() const
+14163	CvMinorCivAI_SetPersonality	CvMinorCivAI::SetPersonality(MinorCivPersonalityTypes)
+14164	CvMinorCivAI_DoTestEndSkirmishes	CvMinorCivAI::DoTestEndSkirmishes(PlayerTypes)
+14165	CvMinorCivAI_DoRemoveStartingResources_with_CvPlot_bool	CvMinorCivAI::DoRemoveStartingResources(CvPlot *, bool)
+14166	CvMinorCivAI_GetQuestTurnsDuration	CvMinorCivAI::GetQuestTurnsDuration(PlayerTypes, MinorCivQuestTypes) const
+14167	CvMinorCivAI_DoSpawnUnit_with_PlayerTypes_bool_bool	CvMinorCivAI::DoSpawnUnit(PlayerTypes, bool, bool)
+14168	CvMinorCivAI_DoBuyout_with_PlayerTypes_bool	CvMinorCivAI::DoBuyout(PlayerTypes, bool)
+14169	CvMinorCivAI_DoAcquire_with_PlayerTypes_int_int_int_bool	CvMinorCivAI::DoAcquire(PlayerTypes, int &, int &, int &, bool)
+14170	CvPlayer_initCity_with_int_int_bool_bool_ReligionTypes_const_char	CvPlayer::initCity(int, int, bool, bool, ReligionTypes, const char *)
+14171	CvPlayer_acquireCity_with_CvCity_bool_bool_bool	CvPlayer::acquireCity(CvCity *, bool, bool, bool)
+14172	CvPlayer_getBuyPlotDistance	CvPlayer::getBuyPlotDistance() const
+14173	CvPlayer_getWorkPlotDistance	CvPlayer::getWorkPlotDistance() const
+14174	CvPlayer_GetNumWorkablePlots	CvPlayer::GetNumWorkablePlots() const
+14175	CvPlayer_GetSpecificUnitType	CvPlayer::GetSpecificUnitType(const char *, bool)
+14176	CvPlayer_GetSpecificBuildingType	CvPlayer::GetSpecificBuildingType(const char *, bool)
+14177	CvPlayer_IsPlotConnectedToPlot	CvPlayer::IsPlotConnectedToPlot(CvPlot *, CvPlot *, RouteTypes, bool)
+14178	CvPlayer_found_with_int_int_ReligionTypes	CvPlayer::found(int, int, ReligionTypes)
+14179	CvPlayer_getMaxStockpile	CvPlayer::getMaxStockpile() const
+14180	CvPlayer_GetCityYieldChangeTimes100	CvPlayer::GetCityYieldChangeTimes100(YieldTypes) const
+14181	CvPlayer_ChangeCityYieldChangeTimes100	CvPlayer::ChangeCityYieldChangeTimes100(YieldTypes, int)
+14182	CvPlayer_GetCapitalYieldChangeTimes100	CvPlayer::GetCapitalYieldChangeTimes100(YieldTypes) const
+14183	CvPlayer_ChangeCapitalYieldChangeTimes100	CvPlayer::ChangeCapitalYieldChangeTimes100(YieldTypes, int)
+14184	CvPlayer_DoYieldsFromKill_with_CvUnit_CvUnit_int_int_int	CvPlayer::DoYieldsFromKill(CvUnit *, CvUnit *, int, int, int)
+14185	CvPlayer_DoYieldBonusFromKill_with_YieldTypes_CvUnit_CvUnit_UnitTypes_int_int_bool_int	CvPlayer::DoYieldBonusFromKill(YieldTypes, CvUnit *, CvUnit *, UnitTypes, int, int, bool, int &)
+14186	CvPlayer_DoUnresearchedTechBonusFromKill_with_CvUnit_UnitTypes_int_int_int	CvPlayer::DoUnresearchedTechBonusFromKill(CvUnit *, UnitTypes, int, int, int &)
+14187	CvPlayer_GetYieldPerTurnFromReligion	CvPlayer::GetYieldPerTurnFromReligion(YieldTypes) const
+14188	CvPlayer_GetYieldPerTurnFromTraits	CvPlayer::GetYieldPerTurnFromTraits(YieldTypes) const
+14189	CvPlayer_GetConversionModifier	CvPlayer::GetConversionModifier() const
+14190	CvPlayer_ChangeConversionModifier	CvPlayer::ChangeConversionModifier(int)
+14191	CvPlayer_grantPolicy	CvPlayer::grantPolicy(PolicyTypes, bool)
+14192	CvPlayer_revokePolicy	CvPlayer::revokePolicy(PolicyTypes)
+14193	CvPlayer_swapPolicy	CvPlayer::swapPolicy(PolicyTypes, PolicyTypes)
+14194	CvPlayer_setHasPolicy_with_PolicyTypes_bool_bool	CvPlayer::setHasPolicy(PolicyTypes, bool, bool)
+14195	CvPlayer_getGreatPeopleCreated_with_bool_const	CvPlayer::getGreatPeopleCreated(bool) const
+14196	CvPlayer_incrementGreatPeopleCreated_with_bool	CvPlayer::incrementGreatPeopleCreated(bool)
+14197	CvPlayer_getGreatGeneralsCreated_with_bool_const	CvPlayer::getGreatGeneralsCreated(bool) const
+14198	CvPlayer_incrementGreatGeneralsCreated_with_bool	CvPlayer::incrementGreatGeneralsCreated(bool)
+14199	CvPlayer_getGreatAdmiralsCreated_with_bool_const	CvPlayer::getGreatAdmiralsCreated(bool) const
+14200	CvPlayer_incrementGreatAdmiralsCreated_with_bool	CvPlayer::incrementGreatAdmiralsCreated(bool)
+14201	CvPlayer_getGreatMerchantsCreated	CvPlayer::getGreatMerchantsCreated(bool) const
+14202	CvPlayer_incrementGreatMerchantsCreated	CvPlayer::incrementGreatMerchantsCreated(bool)
+14203	CvPlayer_getGreatScientistsCreated	CvPlayer::getGreatScientistsCreated(bool) const
+14204	CvPlayer_incrementGreatScientistsCreated	CvPlayer::incrementGreatScientistsCreated(bool)
+14205	CvPlayer_getGreatEngineersCreated	CvPlayer::getGreatEngineersCreated(bool) const
+14206	CvPlayer_incrementGreatEngineersCreated	CvPlayer::incrementGreatEngineersCreated(bool)
+14207	CvPlayer_getGreatWritersCreated_with_bool_const	CvPlayer::getGreatWritersCreated(bool) const
+14208	CvPlayer_incrementGreatWritersCreated_with_bool	CvPlayer::incrementGreatWritersCreated(bool)
+14209	CvPlayer_getGreatArtistsCreated_with_bool_const	CvPlayer::getGreatArtistsCreated(bool) const
+14210	CvPlayer_incrementGreatArtistsCreated_with_bool	CvPlayer::incrementGreatArtistsCreated(bool)
+14211	CvPlayer_getGreatMusiciansCreated_with_bool_const	CvPlayer::getGreatMusiciansCreated(bool) const
+14212	CvPlayer_incrementGreatMusiciansCreated_with_bool	CvPlayer::incrementGreatMusiciansCreated(bool)
+14213	CvPlayer_DoUnitKilledCombat_with_CvUnit_PlayerTypes_UnitTypes	CvPlayer::DoUnitKilledCombat(CvUnit *, PlayerTypes, UnitTypes)
+14214	CvPlayer_DoGreatPersonExpended_with_UnitTypes_CvUnit	CvPlayer::DoGreatPersonExpended(UnitTypes, CvUnit *)
+14215	CvPlayer_DoSpawnGreatPerson_with_PlayerTypes_bool	CvPlayer::DoSpawnGreatPerson(PlayerTypes, bool)
+14216	CvPlayer_disassembleSpaceship	CvPlayer::disassembleSpaceship(CvPlot *)
+14217	CvPlayer_getCombatExperienceTimes100	CvPlayer::getCombatExperienceTimes100() const
+14218	CvPlayer_setCombatExperienceTimes100	CvPlayer::setCombatExperienceTimes100(int, CvUnit *)
+14219	CvPlayer_changeCombatExperienceTimes100	CvPlayer::changeCombatExperienceTimes100(int, CvUnit *)
+14220	CvPlayer_getNavalCombatExperienceTimes100	CvPlayer::getNavalCombatExperienceTimes100() const
+14221	CvPlayer_setNavalCombatExperienceTimes100	CvPlayer::setNavalCombatExperienceTimes100(int, CvUnit *)
+14222	CvPlayer_changeNavalCombatExperienceTimes100	CvPlayer::changeNavalCombatExperienceTimes100(int, CvUnit *)
+14223	CvPlayer_getLifetimeCombatExperienceTimes100	CvPlayer::getLifetimeCombatExperienceTimes100() const
+14224	CvPlayer_isMajorCiv	CvPlayer::isMajorCiv() const
+14225	CvPlayer_setLeaderType	CvPlayer::setLeaderType(LeaderHeadTypes)
+14226	CvPlayer_getPlotYieldChange	CvPlayer::getPlotYieldChange(PlotTypes, YieldTypes) const
+14227	CvPlayer_changePlotYieldChange	CvPlayer::changePlotYieldChange(PlotTypes, YieldTypes, int)
+14228	CvPlayer_getFeatureYieldChange	CvPlayer::getFeatureYieldChange(FeatureTypes, YieldTypes) const
+14229	CvPlayer_changeFeatureYieldChange	CvPlayer::changeFeatureYieldChange(FeatureTypes, YieldTypes, int)
+14230	CvPlayer_getCityYieldFromUnimprovedFeature	CvPlayer::getCityYieldFromUnimprovedFeature(FeatureTypes, YieldTypes) const
+14231	CvPlayer_changeCityYieldFromUnimprovedFeature	CvPlayer::changeCityYieldFromUnimprovedFeature(FeatureTypes, YieldTypes, int)
+14232	CvPlayer_getUnimprovedFeatureYieldChange	CvPlayer::getUnimprovedFeatureYieldChange(FeatureTypes, YieldTypes) const
+14233	CvPlayer_changeUnimprovedFeatureYieldChange	CvPlayer::changeUnimprovedFeatureYieldChange(FeatureTypes, YieldTypes, int)
+14234	CvPlayer_getResourceYieldChange	CvPlayer::getResourceYieldChange(ResourceTypes, YieldTypes) const
+14235	CvPlayer_changeResourceYieldChange	CvPlayer::changeResourceYieldChange(ResourceTypes, YieldTypes, int)
+14236	CvPlayer_getTerrainYieldChange	CvPlayer::getTerrainYieldChange(TerrainTypes, YieldTypes) const
+14237	CvPlayer_changeTerrainYieldChange	CvPlayer::changeTerrainYieldChange(TerrainTypes, YieldTypes, int)
+14238	CvPlayer_getTradeRouteYieldChange	CvPlayer::getTradeRouteYieldChange(DomainTypes, YieldTypes) const
+14239	CvPlayer_changeTradeRouteYieldChange	CvPlayer::changeTradeRouteYieldChange(DomainTypes, YieldTypes, int)
+14240	CvPlayer_getSpecialistYieldChange	CvPlayer::getSpecialistYieldChange(SpecialistTypes, YieldTypes) const
+14241	CvPlayer_changeSpecialistYieldChange	CvPlayer::changeSpecialistYieldChange(SpecialistTypes, YieldTypes, int)
+14242	CvPlayer_getGreatPersonExpendedYield	CvPlayer::getGreatPersonExpendedYield(GreatPersonTypes, YieldTypes) const
+14243	CvPlayer_changeGreatPersonExpendedYield	CvPlayer::changeGreatPersonExpendedYield(GreatPersonTypes, YieldTypes, int)
+14244	CvPlayer_getGoldenAgeGreatPersonRateModifier	CvPlayer::getGoldenAgeGreatPersonRateModifier(GreatPersonTypes) const
+14245	CvPlayer_changeGoldenAgeGreatPersonRateModifier	CvPlayer::changeGoldenAgeGreatPersonRateModifier(GreatPersonTypes, int)
+14246	CvPlayer_GetYieldFromKills	CvPlayer::GetYieldFromKills(YieldTypes) const
+14247	CvPlayer_changeYieldFromKills	CvPlayer::changeYieldFromKills(YieldTypes, int)
+14248	CvPlayer_GetYieldFromBarbarianKills	CvPlayer::GetYieldFromBarbarianKills(YieldTypes) const
+14249	CvPlayer_changeYieldFromBarbarianKills	CvPlayer::changeYieldFromBarbarianKills(YieldTypes, int)
+14250	CvPlayer_GetYieldChangeTradeRoute	CvPlayer::GetYieldChangeTradeRoute(YieldTypes) const
+14251	CvPlayer_ChangeYieldChangeTradeRoute	CvPlayer::ChangeYieldChangeTradeRoute(YieldTypes, int)
+14252	CvPlayer_GetYieldChangesNaturalWonder	CvPlayer::GetYieldChangesNaturalWonder(YieldTypes) const
+14253	CvPlayer_ChangeYieldChangesNaturalWonder	CvPlayer::ChangeYieldChangesNaturalWonder(YieldTypes, int)
+14254	CvPlayer_GetYieldChangeWorldWonder	CvPlayer::GetYieldChangeWorldWonder(YieldTypes) const
+14255	CvPlayer_ChangeYieldChangeWorldWonder	CvPlayer::ChangeYieldChangeWorldWonder(YieldTypes, int)
+14256	CvPlayer_getBuildingClassYieldChange	CvPlayer::getBuildingClassYieldChange(BuildingClassTypes, YieldTypes) const
+14257	CvPlayer_changeBuildingClassYieldChange	CvPlayer::changeBuildingClassYieldChange(BuildingClassTypes, YieldTypes, int)
+14258	CvPlayer_AddNotification	CvPlayer::AddNotification(NotificationTypes, const char *, const char *, int, int)
+14259	CvPlayer_AddNotification_with_NotificationTypes_const_char_const_char_CvPlot_int_int	CvPlayer::AddNotification(NotificationTypes, const char *, const char *, CvPlot *, int, int)
+14260	CvPlayer_GetDiplomacyLog	CvPlayer::GetDiplomacyLog() const
+14261	CvPlayer_AddDiplomacyEvent	CvPlayer::AddDiplomacyEvent(const char *, PlayerTypes, int, int, int, int)
+14262	CvPlayer_GetMilitaryLog	CvPlayer::GetMilitaryLog() const
+14263	CvPlayer_AddMilitaryEvent	CvPlayer::AddMilitaryEvent(const char *, CvPlot *, PlayerTypes, int, int, int, int)
+14264	CvPlayer_createGreatGeneral_with_UnitTypes_int_int_bool	CvPlayer::createGreatGeneral(UnitTypes, int, int, bool)
+14265	CvPlayer_createGreatAdmiral_with_UnitTypes_int_int_bool	CvPlayer::createGreatAdmiral(UnitTypes, int, int, bool)
+14266	CvPlayer_GetCityWorkingChange	CvPlayer::GetCityWorkingChange() const
+14267	CvPlayer_ChangeCityWorkingChange	CvPlayer::ChangeCityWorkingChange(int)
+14268	CvPlayer_GetCityAutomatonWorkersChange	CvPlayer::GetCityAutomatonWorkersChange() const
+14269	CvPlayer_ChangeCityAutomatonWorkersChange	CvPlayer::ChangeCityAutomatonWorkersChange(int)
+14270	CvPlayer_GetDeepWaterEmbarkationPromotion	CvPlayer::GetDeepWaterEmbarkationPromotion() const
+14271	CvPlayer_HasBelief	CvPlayer::HasBelief(BeliefTypes) const
+14272	CvPlayer_HasBuilding	CvPlayer::HasBuilding(BuildingTypes)
+14273	CvPlayer_HasBuildingClass	CvPlayer::HasBuildingClass(BuildingClassTypes)
+14274	CvPlayer_HasAnyWonder	CvPlayer::HasAnyWonder()
+14275	CvPlayer_HasWonder	CvPlayer::HasWonder(BuildingTypes)
+14276	CvPlayer_IsCivilization	CvPlayer::IsCivilization(CivilizationTypes) const
+14277	CvPlayer_IsInEra	CvPlayer::IsInEra(EraTypes) const
+14278	CvPlayer_HasReachedEra	CvPlayer::HasReachedEra(EraTypes) const
+14279	CvPlayer_HasAnyNaturalWonder	CvPlayer::HasAnyNaturalWonder()
+14280	CvPlayer_HasNaturalWonder	CvPlayer::HasNaturalWonder(FeatureTypes)
+14281	CvPlayer_HasPolicy	CvPlayer::HasPolicy(PolicyTypes) const
+14282	CvPlayer_HasTenet	CvPlayer::HasTenet(PolicyTypes) const
+14283	CvPlayer_HasPolicyBranch	CvPlayer::HasPolicyBranch(PolicyBranchTypes) const
+14284	CvPlayer_HasIdeology	CvPlayer::HasIdeology(PolicyBranchTypes) const
+14285	CvPlayer_HasProject	CvPlayer::HasProject(ProjectTypes) const
+14286	CvPlayer_IsAtPeace	CvPlayer::IsAtPeace() const
+14287	CvPlayer_IsAtPeaceAllMajors	CvPlayer::IsAtPeaceAllMajors() const
+14288	CvPlayer_IsAtPeaceAllMinors	CvPlayer::IsAtPeaceAllMinors() const
+14289	CvPlayer_IsAtPeaceWith	CvPlayer::IsAtPeaceWith(PlayerTypes) const
+14290	CvPlayer_IsAtWar	CvPlayer::IsAtWar() const
+14291	CvPlayer_IsAtWarAnyMajor	CvPlayer::IsAtWarAnyMajor() const
+14292	CvPlayer_IsAtWarAnyMinor	CvPlayer::IsAtWarAnyMinor() const
+14293	CvPlayer_IsAtWarWith	CvPlayer::IsAtWarWith(PlayerTypes) const
+14294	CvPlayer_HasPantheon	CvPlayer::HasPantheon() const
+14295	CvPlayer_HasAnyReligion	CvPlayer::HasAnyReligion() const
+14296	CvPlayer_HasReligion	CvPlayer::HasReligion(ReligionTypes) const
+14297	CvPlayer_HasEnhancedReligion	CvPlayer::HasEnhancedReligion() const
+14298	CvPlayer_IsConnectedTo	CvPlayer::IsConnectedTo(PlayerTypes)
+14299	CvPlayer_HasSpecialistSlot	CvPlayer::HasSpecialistSlot(SpecialistTypes)
+14300	CvPlayer_HasSpecialist	CvPlayer::HasSpecialist(SpecialistTypes)
+14301	CvPlayer_HasTech	CvPlayer::HasTech(TechTypes) const
+14302	CvPlayer_HasAnyDomesticTradeRoute	CvPlayer::HasAnyDomesticTradeRoute() const
+14303	CvPlayer_HasAnyInternationalTradeRoute	CvPlayer::HasAnyInternationalTradeRoute() const
+14304	CvPlayer_HasAnyTradeRoute	CvPlayer::HasAnyTradeRoute() const
+14305	CvPlayer_HasAnyTradeRouteWith	CvPlayer::HasAnyTradeRouteWith(PlayerTypes) const
+14306	CvPlayer_HasUnit	CvPlayer::HasUnit(UnitTypes)
+14307	CvPlayer_HasUnitClass	CvPlayer::HasUnitClass(UnitClassTypes)
+14308	CvPlayer_HasTrait	CvPlayer::HasTrait(TraitTypes) const
+14309	CvPlayer_HasAnyHolyCity	CvPlayer::HasAnyHolyCity()
+14310	CvPlayer_HasHolyCity	CvPlayer::HasHolyCity(ReligionTypes)
+14311	CvPlayer_HasCapturedHolyCity	CvPlayer::HasCapturedHolyCity(ReligionTypes)
+14312	CvPlayer_HasEmbassyWith	CvPlayer::HasEmbassyWith(PlayerTypes) const
+14313	CvPlayer_DoForceDefPact	CvPlayer::DoForceDefPact(PlayerTypes)
+14314	CvPlayer_CountAllFeature	CvPlayer::CountAllFeature(FeatureTypes)
+14315	CvPlayer_CountAllWorkedFeature	CvPlayer::CountAllWorkedFeature(FeatureTypes)
+14316	CvPlayer_CountAllImprovement	CvPlayer::CountAllImprovement(ImprovementTypes)
+14317	CvPlayer_CountAllWorkedImprovement	CvPlayer::CountAllWorkedImprovement(ImprovementTypes)
+14318	CvPlayer_CountAllPlotType	CvPlayer::CountAllPlotType(PlotTypes)
+14319	CvPlayer_CountAllWorkedPlotType	CvPlayer::CountAllWorkedPlotType(PlotTypes)
+14320	CvPlayer_CountAllResource	CvPlayer::CountAllResource(ResourceTypes)
+14321	CvPlayer_CountAllWorkedResource	CvPlayer::CountAllWorkedResource(ResourceTypes)
+14322	CvPlayer_CountAllTerrain	CvPlayer::CountAllTerrain(TerrainTypes)
+14323	CvPlayer_CountAllWorkedTerrain	CvPlayer::CountAllWorkedTerrain(TerrainTypes)
+14324	CvPlayerAI_CanFoundOrEnhanceReligion	CvPlayerAI::CanFoundOrEnhanceReligion()
+14325	CvPlot_isAdjacentToIce	CvPlot::isAdjacentToIce() const
+14326	CvPlot_changeSeeFromSight_with_TeamTypes_DirectionTypes_int_bool_InvisibleTypes_CvUnit	CvPlot::changeSeeFromSight(TeamTypes, DirectionTypes, int, bool, InvisibleTypes, CvUnit *)
+14327	CvPlot_changeAdjacentSight_with_TeamTypes_int_bool_InvisibleTypes_DirectionTypes_CvUnit	CvPlot::changeAdjacentSight(TeamTypes, int, bool, InvisibleTypes, DirectionTypes, CvUnit *)
+14328	CvPlot_canSeePlot_with_const_CvPlot_TeamTypes_int_DirectionTypes_DomainTypes_const	CvPlot::canSeePlot(const CvPlot *, TeamTypes, int, DirectionTypes, DomainTypes) const
+14329	CvPlot_canHaveResource_with_ResourceTypes_bool_bool_const	CvPlot::canHaveResource(ResourceTypes, bool, bool) const
+14330	CvPlot_isPassableImprovement	CvPlot::isPassableImprovement() const
+14331	CvPlot_isFriendlyCityOrPassableImprovement	CvPlot::isFriendlyCityOrPassableImprovement(const CvUnit &, bool) const
+14332	CvPlot_isFriendlyCityOrPassableImprovement_with_PlayerTypes_bool_const_CvUnit_const	CvPlot::isFriendlyCityOrPassableImprovement(PlayerTypes, bool, const CvUnit *) const
+14333	CvPlot_IsActualEnemyUnit_with_PlayerTypes_bool_bool_const	CvPlot::IsActualEnemyUnit(PlayerTypes, bool, bool) const
+14334	CvPlot_IsActualAlliedUnit	CvPlot::IsActualAlliedUnit(PlayerTypes, bool) const
+14335	CvPlot_ComputeYieldFromAdjacentImprovement	CvPlot::ComputeYieldFromAdjacentImprovement(CvImprovementEntry &, ImprovementTypes, YieldTypes) const
+14336	CvPlot_getAdditionalUnitsFromImprovement	CvPlot::getAdditionalUnitsFromImprovement() const
+14337	CvPlot_calculateAdditionalUnitsFromImprovement	CvPlot::calculateAdditionalUnitsFromImprovement()
+14338	CvPlot_isBlockaded	CvPlot::isBlockaded(PlayerTypes)
+14339	CvPlot_getTurnDamage	CvPlot::getTurnDamage(bool, bool, bool, bool) const
+14340	CvPlot_removeMinorResources	CvPlot::removeMinorResources(bool)
+14341	CvPlot_SetImprovementPillaged_with_bool_bool	CvPlot::SetImprovementPillaged(bool, bool)
+14342	CvPlot_SetRoutePillaged_with_bool_bool	CvPlot::SetRoutePillaged(bool, bool)
+14343	CvPlot_changeVisibilityCount_with_TeamTypes_int_InvisibleTypes_bool_bool_CvUnit	CvPlot::changeVisibilityCount(TeamTypes, int, InvisibleTypes, bool, bool, CvUnit *)
+14344	CvPlot_setRevealed_with_TeamTypes_bool_CvUnit_bool_TeamTypes	CvPlot::setRevealed(TeamTypes, bool, CvUnit *, bool, TeamTypes)
+14345	CvPlot_showPopupText	CvPlot::showPopupText(PlayerTypes, const char *)
+14346	CvPlot_SetArchaeologicalRecord	CvPlot::SetArchaeologicalRecord(GreatWorkArtifactClass, PlayerTypes, PlayerTypes)
+14347	CvPlot_SetArchaeologicalRecord_with_GreatWorkArtifactClass_EraTypes_PlayerTypes_PlayerTypes	CvPlot::SetArchaeologicalRecord(GreatWorkArtifactClass, EraTypes, PlayerTypes, PlayerTypes)
+14348	CvPlot_IsCivilization	CvPlot::IsCivilization(CivilizationTypes) const
+14349	CvPlot_HasFeature	CvPlot::HasFeature(FeatureTypes) const
+14350	CvPlot_IsFeatureLake	CvPlot::IsFeatureLake() const
+14351	CvPlot_IsFeatureRiver	CvPlot::IsFeatureRiver() const
+14352	CvPlot_HasAnyNaturalWonder	CvPlot::HasAnyNaturalWonder() const
+14353	CvPlot_HasNaturalWonder	CvPlot::HasNaturalWonder(FeatureTypes) const
+14354	CvPlot_HasImprovement	CvPlot::HasImprovement(ImprovementTypes) const
+14355	CvPlot_HasPlotType	CvPlot::HasPlotType(PlotTypes) const
+14356	CvPlot_HasResource	CvPlot::HasResource(ResourceTypes) const
+14357	CvPlot_HasRoute	CvPlot::HasRoute(RouteTypes) const
+14358	CvPlot_HasTerrain	CvPlot::HasTerrain(TerrainTypes) const
+14359	CvPlot_IsAdjacentToFeature	CvPlot::IsAdjacentToFeature(FeatureTypes) const
+14360	CvPlot_IsWithinDistanceOfFeature	CvPlot::IsWithinDistanceOfFeature(FeatureTypes, int) const
+14361	CvPlot_IsAdjacentToImprovement	CvPlot::IsAdjacentToImprovement(ImprovementTypes) const
+14362	CvPlot_IsWithinDistanceOfImprovement	CvPlot::IsWithinDistanceOfImprovement(ImprovementTypes, int) const
+14363	CvPlot_IsAdjacentToPlotType	CvPlot::IsAdjacentToPlotType(PlotTypes) const
+14364	CvPlot_IsWithinDistanceOfPlotType	CvPlot::IsWithinDistanceOfPlotType(PlotTypes, int) const
+14365	CvPlot_IsAdjacentToResource	CvPlot::IsAdjacentToResource(ResourceTypes) const
+14366	CvPlot_IsWithinDistanceOfResource	CvPlot::IsWithinDistanceOfResource(ResourceTypes, int) const
+14367	CvPlot_IsAdjacentToTerrain	CvPlot::IsAdjacentToTerrain(TerrainTypes) const
+14368	CvPlot_IsWithinDistanceOfTerrain	CvPlot::IsWithinDistanceOfTerrain(TerrainTypes, int) const
+14369	CvPlotInfo_isWater	CvPlotInfo::isWater() const
+14370	CvPlotInfo_isImpassable	CvPlotInfo::isImpassable() const
+14371	CvPlotInfo_getYield	CvPlotInfo::getYield(int) const
+14372	CvPlotInfo_CacheResults	CvPlotInfo::CacheResults(Database::Results &, CvDatabaseUtility &)
+14373	CvPolicyEntry_GetCityWorkingChange	CvPolicyEntry::GetCityWorkingChange() const
+14374	CvPolicyEntry_GetCityAutomatonWorkersChange	CvPolicyEntry::GetCityAutomatonWorkersChange() const
+14375	CvPolicyEntry_GetConversionModifier	CvPolicyEntry::GetConversionModifier() const
+14376	CvPolicyEntry_IsDummy	CvPolicyEntry::IsDummy() const
+14377	CvPolicyEntry_HasFaithPurchaseUnitClasses	CvPolicyEntry::HasFaithPurchaseUnitClasses() const
+14378	CvPolicyEntry_IsFaithPurchaseUnitClass	CvPolicyEntry::IsFaithPurchaseUnitClass(const int, const int) const
+14379	CvPolicyEntry_GetPlotYieldChanges	CvPolicyEntry::GetPlotYieldChanges(int, int) const
+14380	CvPolicyEntry_GetFeatureYieldChanges	CvPolicyEntry::GetFeatureYieldChanges(int, int) const
+14381	CvPolicyEntry_GetCityYieldFromUnimprovedFeature	CvPolicyEntry::GetCityYieldFromUnimprovedFeature(int, int) const
+14382	CvPolicyEntry_GetUnimprovedFeatureYieldChanges	CvPolicyEntry::GetUnimprovedFeatureYieldChanges(int, int) const
+14383	CvPolicyEntry_GetResourceYieldChanges	CvPolicyEntry::GetResourceYieldChanges(int, int) const
+14384	CvPolicyEntry_GetTerrainYieldChanges	CvPolicyEntry::GetTerrainYieldChanges(int, int) const
+14385	CvPolicyEntry_GetTradeRouteYieldChange	CvPolicyEntry::GetTradeRouteYieldChange(int, int) const
+14386	CvPolicyEntry_GetSpecialistYieldChanges	CvPolicyEntry::GetSpecialistYieldChanges(int, int) const
+14387	CvPolicyEntry_GetGreatPersonExpendedYield	CvPolicyEntry::GetGreatPersonExpendedYield(int, int) const
+14388	CvPolicyEntry_GetGoldenAgeGreatPersonRateModifier	CvPolicyEntry::GetGoldenAgeGreatPersonRateModifier(int) const
+14389	CvPolicyEntry_GetYieldFromKills	CvPolicyEntry::GetYieldFromKills(int) const
+14390	CvPolicyEntry_GetYieldFromKillsArray	CvPolicyEntry::GetYieldFromKillsArray() const
+14391	CvPolicyEntry_GetYieldFromBarbarianKills	CvPolicyEntry::GetYieldFromBarbarianKills(int) const
+14392	CvPolicyEntry_GetYieldFromBarbarianKillsArray	CvPolicyEntry::GetYieldFromBarbarianKillsArray() const
+14393	CvPolicyEntry_GetYieldChangeTradeRoute	CvPolicyEntry::GetYieldChangeTradeRoute(int) const
+14394	CvPolicyEntry_GetYieldChangeTradeRouteArray	CvPolicyEntry::GetYieldChangeTradeRouteArray() const
+14395	CvPolicyEntry_GetYieldChangesNaturalWonder	CvPolicyEntry::GetYieldChangesNaturalWonder(int) const
+14396	CvPolicyEntry_GetYieldChangesNaturalWonderArray	CvPolicyEntry::GetYieldChangesNaturalWonderArray() const
+14397	CvPolicyEntry_GetYieldChangeWorldWonder	CvPolicyEntry::GetYieldChangeWorldWonder(int) const
+14398	CvPolicyEntry_GetYieldChangeWorldWonderArray	CvPolicyEntry::GetYieldChangeWorldWonderArray() const
+14399	CvPlayerPolicies_IsFreePolicy	CvPlayerPolicies::IsFreePolicy(PolicyTypes) const
+14400	CvPlayerPolicies_SetPolicy_with_PolicyTypes_bool_bool	CvPlayerPolicies::SetPolicy(PolicyTypes, bool, bool)
+14401	CvPlayerPolicies_GetNumPoliciesOwned_with_bool_bool_const	CvPlayerPolicies::GetNumPoliciesOwned(bool, bool) const
+14402	CvPlayerPolicies_IsEraPrereqBranch	CvPlayerPolicies::IsEraPrereqBranch(PolicyBranchTypes)
+14403	CvPlayerPolicies_CanAdoptIdeology	CvPlayerPolicies::CanAdoptIdeology(PolicyBranchTypes) const
+14404	CvPlayerPolicies_HasAdoptedIdeology	CvPlayerPolicies::HasAdoptedIdeology(PolicyBranchTypes) const
+14405	CvPreGame_isReallyNetworkMultiPlayer	CvPreGame::isReallyNetworkMultiPlayer()
+14406	CvPreGame_pushGameType	CvPreGame::pushGameType(GameTypes)
+14407	CvPreGame_popGameType	CvPreGame::popGameType()
+14408	CvPromotionEntry_GetReconChange	CvPromotionEntry::GetReconChange() const
+14409	CvPromotionEntry_GetAuraRangeChange	CvPromotionEntry::GetAuraRangeChange() const
+14410	CvPromotionEntry_GetAuraEffectChange	CvPromotionEntry::GetAuraEffectChange() const
+14411	CvPromotionEntry_IsNoSupply	CvPromotionEntry::IsNoSupply() const
+14412	CvPromotionEntry_GetMaxHitPointsChange	CvPromotionEntry::GetMaxHitPointsChange() const
+14413	CvPromotionEntry_GetMaxHitPointsModifier	CvPromotionEntry::GetMaxHitPointsModifier() const
+14414	CvPromotionEntry_IsIgnoreTerrainDamage	CvPromotionEntry::IsIgnoreTerrainDamage() const
+14415	CvPromotionEntry_IsIgnoreFeatureDamage	CvPromotionEntry::IsIgnoreFeatureDamage() const
+14416	CvPromotionEntry_IsExtraTerrainDamage	CvPromotionEntry::IsExtraTerrainDamage() const
+14417	CvPromotionEntry_IsExtraFeatureDamage	CvPromotionEntry::IsExtraFeatureDamage() const
+14418	CvPromotionEntry_GetNearbyImprovementCombatBonus	CvPromotionEntry::GetNearbyImprovementCombatBonus() const
+14419	CvPromotionEntry_GetNearbyImprovementBonusRange	CvPromotionEntry::GetNearbyImprovementBonusRange() const
+14420	CvPromotionEntry_GetCombatBonusImprovement	CvPromotionEntry::GetCombatBonusImprovement() const
+14421	CvPromotionEntry_CanCrossMountains	CvPromotionEntry::CanCrossMountains() const
+14422	CvPromotionEntry_CanCrossOceans	CvPromotionEntry::CanCrossOceans() const
+14423	CvPromotionEntry_CanCrossIce	CvPromotionEntry::CanCrossIce() const
+14424	CvPromotionEntry_IsGGFromBarbarians	CvPromotionEntry::IsGGFromBarbarians() const
+14425	CvPromotionEntry_IsEmbarkedDeepWater	CvPromotionEntry::IsEmbarkedDeepWater() const
+14426	CvPromotionEntry_GetYieldFromKills	CvPromotionEntry::GetYieldFromKills(int) const
+14427	CvPromotionEntry_GetYieldFromBarbarianKills	CvPromotionEntry::GetYieldFromBarbarianKills(int) const
+14428	CvPromotionEntry_GetTerrainHalfMove	CvPromotionEntry::GetTerrainHalfMove(int) const
+14429	CvPromotionEntry_GetFeatureHalfMove	CvPromotionEntry::GetFeatureHalfMove(int) const
+14430	CvPromotionEntry_IsUnitNaming	CvPromotionEntry::IsUnitNaming(int) const
+14431	CvPromotionEntry_GetUnitName	CvPromotionEntry::GetUnitName(UnitTypes, CvString &) const
+14432	CvQuestInfo_isInternal	CvQuestInfo::isInternal() const
+14433	CvQuestInfo_isEnabled	CvQuestInfo::isEnabled() const
+14434	CvQuestInfo_isGlobal	CvQuestInfo::isGlobal() const
+14435	CvQuestInfo_isRevokeOnBully	CvQuestInfo::isRevokeOnBully() const
+14436	CvQuestInfo_isContest	CvQuestInfo::isContest() const
+14437	CvQuestInfo_getMinPlayers	CvQuestInfo::getMinPlayers() const
+14438	CvQuestInfo_getDuration	CvQuestInfo::getDuration() const
+14439	CvQuestInfo_getFriendship	CvQuestInfo::getFriendship() const
+14440	CvQuestInfo_getBiasFriendly	CvQuestInfo::getBiasFriendly() const
+14441	CvQuestInfo_getBiasNeutral	CvQuestInfo::getBiasNeutral() const
+14442	CvQuestInfo_getBiasHostile	CvQuestInfo::getBiasHostile() const
+14443	CvQuestInfo_getBiasIrrational	CvQuestInfo::getBiasIrrational() const
+14444	CvQuestInfo_getBiasMaritime	CvQuestInfo::getBiasMaritime() const
+14445	CvQuestInfo_getBiasMercantile	CvQuestInfo::getBiasMercantile() const
+14446	CvQuestInfo_getBiasCultured	CvQuestInfo::getBiasCultured() const
+14447	CvQuestInfo_getBiasMilitaristic	CvQuestInfo::getBiasMilitaristic() const
+14448	CvQuestInfo_getBiasReligious	CvQuestInfo::getBiasReligious() const
+14449	CvQuestInfo_getStartSummary	CvQuestInfo::getStartSummary() const
+14450	CvQuestInfo_getStartMessage	CvQuestInfo::getStartMessage() const
+14451	CvQuestInfo_getFinishSummary	CvQuestInfo::getFinishSummary() const
+14452	CvQuestInfo_getFinishMessage	CvQuestInfo::getFinishMessage() const
+14453	CvQuestInfo_getCancelSummary	CvQuestInfo::getCancelSummary() const
+14454	CvQuestInfo_getCancelMessage	CvQuestInfo::getCancelMessage() const
+14455	CvQuestInfo_CacheResults	CvQuestInfo::CacheResults(Database::Results &, CvDatabaseUtility &)
+14456	CvReligionEntry_IsLocalReligion	CvReligionEntry::IsLocalReligion() const
+14457	CvGameReligions_EnhanceReligion_with_PlayerTypes_ReligionTypes_BeliefTypes_BeliefTypes_bool	CvGameReligions::EnhanceReligion(PlayerTypes, ReligionTypes, BeliefTypes, BeliefTypes, bool)
+14458	CvGameReligions_IsInSomeReligion_with_BeliefTypes_PlayerTypes_const	CvGameReligions::IsInSomeReligion(BeliefTypes, PlayerTypes) const
+14459	CvGameReligions_GetAvailablePantheonBeliefs_with_PlayerTypes	CvGameReligions::GetAvailablePantheonBeliefs(PlayerTypes)
+14460	CvGameReligions_IsPantheonBeliefAvailable_with_BeliefTypes_PlayerTypes	CvGameReligions::IsPantheonBeliefAvailable(BeliefTypes, PlayerTypes)
+14461	CvGameReligions_HasCreatedReligion_with_PlayerTypes_bool_const	CvGameReligions::HasCreatedReligion(PlayerTypes, bool) const
+14462	CvGameReligions_GetNumReligionsFounded_with_bool_const	CvGameReligions::GetNumReligionsFounded(bool) const
+14463	CvGameReligions_GetNumReligionsStillToFound_with_bool_const	CvGameReligions::GetNumReligionsStillToFound(bool) const
+14464	CvGameReligions_GetAvailableFounderBeliefs_with_PlayerTypes_ReligionTypes	CvGameReligions::GetAvailableFounderBeliefs(PlayerTypes, ReligionTypes)
+14465	CvGameReligions_GetAvailableFollowerBeliefs_with_PlayerTypes_ReligionTypes	CvGameReligions::GetAvailableFollowerBeliefs(PlayerTypes, ReligionTypes)
+14466	CvGameReligions_GetAvailableEnhancerBeliefs_with_PlayerTypes_ReligionTypes	CvGameReligions::GetAvailableEnhancerBeliefs(PlayerTypes, ReligionTypes)
+14467	CvGameReligions_GetAvailableBonusBeliefs_with_PlayerTypes_ReligionTypes	CvGameReligions::GetAvailableBonusBeliefs(PlayerTypes, ReligionTypes)
+14468	CvGameReligions_GetAvailableReformationBeliefs_with_PlayerTypes_ReligionTypes	CvGameReligions::GetAvailableReformationBeliefs(PlayerTypes, ReligionTypes)
+14469	CvPlayerReligions_GetNumProphetsSpawned_with_bool_const	CvPlayerReligions::GetNumProphetsSpawned(bool) const
+14470	CvPlayerReligions_ChangeNumProphetsSpawned_with_int_bool	CvPlayerReligions::ChangeNumProphetsSpawned(int, bool)
+14471	CvPlayerReligions_GetCostNextProphet_with_bool_bool_bool_const	CvPlayerReligions::GetCostNextProphet(bool, bool, bool) const
+14472	CvPlayerReligions_HasCreatedReligion_with_bool_const	CvPlayerReligions::HasCreatedReligion(bool) const
+14473	CvPlayerReligions_GetReligionCreatedByPlayer_with_bool_const	CvPlayerReligions::GetReligionCreatedByPlayer(bool) const
+14474	CvPlayerReligions_CanAffordFaithPurchase_with_int_const	CvPlayerReligions::CanAffordFaithPurchase(int) const
+14475	CvPlayerReligions_CanAffordNextPurchase	CvPlayerReligions::CanAffordNextPurchase()
+14476	CvPlayerReligions_SetFaithAtLastNotify	CvPlayerReligions::SetFaithAtLastNotify(int)
+14477	CvReligionAI_ChoosePantheonBelief_with_PlayerTypes	CvReligionAI::ChoosePantheonBelief(PlayerTypes)
+14478	CvReligionAI_ChooseFounderBelief_with_PlayerTypes_ReligionTypes	CvReligionAI::ChooseFounderBelief(PlayerTypes, ReligionTypes)
+14479	CvReligionAI_ChooseFollowerBelief_with_PlayerTypes_ReligionTypes	CvReligionAI::ChooseFollowerBelief(PlayerTypes, ReligionTypes)
+14480	CvReligionAI_ChooseEnhancerBelief_with_PlayerTypes_ReligionTypes	CvReligionAI::ChooseEnhancerBelief(PlayerTypes, ReligionTypes)
+14481	CvReligionAI_ChooseBonusBelief_with_PlayerTypes_ReligionTypes_int_int_int	CvReligionAI::ChooseBonusBelief(PlayerTypes, ReligionTypes, int, int, int)
+14482	CvReligionAI_ChooseReformationBelief_with_PlayerTypes_ReligionTypes	CvReligionAI::ChooseReformationBelief(PlayerTypes, ReligionTypes)
+14483	CvTacticalAI_SamePlotFound	CvTacticalAI::SamePlotFound(vector<CvPlot *>, CvPlot *)
+14484	CvTacticalAI_GetBestPlot	CvTacticalAI::GetBestPlot(CvPlot *&, vector<CvPlot *>)
+14485	CvTacticalAI_GetBestRepositionPlot	CvTacticalAI::GetBestRepositionPlot(UnitHandle, CvPlot *)
+14486	CvTacticalAI_FindAirUnitsToAirSweep	CvTacticalAI::FindAirUnitsToAirSweep(CvPlot *)
+14487	CvTeam_canDeclareWar_with_TeamTypes_PlayerTypes_const	CvTeam::canDeclareWar(TeamTypes, PlayerTypes) const
+14488	CvTeam_declareWar_with_TeamTypes_bool_PlayerTypes	CvTeam::declareWar(TeamTypes, bool, PlayerTypes)
+14489	CvTeam_DoDeclareWar_with_PlayerTypes_bool_TeamTypes_bool_bool	CvTeam::DoDeclareWar(PlayerTypes, bool, TeamTypes, bool, bool)
+14490	CvTeam_makePeace_with_TeamTypes_bool_bool_PlayerTypes	CvTeam::makePeace(TeamTypes, bool, bool, PlayerTypes)
+14491	CvTeam_DoMakePeace_with_PlayerTypes_bool_TeamTypes_bool_bool	CvTeam::DoMakePeace(PlayerTypes, bool, TeamTypes, bool, bool)
+14492	CvTeam_isMajorCiv	CvTeam::isMajorCiv() const
+14493	CvTeam_GetCityWorkingChange	CvTeam::GetCityWorkingChange() const
+14494	CvTeam_isCityWorkingChange	CvTeam::isCityWorkingChange() const
+14495	CvTeam_changeCityWorkingChange	CvTeam::changeCityWorkingChange(int)
+14496	CvTeam_GetCityAutomatonWorkersChange	CvTeam::GetCityAutomatonWorkersChange() const
+14497	CvTeam_isCityAutomatonWorkersChange	CvTeam::isCityAutomatonWorkersChange() const
+14498	CvTeam_changeCityAutomatonWorkersChange	CvTeam::changeCityAutomatonWorkersChange(int)
+14499	CvTeam_isAggressor	CvTeam::isAggressor(TeamTypes) const
+14500	CvTeam_isPacifier	CvTeam::isPacifier(TeamTypes) const
+14501	CvTeam_setAtWar_with_TeamTypes_bool_bool	CvTeam::setAtWar(TeamTypes, bool, bool)
+14502	CvTeam_HasSpyAtTeam	CvTeam::HasSpyAtTeam(TeamTypes) const
+14503	CvTeam_getFeatureYieldChange	CvTeam::getFeatureYieldChange(FeatureTypes, YieldTypes) const
+14504	CvTeam_changeFeatureYieldChange	CvTeam::changeFeatureYieldChange(FeatureTypes, YieldTypes, int)
+14505	CvTeam_getTerrainYieldChange	CvTeam::getTerrainYieldChange(TerrainTypes, YieldTypes) const
+14506	CvTeam_changeTerrainYieldChange	CvTeam::changeTerrainYieldChange(TerrainTypes, YieldTypes, int)
+14507	CvTechAI_ReweightByCost_with_CvPlayer_bool	CvTechAI::ReweightByCost(CvPlayer *, bool)
+14508	CvTechEntry_GetCityWorkingChange	CvTechEntry::GetCityWorkingChange() const
+14509	CvTechEntry_GetCityAutomatonWorkersChange	CvTechEntry::GetCityAutomatonWorkersChange() const
+14510	CvTeamTechs_SetResearchProgressTimes100_with_TechTypes_int_PlayerTypes_int_int	CvTeamTechs::SetResearchProgressTimes100(TechTypes, int, PlayerTypes, int, int)
+14511	CvTeamTechs_ChangeResearchProgressTimes100_with_TechTypes_int_PlayerTypes_int_int	CvTeamTechs::ChangeResearchProgressTimes100(TechTypes, int, PlayerTypes, int, int)
+14512	CvGameTrade_ClearAllCityTradeRoutes_with_CvPlot_bool	CvGameTrade::ClearAllCityTradeRoutes(CvPlot *, bool)
+14513	CvGameTrade_IsRecalledUnit	CvGameTrade::IsRecalledUnit(int)
+14514	CvGameTrade_RecallUnit	CvGameTrade::RecallUnit(int, bool)
+14515	CvGameTrade_EndTradeRoute	CvGameTrade::EndTradeRoute(int)
+14516	CvPlayerTrade_PlunderTradeRoute_with_int_CvUnit	CvPlayerTrade::PlunderTradeRoute(int, CvUnit *)
+14517	CvPlayerTrade_GetTradeUnit_with_DomainTypes_CvPlayer	CvPlayerTrade::GetTradeUnit(DomainTypes, CvPlayer *)
+14518	CvTradeAI_ScoreWonderTR	CvTradeAI::ScoreWonderTR(const TradeConnection &, std::vector<CvCity *>)
+14519	CvTraitEntry_GetCityWorkingChange	CvTraitEntry::GetCityWorkingChange() const
+14520	CvTraitEntry_GetCityAutomatonWorkersChange	CvTraitEntry::GetCityAutomatonWorkersChange() const
+14521	CvTraitEntry_GetExtraSupply	CvTraitEntry::GetExtraSupply() const
+14522	CvTraitEntry_GetExtraSupplyPerCity	CvTraitEntry::GetExtraSupplyPerCity() const
+14523	CvTraitEntry_GetExtraSupplyPerPopulation	CvTraitEntry::GetExtraSupplyPerPopulation() const
+14524	CvTraitEntry_GetSeaTradeRouteRangeBonus	CvTraitEntry::GetSeaTradeRouteRangeBonus() const
+14525	CvTraitEntry_IsAnyBelief	CvTraitEntry::IsAnyBelief() const
+14526	CvTraitEntry_IsCrossesIce	CvTraitEntry::IsCrossesIce() const
+14527	CvTraitEntry_IsGGFromBarbarians	CvTraitEntry::IsGGFromBarbarians() const
+14528	CvTraitEntry_GetPlotYieldChanges	CvTraitEntry::GetPlotYieldChanges(PlotTypes, YieldTypes) const
+14529	CvTraitEntry_GetBuildingClassYieldChanges	CvTraitEntry::GetBuildingClassYieldChanges(BuildingClassTypes, YieldTypes) const
+14530	CvTraitEntry_GetCapitalYieldChanges	CvTraitEntry::GetCapitalYieldChanges(int) const
+14531	CvTraitEntry_GetCityYieldChanges	CvTraitEntry::GetCityYieldChanges(int) const
+14532	CvTraitEntry_GetCoastalCityYieldChanges	CvTraitEntry::GetCoastalCityYieldChanges(int) const
+14533	CvTraitEntry_GetGreatWorkYieldChanges	CvTraitEntry::GetGreatWorkYieldChanges(int) const
+14534	CvTraitEntry_GetFeatureYieldChanges	CvTraitEntry::GetFeatureYieldChanges(FeatureTypes, YieldTypes) const
+14535	CvTraitEntry_GetResourceYieldChanges	CvTraitEntry::GetResourceYieldChanges(ResourceTypes, YieldTypes) const
+14536	CvTraitEntry_GetTerrainYieldChanges	CvTraitEntry::GetTerrainYieldChanges(TerrainTypes, YieldTypes) const
+14537	CvTraitEntry_GetYieldFromKills	CvTraitEntry::GetYieldFromKills(YieldTypes) const
+14538	CvTraitEntry_GetYieldFromBarbarianKills	CvTraitEntry::GetYieldFromBarbarianKills(YieldTypes) const
+14539	CvTraitEntry_GetYieldChangeTradeRoute	CvTraitEntry::GetYieldChangeTradeRoute(int) const
+14540	CvTraitEntry_GetYieldChangeWorldWonder	CvTraitEntry::GetYieldChangeWorldWonder(int) const
+14541	CvTraitEntry_GetTradeRouteYieldChange	CvTraitEntry::GetTradeRouteYieldChange(DomainTypes, YieldTypes) const
+14542	CvTraitEntry_GetGreatPersonExpendedYield	CvTraitEntry::GetGreatPersonExpendedYield(GreatPersonTypes, YieldTypes) const
+14543	CvTraitEntry_GetGoldenAgeGreatPersonRateModifier	CvTraitEntry::GetGoldenAgeGreatPersonRateModifier(GreatPersonTypes) const
+14544	CvTraitEntry_GetCityYieldFromUnimprovedFeature	CvTraitEntry::GetCityYieldFromUnimprovedFeature(FeatureTypes, YieldTypes) const
+14545	CvTraitEntry_GetObsoleteBelief	CvTraitEntry::GetObsoleteBelief() const
+14546	CvTraitEntry_GetPrereqBelief	CvTraitEntry::GetPrereqBelief() const
+14547	CvTraitEntry_GetObsoletePolicy	CvTraitEntry::GetObsoletePolicy() const
+14548	CvTraitEntry_GetPrereqPolicy	CvTraitEntry::GetPrereqPolicy() const
+14549	CvTraitEntry_IsObsoleteByBelief	CvTraitEntry::IsObsoleteByBelief(PlayerTypes)
+14550	CvTraitEntry_IsEnabledByBelief	CvTraitEntry::IsEnabledByBelief(PlayerTypes)
+14551	CvTraitEntry_IsObsoleteByPolicy	CvTraitEntry::IsObsoleteByPolicy(PlayerTypes)
+14552	CvTraitEntry_IsEnabledByPolicy	CvTraitEntry::IsEnabledByPolicy(PlayerTypes)
+14553	CvPlayerTraits_GetPlotYieldChange	CvPlayerTraits::GetPlotYieldChange(PlotTypes, YieldTypes) const
+14554	CvPlayerTraits_GetBuildingClassYieldChange	CvPlayerTraits::GetBuildingClassYieldChange(BuildingClassTypes, YieldTypes) const
+14555	CvPlayerTraits_GetFeatureYieldChange	CvPlayerTraits::GetFeatureYieldChange(FeatureTypes, YieldTypes) const
+14556	CvPlayerTraits_GetResourceYieldChange	CvPlayerTraits::GetResourceYieldChange(ResourceTypes, YieldTypes) const
+14557	CvPlayerTraits_GetTerrainYieldChange	CvPlayerTraits::GetTerrainYieldChange(TerrainTypes, YieldTypes) const
+14558	CvPlayerTraits_GetYieldFromKills	CvPlayerTraits::GetYieldFromKills(YieldTypes) const
+14559	CvPlayerTraits_GetYieldFromBarbarianKills	CvPlayerTraits::GetYieldFromBarbarianKills(YieldTypes) const
+14560	CvPlayerTraits_GetTradeRouteYieldChange	CvPlayerTraits::GetTradeRouteYieldChange(DomainTypes, YieldTypes) const
+14561	CvPlayerTraits_GetGreatPersonExpendedYield	CvPlayerTraits::GetGreatPersonExpendedYield(GreatPersonTypes, YieldTypes) const
+14562	CvPlayerTraits_GetGoldenAgeGreatPersonRateModifier	CvPlayerTraits::GetGoldenAgeGreatPersonRateModifier(GreatPersonTypes) const
+14563	CvPlayerTraits_GetCityYieldFromUnimprovedFeature	CvPlayerTraits::GetCityYieldFromUnimprovedFeature(FeatureTypes, YieldTypes) const
+14564	CvPlayerTraits_CheckForBarbarianConversion_with_CvUnit_CvPlot	CvPlayerTraits::CheckForBarbarianConversion(CvUnit *, CvPlot *)
+14565	CvPlayerTraits_IsAbleToCrossIce	CvPlayerTraits::IsAbleToCrossIce() const
+14566	CvPlayerTraits_ConvertBarbarianCamp_with_CvUnit_CvPlot	CvPlayerTraits::ConvertBarbarianCamp(CvUnit *, CvPlot *)
+14567	CvPlayerTraits_ConvertBarbarianNavalUnit_with_CvUnit_UnitHandle	CvPlayerTraits::ConvertBarbarianNavalUnit(CvUnit *, UnitHandle)
+14568	CvTreasury_HasCityConnectionRouteBetweenCities_with_CvCity_CvCity_const	CvTreasury::HasCityConnectionRouteBetweenCities(CvCity *, CvCity *) const
+14569	CvUnit_IsEmbarkDeepWater	CvUnit::IsEmbarkDeepWater() const
+14570	CvUnit_ChangeEmbarkDeepWaterCount	CvUnit::ChangeEmbarkDeepWaterCount(int)
+14571	CvUnit_GetEmbarkDeepWaterCount	CvUnit::GetEmbarkDeepWaterCount() const
+14572	CvUnit_getAirliftToPlot	CvUnit::getAirliftToPlot(const CvPlot *, bool) const
+14573	CvUnit_getAirliftFromPlot	CvUnit::getAirliftFromPlot(const CvPlot *) const
+14574	CvUnit_GetConversionStrength_with_const_CvCity_const	CvUnit::GetConversionStrength(const CvCity *) const
+14575	CvUnit_CanUpgradeTo	CvUnit::CanUpgradeTo(UnitTypes, bool) const
+14576	CvUnit_CanUpgradeInTerritory	CvUnit::CanUpgradeInTerritory(bool) const
+14577	CvUnit_DoUpgrade_with_bool	CvUnit::DoUpgrade(bool)
+14578	CvUnit_DoUpgradeTo	CvUnit::DoUpgradeTo(UnitTypes, bool)
+14579	CvUnit_getUnitPromotionType	CvUnit::getUnitPromotionType() const
+14580	CvUnit_reconRange	CvUnit::reconRange() const
+14581	CvUnit_SetBaseRangedCombatStrength	CvUnit::SetBaseRangedCombatStrength(int)
+14582	CvUnit_EnemyScoreAtRange	CvUnit::EnemyScoreAtRange(const CvPlot *, bool) const
+14583	CvUnit_GetParadropInterceptionDamage	CvUnit::GetParadropInterceptionDamage(const CvUnit *, bool) const
+14584	CvUnit_ignoreTerrainDamage	CvUnit::ignoreTerrainDamage() const
+14585	CvUnit_getIgnoreTerrainDamageCount	CvUnit::getIgnoreTerrainDamageCount() const
+14586	CvUnit_changeIgnoreTerrainDamageCount	CvUnit::changeIgnoreTerrainDamageCount(int)
+14587	CvUnit_ignoreFeatureDamage	CvUnit::ignoreFeatureDamage() const
+14588	CvUnit_getIgnoreFeatureDamageCount	CvUnit::getIgnoreFeatureDamageCount() const
+14589	CvUnit_changeIgnoreFeatureDamageCount	CvUnit::changeIgnoreFeatureDamageCount(int)
+14590	CvUnit_extraTerrainDamage	CvUnit::extraTerrainDamage() const
+14591	CvUnit_getExtraTerrainDamageCount	CvUnit::getExtraTerrainDamageCount() const
+14592	CvUnit_changeExtraTerrainDamageCount	CvUnit::changeExtraTerrainDamageCount(int)
+14593	CvUnit_extraFeatureDamage	CvUnit::extraFeatureDamage() const
+14594	CvUnit_getExtraFeatureDamageCount	CvUnit::getExtraFeatureDamageCount() const
+14595	CvUnit_changeExtraFeatureDamageCount	CvUnit::changeExtraFeatureDamageCount(int)
+14596	CvUnit_GetNearbyImprovementCombatBonus	CvUnit::GetNearbyImprovementCombatBonus() const
+14597	CvUnit_SetNearbyImprovementCombatBonus	CvUnit::SetNearbyImprovementCombatBonus(int)
+14598	CvUnit_GetNearbyImprovementBonusRange	CvUnit::GetNearbyImprovementBonusRange() const
+14599	CvUnit_SetNearbyImprovementBonusRange	CvUnit::SetNearbyImprovementBonusRange(int)
+14600	CvUnit_GetCombatBonusImprovement	CvUnit::GetCombatBonusImprovement() const
+14601	CvUnit_SetCombatBonusImprovement	CvUnit::SetCombatBonusImprovement(ImprovementTypes)
+14602	CvUnit_canCrossMountains	CvUnit::canCrossMountains() const
+14603	CvUnit_getCanCrossMountainsCount	CvUnit::getCanCrossMountainsCount() const
+14604	CvUnit_changeCanCrossMountainsCount	CvUnit::changeCanCrossMountainsCount(int)
+14605	CvUnit_canCrossOceans	CvUnit::canCrossOceans() const
+14606	CvUnit_getCanCrossOceansCount	CvUnit::getCanCrossOceansCount() const
+14607	CvUnit_changeCanCrossOceansCount	CvUnit::changeCanCrossOceansCount(int)
+14608	CvUnit_canCrossIce	CvUnit::canCrossIce() const
+14609	CvUnit_getCanCrossIceCount	CvUnit::getCanCrossIceCount() const
+14610	CvUnit_changeCanCrossIceCount	CvUnit::changeCanCrossIceCount(int)
+14611	CvUnit_isGGFromBarbarians	CvUnit::isGGFromBarbarians() const
+14612	CvUnit_getGGFromBarbariansCount	CvUnit::getGGFromBarbariansCount() const
+14613	CvUnit_changeGGFromBarbariansCount	CvUnit::changeGGFromBarbariansCount(int)
+14614	CvUnit_setDamage_with_int_PlayerTypes_int_float_const_CvString	CvUnit::setDamage(int, PlayerTypes, int, float, const CvString *)
+14615	CvUnit_changeDamage_with_int_PlayerTypes_int_float_const_CvString	CvUnit::changeDamage(int, PlayerTypes, int, float, const CvString *)
+14616	CvUnit_getExperienceTimes100	CvUnit::getExperienceTimes100() const
+14617	CvUnit_setExperienceTimes100	CvUnit::setExperienceTimes100(int, int)
+14618	CvUnit_changeExperienceTimes100	CvUnit::changeExperienceTimes100(int, int, bool, bool, bool)
+14619	CvUnit_getExtraReconRange	CvUnit::getExtraReconRange() const
+14620	CvUnit_changeExtraReconRange	CvUnit::changeExtraReconRange(int)
+14621	CvUnit_IsNearGreatGeneral_with_int_const	CvUnit::IsNearGreatGeneral(int &) const
+14622	CvUnit_GetNearbyImprovementModifierFromTraits	CvUnit::GetNearbyImprovementModifierFromTraits() const
+14623	CvUnit_GetNearbyImprovementModifierFromPromotions	CvUnit::GetNearbyImprovementModifierFromPromotions() const
+14624	CvUnit_GetNearbyImprovementModifier_with_ImprovementTypes_int_int_const	CvUnit::GetNearbyImprovementModifier(ImprovementTypes, int, int) const
+14625	CvUnit_GetAuraRangeChange	CvUnit::GetAuraRangeChange() const
+14626	CvUnit_ChangeAuraRangeChange	CvUnit::ChangeAuraRangeChange(int)
+14627	CvUnit_GetAuraEffectChange	CvUnit::GetAuraEffectChange() const
+14628	CvUnit_ChangeAuraEffectChange	CvUnit::ChangeAuraEffectChange(int)
+14629	CvUnit_isNoSupply	CvUnit::isNoSupply() const
+14630	CvUnit_changeNoSupply	CvUnit::changeNoSupply(int)
+14631	CvUnit_getMaxHitPointsBase	CvUnit::getMaxHitPointsBase() const
+14632	CvUnit_setMaxHitPointsBase	CvUnit::setMaxHitPointsBase(int)
+14633	CvUnit_changeMaxHitPointsBase	CvUnit::changeMaxHitPointsBase(int)
+14634	CvUnit_getMaxHitPointsChange	CvUnit::getMaxHitPointsChange() const
+14635	CvUnit_changeMaxHitPointsChange	CvUnit::changeMaxHitPointsChange(int)
+14636	CvUnit_getMaxHitPointsModifier	CvUnit::getMaxHitPointsModifier() const
+14637	CvUnit_changeMaxHitPointsModifier	CvUnit::changeMaxHitPointsModifier(int)
+14638	CvUnit_getUnitName	CvUnit::getUnitName() const
+14639	CvUnit_setUnitName	CvUnit::setUnitName(const CvString)
+14640	CvUnit_getGreatName	CvUnit::getGreatName() const
+14641	CvUnit_setGreatName	CvUnit::setGreatName(CvString)
+14642	CvUnit_HasGreatWork	CvUnit::HasGreatWork() const
+14643	CvUnit_HasUnusedGreatWork	CvUnit::HasUnusedGreatWork() const
+14644	CvUnit_getTerrainHalfMoveCount	CvUnit::getTerrainHalfMoveCount(TerrainTypes) const
+14645	CvUnit_isTerrainHalfMove	CvUnit::isTerrainHalfMove(TerrainTypes) const
+14646	CvUnit_changeTerrainHalfMoveCount	CvUnit::changeTerrainHalfMoveCount(TerrainTypes, int)
+14647	CvUnit_getFeatureHalfMoveCount	CvUnit::getFeatureHalfMoveCount(FeatureTypes) const
+14648	CvUnit_isFeatureHalfMove	CvUnit::isFeatureHalfMove(FeatureTypes) const
+14649	CvUnit_changeFeatureHalfMoveCount	CvUnit::changeFeatureHalfMoveCount(FeatureTypes, int)
+14650	CvUnit_getYieldFromKills	CvUnit::getYieldFromKills(YieldTypes) const
+14651	CvUnit_changeYieldFromKills	CvUnit::changeYieldFromKills(YieldTypes, int)
+14652	CvUnit_getYieldFromBarbarianKills	CvUnit::getYieldFromBarbarianKills(YieldTypes) const
+14653	CvUnit_changeYieldFromBarbarianKills	CvUnit::changeYieldFromBarbarianKills(YieldTypes, int)
+14654	CvUnit_GetRangePlusMoveToshot	CvUnit::GetRangePlusMoveToshot() const
+14655	CvUnit_canEverRangeStrikeAt_with_int_int_const_CvPlot_const	CvUnit::canEverRangeStrikeAt(int, int, const CvPlot *) const
+14656	CvUnit_GetMovablePlotListOpt	CvUnit::GetMovablePlotListOpt(vector<CvPlot *> &, CvPlot *, bool, bool)
+14657	CvUnit_SetActivityType_with_ActivityTypes_bool	CvUnit::SetActivityType(ActivityTypes, bool)
+14658	CvUnit_SentryAlert_with_bool_const	CvUnit::SentryAlert(bool) const
+14659	CvUnit_PlotValid_with_CvPlot_byte_const	CvUnit::PlotValid(CvPlot *, byte) const
+14660	CvUnit_GetPromotionValue	CvUnit::GetPromotionValue(int, int, int, int)
+14661	CvUnit_IsCivilization	CvUnit::IsCivilization(CivilizationTypes) const
+14662	CvUnit_HasPromotion	CvUnit::HasPromotion(PromotionTypes) const
+14663	CvUnit_IsUnit	CvUnit::IsUnit(UnitTypes) const
+14664	CvUnit_IsUnitClass	CvUnit::IsUnitClass(UnitClassTypes) const
+14665	CvUnit_IsOnFeature	CvUnit::IsOnFeature(FeatureTypes) const
+14666	CvUnit_IsAdjacentToFeature	CvUnit::IsAdjacentToFeature(FeatureTypes) const
+14667	CvUnit_IsWithinDistanceOfFeature	CvUnit::IsWithinDistanceOfFeature(FeatureTypes, int) const
+14668	CvUnit_IsOnImprovement	CvUnit::IsOnImprovement(ImprovementTypes) const
+14669	CvUnit_IsAdjacentToImprovement	CvUnit::IsAdjacentToImprovement(ImprovementTypes) const
+14670	CvUnit_IsWithinDistanceOfImprovement	CvUnit::IsWithinDistanceOfImprovement(ImprovementTypes, int) const
+14671	CvUnit_IsOnPlotType	CvUnit::IsOnPlotType(PlotTypes) const
+14672	CvUnit_IsAdjacentToPlotType	CvUnit::IsAdjacentToPlotType(PlotTypes) const
+14673	CvUnit_IsWithinDistanceOfPlotType	CvUnit::IsWithinDistanceOfPlotType(PlotTypes, int) const
+14674	CvUnit_IsOnResource	CvUnit::IsOnResource(ResourceTypes) const
+14675	CvUnit_IsAdjacentToResource	CvUnit::IsAdjacentToResource(ResourceTypes) const
+14676	CvUnit_IsWithinDistanceOfResource	CvUnit::IsWithinDistanceOfResource(ResourceTypes, int) const
+14677	CvUnit_IsOnTerrain	CvUnit::IsOnTerrain(TerrainTypes) const
+14678	CvUnit_IsAdjacentToTerrain	CvUnit::IsAdjacentToTerrain(TerrainTypes) const
+14679	CvUnit_IsWithinDistanceOfTerrain	CvUnit::IsWithinDistanceOfTerrain(TerrainTypes, int) const
+14680	CvUnitEntry_IsNoMinorGifts	CvUnitEntry::IsNoMinorGifts() const
+14681	CvUnitEntry_CanMoveAfterUpgrade	CvUnitEntry::CanMoveAfterUpgrade() const
+14682	CvUnitEntry_CannotEmbark	CvUnitEntry::CannotEmbark() const
+14683	CvUnitEntry_IsCanRepairFleet	CvUnitEntry::IsCanRepairFleet() const
+14684	CvUnitEntry_IsCanChangePort	CvUnitEntry::IsCanChangePort() const
+14685	CvUnitEntry_IsNoSupply	CvUnitEntry::IsNoSupply() const
+14686	CvUnitEntry_GetMaxHitPoints	CvUnitEntry::GetMaxHitPoints() const
+14687	CvUnitEntry_GetUnitPromotionType	CvUnitEntry::GetUnitPromotionType() const
+14688	CvUnitEntry_IsSendCanMoveIntoEvent	CvUnitEntry::IsSendCanMoveIntoEvent() const
+14689	CvUnitEntry_GetYieldFromBarbarianKills	CvUnitEntry::GetYieldFromBarbarianKills(YieldTypes) const
+14690	CvUnitCombat_ParadropIntercept	CvUnitCombat::ParadropIntercept(CvUnit &, CvPlot &)
+14691	CvUnitProductionAI_GetTempWeightRevised	CvUnitProductionAI::GetTempWeightRevised(UnitTypes, int)
+14692	CvLeague_IsPlayerEmbargoed	CvLeague::IsPlayerEmbargoed(PlayerTypes)
+14693	CvWonderProductionAI_IsWonderNotNationalUnique	CvWonderProductionAI::IsWonderNotNationalUnique(const CvBuildingEntry &) const
+14694	CvLuaPlayer_GetPotentialInternationalTradeRouteDestinationsHelper	CvLuaPlayer::GetPotentialInternationalTradeRouteDestinationsHelper(lua_State *, CvPlayerAI *, CvUnit *, CvPlot *)

@@ -18,6 +18,8 @@ import common
 
 ID_PLACEHOLDER = "\0HOOK_ID\0"
 INCLUDE_LINE = re.compile(rb"^[ \t]*#[ \t]*(?:include\b|pragma[ \t]+once\b)[^\n]*", re.MULTILINE)
+QUOTED_INCLUDE = re.compile(rb'^([ \t]*#[ \t]*include[ \t]*")([^"\r\n]+)"', re.MULTILINE)
+DIRECTIVE = re.compile(r"^[ \t]*#[ \t]*(\w+)")
 CALLING_CONVENTIONS = {"__stdcall", "__cdecl", "__thiscall", "__fastcall", "DLLCALL", "WINAPI", "CALLBACK", "APIENTRY"}
 LEADING_SPECIFIERS = {"static", "inline", "__inline", "__forceinline", "extern", "virtual", "explicit"}
 OPERATOR_NAMES = {
@@ -165,7 +167,30 @@ def wrapper_signature(fn, data, keep_defaults=False):
                 raise Skip("unnamed parameter with a default value")
             at = p["end"] - start
             sig[at:at] = (" civ_p%d" % i).encode("cp1252")
-    return sig.decode("cp1252").rstrip()
+    return active_version(sig.decode("cp1252")).rstrip()
+
+
+def active_version(sig):
+    """The signature without other versions written around it with #if. The body is always active, so an #if the
+    signature leaves open is the branch it is in, and an unmatched #else, #elif or #endif starts another version."""
+    kept, open_ifs = [], []
+    for line in sig.split("\n"):
+        m = DIRECTIVE.match(line)
+        word = m.group(1) if m else None
+        if word in ("if", "ifdef", "ifndef"):
+            open_ifs.append([len(kept), False])
+        elif word in ("else", "elif", "endif") and not open_ifs:
+            break
+        elif word in ("else", "elif"):
+            open_ifs[-1][1] = True
+        elif word == "endif":
+            open_ifs.pop()
+        kept.append(line)
+    for at, has_other_branch in reversed(open_ifs):
+        if has_other_branch:
+            raise Skip("signature split across #if branches")
+        del kept[at]
+    return "\n".join(kept)
 
 
 def collapse(code):
@@ -509,6 +534,18 @@ def apply_edits(data, edits):
     return bytes(out)
 
 
+def pin_outside_includes(project, path, data):
+    """Point quoted #includes that climb out of the project at the originals, which the mirror does not copy."""
+
+    def pin(m):
+        target = os.path.normpath(os.path.join(os.path.dirname(path), m.group(2).decode("cp1252")))
+        if project.contains(target) or not os.path.isfile(target):
+            return m.group(0)
+        return m.group(1) + target.encode("cp1252") + b'"'
+
+    return QUOTED_INCLUDE.sub(pin, data)
+
+
 def add_line_directive(path, data):
     """Point the rest of the file back at the original, after the last #include or #pragma once.
 
@@ -540,7 +577,8 @@ def write_mirror(project, files, edits, wrappers):
             if not name.lower().endswith((".cpp", ".h", ".inl")):
                 shutil.copyfile(src, dst)
                 continue
-            out = add_line_directive(src, apply_edits(files.get(src) or read(src), edits.get(src, [])))
+            data = apply_edits(files.get(src) or read(src), edits.get(src, []))
+            out = add_line_directive(src, pin_outside_includes(project, src, data))
             if src in wrappers:
                 tail = ["", '#include "CivHostHooks.h"', ""]
                 for fn, code in wrappers[src]:

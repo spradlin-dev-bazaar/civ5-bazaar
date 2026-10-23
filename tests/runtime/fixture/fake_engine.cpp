@@ -52,9 +52,39 @@ bool FakeUnit::operator==(const FakeUnit& other) const
 	return m_name == other.m_name;
 }
 
+#if defined(FAKE_MOD_OPTION)
+int FakeUnit::Heal(int amount) const
+#else
+int FakeUnit::Heal(int amount, bool full) const
+#endif
+{
+	return amount;
+}
+
+int FakeUnit::Range() const
+#if defined(FAKE_MOD_OPTION)
+{
+	return Reach() + 1;
+}
+
+int FakeUnit::Reach() const
+#endif
+{
+	return 3;
+}
+
 int FakeRules::Bonus(int x)
 {
 	return x + 1;
+}
+
+#if !defined(FAKE_MOD_OPTION)
+int FakeRules::Penalty(int x, int y)
+#else
+int FakeRules::Penalty(int x)
+#endif
+{
+	return x - 1;
 }
 
 __declspec(noinline) int Square(int x)

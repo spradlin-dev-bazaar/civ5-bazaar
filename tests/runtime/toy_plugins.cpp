@@ -188,6 +188,16 @@ static void AfterEquals(const FakeUnit*, const FakeUnit&, bool& result)
 	result = !result;
 }
 
+static void AfterHeal(const FakeUnit*, int, int& result)
+{
+	result += 1000;
+}
+
+static void AfterRange(const FakeUnit*, int& result)
+{
+	result += 1000;
+}
+
 static bool BeforeIgnore(FakeUnit*, int)
 {
 	++s_beforeCalls;
@@ -214,7 +224,10 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Register(CivHooks::FakeUnit_Greet::ID, CIV_HOOK_AFTER, (void*)&AfterGreet);
 	Register(CivHooks::FakeUnit_op_eq::ID, CIV_HOOK_AFTER, (void*)&AfterEquals);
 	Register(CivHooks::FakeUnit_Ignore::ID, CIV_HOOK_BEFORE, (void*)&BeforeIgnore);
+	Register(CivHooks::FakeUnit_Heal::ID, CIV_HOOK_AFTER, (void*)&AfterHeal);
+	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
 	Register(CivHooks::FakeRules_Bonus::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
+	Register(CivHooks::FakeRules_Penalty::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
 	Register(CivHooks::fake_engine_cpp_Helper::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
 	Register(CivHooks::Unannounced::ID, CIV_HOOK_AFTER, (void*)&AfterUnannounced);
 	return true;

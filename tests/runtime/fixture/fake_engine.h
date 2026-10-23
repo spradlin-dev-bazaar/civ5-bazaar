@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "..\fixture_options.h"
+
 // A stand-in engine, hooked by the real generator at test time. Each function is a shape the
 // generator must handle.
 class FakeUnit
@@ -19,6 +21,15 @@ public:
 	const int Level() const;
 	std::string Greet(std::string who) const;
 	bool operator==(const FakeUnit& other) const;
+#if defined(FAKE_MOD_OPTION)
+	int Heal(int amount) const;
+#else
+	int Heal(int amount, bool full) const;
+#endif
+	int Range() const;
+#if defined(FAKE_MOD_OPTION)
+	int Reach() const;
+#endif
 
 	int m_notified;
 	std::string m_name;
@@ -29,6 +40,11 @@ extern int g_levelCalls;
 namespace FakeRules
 {
 	int Bonus(int x);
+#if !defined(FAKE_MOD_OPTION)
+	int Penalty(int x, int y);
+#else
+	int Penalty(int x);
+#endif
 }
 
 int Square(int x);
