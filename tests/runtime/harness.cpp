@@ -11,7 +11,12 @@ void TestHooks();
 void TestShapes();
 void TestQuarantine();
 void TestStrings();
+void TestRegistration();
+void TestTurnedAwayAfterRegistering();
+void TestVetoAndReplace();
+void TestExceptions();
 void TestUnloading();
+void TestNoShutdown();
 void TestReload();
 void TestListWhileRunning();
 void TestReplaceSwap();
@@ -52,7 +57,12 @@ namespace
 		{"shapes", &TestShapes},
 		{"quarantine", &TestQuarantine},
 		{"strings", &TestStrings},
+		{"registration", &TestRegistration},
+		{"declined or refused after registering", &TestTurnedAwayAfterRegistering},
+		{"veto and replace", &TestVetoAndReplace},
+		{"exceptions", &TestExceptions},
 		{"unloading", &TestUnloading},
+		{"no shutdown", &TestNoShutdown},
 		{"reload", &TestReload},
 		{"list while running", &TestListWhileRunning},
 		{"replace swap", &TestReplaceSwap},

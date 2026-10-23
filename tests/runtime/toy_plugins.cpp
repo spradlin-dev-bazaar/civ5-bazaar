@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 
+#include <stdexcept>
+
 #define TOY_EXPORT extern "C" __declspec(dllexport)
 
 TOY_EXPORT ToyBeforeCallsFn ToyBeforeCalls;
@@ -66,6 +68,7 @@ TOY_EXPORT void ToyFaultOnShutdown()
 	s_faultOnShutdown = true;
 }
 
+#if !defined(TOY_NO_SHUTDOWN)
 TOY_EXPORT void CivPluginShutdown()
 {
 	s_host->Log(s_host->pluginIndex, "shutting down");
@@ -78,6 +81,14 @@ TOY_EXPORT void CivPluginShutdown()
 		int* volatile nowhere = 0;
 		*nowhere = 1;
 	}
+}
+#endif
+
+static void LogResult(const char* what, int result)
+{
+	char line[128];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "%s %d", what, result);
+	s_host->Log(s_host->pluginIndex, line);
 }
 
 #if defined(TOY_BASIC)
@@ -266,9 +277,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Describe(info, "Toy Conflict", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	Register(CivHooks::FakeUnit_Grow::ID, CIV_HOOK_REPLACE, (void*)&ReplaceGrow);
-	char line[64];
-	_snprintf_s(line, sizeof(line), _TRUNCATE, "replace result %d", Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify));
-	s_host->Log(s_host->pluginIndex, line);
+	LogResult("replace result", Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify));
 	return true;
 }
 
@@ -478,6 +487,101 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_host = host;
 	Describe(info, "Toy Threads", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	s_ownShutdown = &StopThread;
+	return true;
+}
+
+#elif defined(TOY_DECLINE) || defined(TOY_LATE_FAULT)
+
+static void AfterAdd(const FakeUnit*, int, int, int& result)
+{
+	result += 500000;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+#if defined(TOY_DECLINE)
+	Describe(info, "Toy Decline", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	return false;
+#else
+	Describe(info, "Toy Late Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	volatile int zero = 0;
+	return 10 / zero == 1;
+#endif
+}
+
+#elif defined(TOY_BAD_HOOKS)
+
+static void AfterAdd(const FakeUnit*, int, int, int& result)
+{
+	result += 700000;
+}
+
+static int ReplaceRangeFirst(int (*)(const FakeUnit*), const FakeUnit*)
+{
+	return 500;
+}
+
+static int ReplaceRangeSecond(int (*)(const FakeUnit*), const FakeUnit*)
+{
+	return 600;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Bad Hooks", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	LogResult("unknown id", Register(1000000, CIV_HOOK_AFTER, (void*)&AfterAdd));
+	LogResult("negative id", Register(-1, CIV_HOOK_AFTER, (void*)&AfterAdd));
+	LogResult("kind past the last", Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_REPLACE + 1, (void*)&AfterAdd));
+	LogResult("negative kind", Register(CivHooks::FakeUnit_add::ID, -1, (void*)&AfterAdd));
+	LogResult("no function", Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, 0));
+	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeFirst);
+	LogResult("second replace", Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeSecond));
+	return true;
+}
+
+#elif defined(TOY_THROW)
+
+static void AfterRange(const FakeUnit*, int&)
+{
+	throw std::runtime_error("thrown from a plugin hook");
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Throw", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
+	return true;
+}
+
+#elif defined(TOY_VETO)
+
+static bool BeforeSubtract(const FakeUnit*, int a, int, int& result)
+{
+	if (a != 99)
+		return false;
+	result = 77;
+	return true;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Veto", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_BEFORE, (void*)&BeforeSubtract);
+	return true;
+}
+
+#elif defined(TOY_NO_SHUTDOWN)
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy No Shutdown", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
 	return true;
 }
 

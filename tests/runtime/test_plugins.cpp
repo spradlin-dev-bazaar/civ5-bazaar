@@ -1,9 +1,44 @@
 // Loading plugins, running their hooks, catching their crashes, and sharing memory with them.
 #include "harness.h"
+#include "CivHooks.h"
+#include "CivHostHooks.h"
 #include "fake_engine.h"
 
 #include <malloc.h>
 #include <stdio.h>
+
+#include <exception>
+
+namespace
+{
+	// Mirrors the host's "[plugin name] message" log lines and the toys' LogResult message.
+	std::string ResultLine(const char* pluginName, const char* what, int result)
+	{
+		char line[128];
+		_snprintf_s(line, sizeof(line), _TRUNCATE, "[%s] %s %d", pluginName, what, result);
+		return line;
+	}
+
+	int AfterHookCount(int hookId)
+	{
+		int count = 0;
+		for (const CivHookEntry* e = g_CivHookPoints[hookId].after; e; e = e->next)
+			++count;
+		return count;
+	}
+
+	// The toy registers a hook and is then declined or refused; toy_second loads after it and doubles add's result.
+	void CheckTurnedAwayAfterRegistering(const char* toy, CivPluginStatus status, const char* what)
+	{
+		const char* const names[] = {toy, "toy_second.dll"};
+		StartWith(names);
+		FakeUnit unit;
+		Check(HasStatus(toy, status), what);
+		const std::string name = toy;
+		Check(unit.add(2, 3) == 10, (name + ": its hook never runs, and the next plugin's hooks do").c_str());
+		Check(AfterHookCount(CivHooks::FakeUnit_add::ID) == 1, (name + ": only the next plugin's hook is registered").c_str());
+	}
+}
 
 void TestLoading()
 {
@@ -23,9 +58,7 @@ void TestLoading()
 	Check(IsQuarantined("toy_entry_fault.dll"), "a plugin that faults while loading is quarantined");
 	Check(HasStatus("toy_conflict.dll", CIV_PLUGIN_REPLACE_CONFLICT), "a plugin replacing a function another plugin already replaces is turned off");
 	Check(!IsInMemory("toy_conflict.dll"), "a plugin turned off for replacing a taken function is unloaded");
-	char toldWhy[64];
-	_snprintf_s(toldWhy, sizeof(toldWhy), _TRUNCATE, "[Toy Conflict] replace result %d", CIV_HOOK_REPLACE_TAKEN);
-	Check(LogHas(toldWhy), "the refused plugin is told why");
+	Check(LogHas(ResultLine("Toy Conflict", "replace result", CIV_HOOK_REPLACE_TAKEN).c_str()), "the refused plugin is told why");
 	Check(LogHas("Toy Basic, higher in the list, already replaces"), "the refusal names the plugin that holds the replacement");
 	Check(LogHas("Plugin Toy Conflict: Toy Basic"), "the refusal names the refused plugin, though it is still loading");
 	Check(LogHas("[Toy Basic] starting"), "a plugin logging from its entry point is named in the log");
@@ -105,7 +138,9 @@ void TestQuarantine()
 	Check(result == 110, "the other plugins' hooks still run on the same call");
 	Check(IsQuarantined("toy_fault.dll"), "a faulting plugin is quarantined");
 	Check(ReportRow("toy_fault.dll").problems.find("Faulted") != std::string::npos, "a quarantined plugin's row gives the fault");
-	Check(unit.add(2, 3) == 110 && FaultCount() == before + 2, "a quarantined plugin's hooks never run again");
+	ClearLog();
+	Check(unit.add(2, 3) == 110, "the other plugins' hooks still run once the faulting ones are quarantined");
+	Check(!LogHas("Plugin Toy Fault: Faulted") && !LogHas("Plugin Toy Fault Before: Faulted"), "a quarantined plugin's hooks never run again");
 	const CivPluginReportRow faulted = ReportRow("toy_fault.dll");
 	Check(faulted.failed && faulted.status == "Turned off after a crash", "the Plugins screen lists a quarantined plugin as turned off");
 
@@ -137,4 +172,63 @@ void TestStrings()
 	release(s2, v2);
 	Check(s2.empty() && v2.empty(), "a plugin frees memory the host allocated");
 	Check(_heapchk() == _HEAPOK, "the shared heap is intact afterwards");
+}
+
+void TestRegistration()
+{
+	const char* const names[] = {"toy_bad_hooks.dll"};
+	StartWith(names);
+	Check(LogHas(ResultLine("Toy Bad Hooks", "unknown id", CIV_HOOK_BAD_ID).c_str()), "registering a hook with an unknown id is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "negative id", CIV_HOOK_BAD_ID).c_str()), "registering a hook with a negative id is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "kind past the last", CIV_HOOK_BAD_KIND).c_str()), "registering a hook of a kind past the last is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "negative kind", CIV_HOOK_BAD_KIND).c_str()), "registering a hook of a negative kind is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "no function", CIV_HOOK_BAD_ID).c_str()), "registering a hook with no function is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "second replace", CIV_HOOK_REPLACE_TAKEN).c_str()),
+		"a plugin replacing the same function twice has the second replacement refused");
+	Check(HasStatus("toy_bad_hooks.dll", CIV_PLUGIN_LOADED), "a plugin whose bad registrations were refused still loads");
+	Check(ReportRow("toy_bad_hooks.dll").problems.find("this plugin already replaces it") != std::string::npos,
+		"the Plugins screen shows that a plugin's second replacement of one function was refused");
+	FakeUnit unit;
+	Check(unit.Range() == 500, "a plugin's first replacement of a function still runs after its second was refused");
+	Check(unit.add(2, 3) == 5, "refused registrations add no hooks");
+}
+
+void TestTurnedAwayAfterRegistering()
+{
+	CheckTurnedAwayAfterRegistering("toy_decline.dll", CIV_PLUGIN_ENTRY_DECLINED, "a plugin whose entry function declines is not loaded");
+	Check(ReportRow("toy_decline.dll").problems.find("Declined") != std::string::npos, "the Plugins screen says the plugin declined");
+	Check(LogHas("[Toy Decline] shutting down"), "a plugin that declined is shut down");
+	Check(!IsInMemory("toy_decline.dll"), "a plugin that declined is released");
+	CheckTurnedAwayAfterRegistering("toy_late_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD, "a plugin that faults after registering a hook is refused");
+	CheckTurnedAwayAfterRegistering("toy_newer.dll", CIV_PLUGIN_NEWER_API, "a plugin built for a newer host is refused after registering a hook");
+	CheckTurnedAwayAfterRegistering("toy_major.dll", CIV_PLUGIN_OTHER_MAJOR, "a plugin built for another major version is refused after registering a hook");
+}
+
+void TestVetoAndReplace()
+{
+	const char* const names[] = {"toy_second.dll", "toy_veto.dll"};
+	StartWith(names);
+	FakeUnit unit;
+	Check(unit.Subtract(7, 2) == 50, "a replacement runs when no before-hook vetoes");
+	Check(unit.Subtract(99, 1) == 77, "a veto skips the replacement as well as the original, and the call returns the veto's result");
+}
+
+void TestExceptions()
+{
+	StartWithNone();
+	FakeUnit unit;
+	const int original = unit.Range();
+	// toy_throw loads last, so its after-hook runs first and toy_shapes' runs after it.
+	const char* const names[] = {"toy_shapes.dll", "toy_throw.dll"};
+	StartWith(names);
+	const int before = FaultCount();
+	const int range = unit.Range();
+	Check(FaultCount() == before + 1, "a C++ exception thrown out of a plugin hook is caught and reported");
+	Check(!std::uncaught_exception(), "no C++ exception is left in flight after the host catches one");
+	Check(range == original + 1000, "the hooks after the one that threw still run, on the original's result");
+	Check(IsQuarantined("toy_throw.dll"), "the plugin that threw is quarantined");
+	Check(ReportRow("toy_throw.dll").problems.find("0xE06D7363") != std::string::npos, "the Plugins screen gives the C++ exception's code");
+	ClearLog();
+	Check(unit.Range() == original + 1000, "the other plugin's hook keeps running after the quarantine");
+	Check(!LogHas("Plugin Toy Throw: Faulted"), "the hook that threw never runs again");
 }

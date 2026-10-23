@@ -202,3 +202,14 @@ void TestThreads()
 	CivHostSetPlugins(OutFiles(threads));
 	Check(HasStatus("toy_threads.dll", CIV_PLUGIN_STILL_IN_MEMORY), "a plugin left in memory by its thread is refused when listed again");
 }
+
+void TestNoShutdown()
+{
+	const char* const names[] = {"toy_no_shutdown.dll"};
+	StartWith(names);
+	Check(HasStatus("toy_no_shutdown.dll", CIV_PLUGIN_LOADED), "a plugin without a shutdown function loads");
+	const int faults = FaultCount();
+	Check(CivHostSetPlugins(std::vector<std::string>()) == CIV_PLUGINS_CHANGED, "dropping a plugin that has no shutdown function from the list is accepted");
+	Check(!IsInMemory("toy_no_shutdown.dll"), "a plugin without a shutdown function is unloaded and released");
+	Check(FaultCount() == faults, "unloading a plugin without a shutdown function reports no fault");
+}
