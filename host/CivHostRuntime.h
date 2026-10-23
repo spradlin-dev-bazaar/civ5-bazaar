@@ -37,6 +37,21 @@ struct CivPluginRecord
 	CivHostInfo* host;
 };
 
+#define CIV_REPORT_NOT_LOADED "Not loaded"
+
+struct CivPluginReportRow
+{
+	CivPluginReportRow() : failed(false) {}
+
+	std::string file;
+	std::string name;
+	std::string version;
+	std::string status;
+	std::string problems;
+	// The Plugins screen shows a failed row in red; other rows' problems are warnings.
+	bool failed;
+};
+
 enum CivPluginListResult
 {
 	CIV_PLUGINS_UNCHANGED,
@@ -58,3 +73,5 @@ CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths);
 // False, with nothing changed, when called while a plugin is running.
 bool CivHostUnloadPlugins();
 const std::vector<CivPluginRecord>& CivHostPlugins();
+// What the Plugins screen shows for each plugin record, in load order; problems are separated by "\n".
+std::vector<CivPluginReportRow> CivHostReportRows();

@@ -28,6 +28,8 @@ CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
 
 PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
 VMC_DIR = os.path.join(common.REPO, "mod", "vmc")
+FRONTEND_DIR = os.path.join(common.REPO, "frontend")
+PLUGINS_DESCRIPTION = "See which plugins Bazaar loaded, and any it refused or turned off."
 
 HOST_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
 HOST_NAME = "Bazaar Multi-DLL Mod Loader"
@@ -152,7 +154,18 @@ def write_modinfo(folder, name, mod_id, teaser, files, updates, entries=(), dll=
         f.write("</Mod>\n")
 
 
-def write_dll_mod(name, mod_id, teaser, dll):
+def copy_plugins_screen(folder):
+    """The Plugins screen's files, and the Custom game entry that opens it: the game builds its Mods menu before any
+    mod is on, so the screen cannot hang off that menu."""
+    os.makedirs(os.path.join(folder, "frontend"))
+    files = []
+    for path in sorted(glob.glob(os.path.join(FRONTEND_DIR, "*.lua")) + glob.glob(os.path.join(FRONTEND_DIR, "*.xml"))):
+        files.append(("frontend/" + os.path.basename(path), 1))
+        shutil.copyfile(path, os.path.join(folder, files[-1][0]))
+    return files, ("Custom", "frontend/BazaarPlugins.xml", "Manage Plugins", PLUGINS_DESCRIPTION)
+
+
+def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
     """A mod holding the DLL and VMC's own mod files, which the DLL needs: it reads tables and columns they add."""
     folder = new_mod_folder(name)
     shutil.copyfile(dll, os.path.join(folder, "CvGameCore_Expansion2.dll"))
@@ -161,6 +174,10 @@ def write_dll_mod(name, mod_id, teaser, dll):
         os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
         shutil.copyfile(os.path.join(VMC_DIR, path), os.path.join(folder, path))
     files = vmc_files + [("CvGameCore_Expansion2.dll", 1)]
+    if plugins_screen:
+        screen_files, screen_entry = copy_plugins_screen(folder)
+        files += screen_files
+        entries = entries + [screen_entry]
     write_modinfo(folder, name, mod_id, teaser, files, updates, entries, dll="CvGameCore_Expansion2.dll")
 
 
@@ -266,6 +283,7 @@ def main(args):
         HOST_ID,
         "Test build of the %s." % HOST_NAME,
         os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"),
+        plugins_screen=True,
     )
     for _, dll_name, mod_name, mod_id in TOYS:
         write_toy_mod(dll_name, mod_name, mod_id)

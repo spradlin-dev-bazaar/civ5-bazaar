@@ -604,6 +604,30 @@ const std::vector<CivPluginRecord>& CivHostPlugins()
 	return s_plugins;
 }
 
+std::vector<CivPluginReportRow> CivHostReportRows()
+{
+	std::vector<CivPluginReportRow> rows;
+	for (size_t i = 0; i < s_plugins.size(); ++i)
+	{
+		const CivPluginRecord& p = s_plugins[i];
+		CivPluginReportRow row;
+		row.file = FileName(p.path);
+		row.name = p.name;
+		row.version = p.version;
+		row.failed = p.status != CIV_PLUGIN_LOADED || p.quarantined;
+		if (p.quarantined)
+			row.status = "Turned off after a crash";
+		else if (row.failed)
+			row.status = CIV_REPORT_NOT_LOADED;
+		else
+			row.status = "Loaded";
+		for (size_t j = 0; j < p.problems.size(); ++j)
+			row.problems += (j ? "\n" : "") + p.problems[j];
+		rows.push_back(row);
+	}
+	return rows;
+}
+
 void CivHostLoadPlugins(const std::vector<std::string>& paths)
 {
 	for (size_t i = 0; i < paths.size(); ++i)

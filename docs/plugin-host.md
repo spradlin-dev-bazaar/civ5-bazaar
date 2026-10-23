@@ -118,7 +118,7 @@ C++ exceptions are on, as in Firaxis's project, because the engine's own code us
 
 - the host logs the plugin and the function; the call stack, as the MCP mod's crash handler logs it today, comes in P1;
 - the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
-- an in-game notification names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable and that any save should go to a new slot, and points to Mods > Plugins. A pop-up in the middle of the screen is planned instead (issue #4);
+- an in-game notification names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable and that any save should go to a new slot, and says the details are in Logs\Bazaar.log. A pop-up in the middle of the screen is planned instead (issue #4);
 - the game keeps running.
 
 Before unloading any plugin, the host checks that none of its threads is still running inside its DLL. A plugin that left one running, or whose shutdown function crashed, stays in memory and is refused until Civilization V restarts, because unloading it could crash the game.
@@ -127,9 +127,9 @@ Known limit: a plugin that faulted halfway through a replace may already have ch
 
 ### 5. The Plugins screen
 
-When the player presses Next on the Mods browser, the game activates the enabled mods and then shows the Mods menu. Files a mod imports into the VFS replace the game's UI files once mods are active, so the host ships its own copy of that menu with a **Plugins** button. The flow becomes Mods > Plugins > Single Player > Start Game.
+When the player presses Next on the Mods browser, the game switches on the enabled mods, the host loads the plugins, and the game shows the Mods menu. A mod cannot replace that menu: the game builds it at startup, before any mod is on, and files a mod imports only replace screens the game builds after that, when they are first opened (such as Advanced Setup). So the host mod lists the Plugins screen as a Custom game entry, which the game loads after the mods are on: Mods > Single Player > Custom Game > Manage Plugins.
 
-The Plugins screen is front-end Lua. It lists the installed plugins by reading the `DllPlugins` rows from the activated database, lets the player move each up or down and skip it, and saves the order and skip flags through the game's per-mod persistent store (`Modding.OpenUserData`). The host reads the same store when it loads plugins. The screen also shows, beside each plugin, last session's failures, handshake refusals and replace conflicts, so the player can see what to move or disable without reading a log.
+The Plugins screen is front-end Lua. After loading the plugins, the host writes a `BazaarPlugins` table with one row per plugin (its name, version, a status, its problems and whether it failed), and the screen lists those rows. Handshake refusals, replace conflicts and crashes show beside the plugin, so the player can see what to move or disable without reading a log; possible conflicts with hand-placed hooks will show there too, with the "use both anyway" choice. Next, the screen will let the player move each plugin up or down and skip it, saving the order and skip flags through the game's per-mod persistent store (`Modding.OpenUserData`). The host will read the same store when it loads plugins, and a new order will need the plugins reloaded before a game starts.
 
 Load order is the list on the screen, top first.
 

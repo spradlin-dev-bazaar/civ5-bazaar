@@ -77,6 +77,72 @@ namespace
 			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
 	}
 
+	const char* const kFileNotFound = "The file was not found in the MODS folder.";
+	const char* const kNoDocuments = "Bazaar could not find your Documents folder, so it could not look for plugins.";
+	const char* const kListUnreadable = "Bazaar could not read the list of plugins, so any plugins already loaded were left as they were.";
+	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
+
+	std::vector<CivPluginReportRow> ReportRows(const char* warning, const std::vector<std::string>& missing = std::vector<std::string>())
+	{
+		std::vector<CivPluginReportRow> rows;
+		if (warning)
+		{
+			CivPluginReportRow note;
+			note.name = "Bazaar";
+			note.status = "Warning";
+			note.problems = warning;
+			rows.push_back(note);
+		}
+		const std::vector<CivPluginReportRow> plugins = CivHostReportRows();
+		rows.insert(rows.end(), plugins.begin(), plugins.end());
+		for (size_t i = 0; i < missing.size(); ++i)
+		{
+			CivPluginReportRow row;
+			row.file = missing[i];
+			row.name = missing[i];
+			row.status = CIV_REPORT_NOT_LOADED;
+			row.problems = kFileNotFound;
+			row.failed = true;
+			rows.push_back(row);
+		}
+		return rows;
+	}
+
+	bool InsertPluginRows(const std::vector<CivPluginReportRow>& rows)
+	{
+		Database::Results insert;
+		if (!DB.Execute("DROP TABLE IF EXISTS BazaarPlugins")
+			|| !DB.Execute("CREATE TABLE BazaarPlugins (Position INTEGER, File TEXT, Name TEXT, Version TEXT, Status TEXT, Problems TEXT, Failed INTEGER)")
+			|| !DB.Execute(insert, "INSERT INTO BazaarPlugins (Position, File, Name, Version, Status, Problems, Failed) VALUES (?, ?, ?, ?, ?, ?, ?)"))
+			return false;
+		for (size_t i = 0; i < rows.size(); ++i)
+		{
+			insert.Bind(1, (int)i + 1);
+			insert.Bind(2, rows[i].file.c_str());
+			insert.Bind(3, rows[i].name.c_str());
+			insert.Bind(4, rows[i].version.c_str());
+			insert.Bind(5, rows[i].status.c_str());
+			insert.Bind(6, rows[i].problems.c_str());
+			insert.Bind(7, rows[i].failed ? 1 : 0);
+			insert.Execute();
+			insert.Reset();
+		}
+		Database::Results count;
+		return DB.Execute(count, "SELECT COUNT(*) FROM BazaarPlugins") && count.Step() && count.GetInt(0) == (int)rows.size();
+	}
+
+	// Read by the Plugins screen (frontend/BazaarPlugins.lua). Rebuilt on every call, because the game may have rebuilt its database.
+	void WritePluginReport(const std::vector<CivPluginReportRow>& rows)
+	{
+		DB.BeginTransaction();
+		const bool written = InsertPluginRows(rows);
+		if (!written)
+			DB.Execute("DROP TABLE IF EXISTS BazaarPlugins");
+		DB.EndTransaction();
+		if (!written)
+			LogLine("Could not write the BazaarPlugins table, so the Plugins screen cannot list the plugins.");
+	}
+
 	// No DllPlugins table means no plugin mod is active; false means the table could not be read.
 	bool ListedPluginFiles(std::vector<std::string>* files)
 	{
@@ -104,11 +170,13 @@ void CivHostOnDatabaseReady()
 	if (!ListedPluginFiles(&files))
 	{
 		LogLine("Could not read the DllPlugins table, so the plugins were left as they were.");
+		WritePluginReport(ReportRows(kListUnreadable));
 		return;
 	}
 	if (!files.empty() && UserFolder().empty())
 	{
-		Notify("Plugins not loaded", "Bazaar could not find your Documents folder, so it could not look for plugins.");
+		Notify("Plugins not loaded", kNoDocuments);
+		WritePluginReport(ReportRows(kNoDocuments));
 		return;
 	}
 
@@ -126,7 +194,7 @@ void CivHostOnDatabaseReady()
 	{
 		for (size_t i = 0; i < missing.size(); ++i)
 		{
-			const std::string line = "Plugin file not found in the MODS folder: " + missing[i];
+			const std::string line = missing[i] + ": " + kFileNotFound;
 			LogLine(line.c_str());
 			Notify("Plugin missing", line);
 		}
@@ -135,16 +203,16 @@ void CivHostOnDatabaseReady()
 
 	CivHostSetLogSink(&LogLine);
 	CivHostSetFaultSink(&OnFault);
-	switch (CivHostSetPlugins(paths))
+	const CivPluginListResult result = CivHostSetPlugins(paths);
+	if (result == CIV_PLUGINS_BUSY)
 	{
-	case CIV_PLUGINS_UNCHANGED:
+		Notify("Plugins not changed", kBusy);
+		WritePluginReport(ReportRows(kBusy));
 		return;
-	case CIV_PLUGINS_BUSY:
-		Notify("Plugins not changed", "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.");
-		return;
-	case CIV_PLUGINS_CHANGED:
-		break;
 	}
+	WritePluginReport(ReportRows(NULL, missing));
+	if (result == CIV_PLUGINS_UNCHANGED)
+		return;
 
 	const std::vector<CivPluginRecord>& plugins = CivHostPlugins();
 	for (size_t i = 0; i < plugins.size(); ++i)

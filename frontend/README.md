@@ -1,1 +1,1 @@
-The Plugins screen, and the host's edited copy of the game's Mods menu that adds the Plugins button. The Mods menu copy is Firaxis code; see NOTICE.
+The Plugins screen. A mod cannot replace the game's Mods menu, because the game builds it before any mod is switched on, so the host mod lists this screen as a Custom game entry: Mods > Single Player > Custom Game > Manage Plugins. The screen's frame is adapted from the game's Mods menu, which is Firaxis code; see NOTICE.

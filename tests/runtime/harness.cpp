@@ -59,6 +59,15 @@ static const CivPluginRecord* Find(const char* fileName)
 	return found;
 }
 
+static CivPluginReportRow ReportRow(const char* fileName)
+{
+	const std::vector<CivPluginReportRow> rows = CivHostReportRows();
+	for (size_t i = 0; i < rows.size(); ++i)
+		if (_stricmp(rows[i].file.c_str(), fileName) == 0)
+			return rows[i];
+	return CivPluginReportRow();
+}
+
 static bool HasStatus(const char* fileName, CivPluginStatus status)
 {
 	const CivPluginRecord* rec = Find(fileName);
@@ -131,6 +140,16 @@ static void TestLoading()
 	Check(LogHas("Plugin Toy Conflict: Its replacement"), "the refusal names the refused plugin, though it is still loading");
 	Check(LogHas("[Toy Basic] starting"), "a plugin logging from its entry point is named in the log");
 	Check(CallInt("toy_basic.dll", "ToyRegisterLate", -1) == CIV_HOOK_NOT_ALLOWED, "registering after loading is refused");
+
+	const CivPluginReportRow basic = ReportRow("toy_basic.dll");
+	Check(!basic.failed && basic.status == "Loaded" && basic.name == "Toy Basic" && basic.problems.empty(), "the Plugins screen lists a loaded plugin by name as Loaded");
+	const CivPluginReportRow newer = ReportRow("toy_newer.dll");
+	Check(newer.failed && newer.status == "Not loaded" && newer.problems.find("newer Bazaar") != std::string::npos, "it lists a refused plugin as Not loaded, with the reason");
+	const CivPluginReportRow conflict = ReportRow("toy_conflict.dll");
+	Check(!conflict.failed && conflict.problems.find("Toy Basic already replaces") != std::string::npos, "it keeps a refused replacement as a warning on a loaded plugin");
+	const CivPluginReportRow entryFault = ReportRow("toy_entry_fault.dll");
+	Check(entryFault.failed && entryFault.status == "Turned off after a crash", "it lists a plugin that crashed while loading as turned off");
+	Check(ReportRow("toy_missing.dll").name == "toy_missing.dll", "it names a plugin by its file until the plugin gives its own name");
 }
 
 static void TestHooks()
@@ -185,6 +204,8 @@ static void TestQuarantine()
 	Check(r1 == 110, "the other plugins' hooks still run on the same call");
 	Check(Find("toy_fault.dll") && Find("toy_fault.dll")->quarantined && !Find("toy_fault.dll")->problems.empty(), "a faulting plugin is quarantined with a reason");
 	Check(unit.add(2, 3) == 110 && s_faults == before + 2, "a quarantined plugin's hooks never run again");
+	const CivPluginReportRow faulted = ReportRow("toy_fault.dll");
+	Check(faulted.failed && faulted.status == "Turned off after a crash", "the Plugins screen lists a quarantined plugin as turned off");
 
 	Load("toy_fault_replace.dll");
 	const int calls = g_levelCalls;

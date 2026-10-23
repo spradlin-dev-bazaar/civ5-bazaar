@@ -12,7 +12,7 @@ The proof of concept works: built from the plain Firaxis source, the host loads 
 
 - The host is built on whoward69's DLL-VMC (v97), so it keeps VMC's Lua events and switchable bug fixes. A mod that only needs a Lua event can stay a plain Lua mod.
 - A plugin is an ordinary mod with a DLL inside. It lists the host as a requirement, so the game won't let you turn it on without the host.
-- A Plugins screen (Mods > Plugins) lets you reorder plugins or turn them off. It also shows any plugin that failed or was refused.
+- A Plugins screen (Mods > Single Player > Custom Game > Manage Plugins) shows which plugins loaded and any that failed or were refused. It will also let you reorder plugins or turn them off.
 - If a plugin crashes, the host turns it off until you return to the main menu and tells you. The game keeps running.
 - A plugin built for an older host keeps working on newer hosts.
 
