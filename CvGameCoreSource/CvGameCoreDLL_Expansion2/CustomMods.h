@@ -31,9 +31,9 @@
  *****                                                                  *****
  ****************************************************************************
  ****************************************************************************/
-#define MOD_DLL_GUID {0xcf7d28a8, 0x1684, 0x4420, { 0xaf, 0x45, 0x11, 0x7, 0xc, 0xb, 0x8c, 0x4a }} // {CF7D28A8-1684-4420-AF45-11070C0B8C4A}
-#define MOD_DLL_NAME "Pick'N'Mix BNW DLL"
-#define MOD_DLL_VERSION_NUMBER ((uint) 97)
+#define MOD_DLL_GUID {0xb6feea41, 0x2029, 0x417b, { 0x8d, 0xb5, 0x34, 0xc, 0x2d, 0xc2, 0x47, 0xcc }} // {B6FEEA41-2029-417B-8DB5-340C2DC247CC}
+#define MOD_DLL_NAME "Bazaar Multi-DLL Mod Loader"
+#define MOD_DLL_VERSION_NUMBER ((uint) 97)			// VMC's version, also its save format version: only a VMC update changes it
 #define MOD_DLL_VERSION_STATUS ""			// a (alpha), b (beta) or blank (released)
 #define MOD_DLL_CUSTOM_BUILD_NAME ""
 
