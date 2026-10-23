@@ -2,13 +2,23 @@
 #include "CivHooks.h"
 #include "CivPluginApi.h"
 #include "fake_engine.h"
+#include "toy_api.h"
 
 #include <stdio.h>
 
-#include <string>
-#include <vector>
-
 #define TOY_EXPORT extern "C" __declspec(dllexport)
+
+TOY_EXPORT ToyBeforeCallsFn ToyBeforeCalls;
+TOY_EXPORT ToyRegisterLateFn ToyRegisterLate;
+TOY_EXPORT ToyFaultOnShutdownFn ToyFaultOnShutdown;
+TOY_EXPORT ToySetShutdownProbeFn ToySetShutdownProbe;
+TOY_EXPORT ToyFillStringsFn ToyFillStrings;
+TOY_EXPORT ToyReleaseStringsFn ToyReleaseStrings;
+TOY_EXPORT ToySetHostCallFn ToySetHostCall;
+TOY_EXPORT ToyHostCallResultFn ToyHostCallResult;
+TOY_EXPORT ToyBreakOnNextCallFn ToyBreakOnNextCall;
+TOY_EXPORT ToyStartThreadFn ToyStartThread;
+TOY_EXPORT ToyLeaveThreadRunningFn ToyLeaveThreadRunning;
 
 static const CivHostInfo* s_host = 0;
 static int s_beforeCalls = 0;
@@ -42,12 +52,11 @@ TOY_EXPORT int ToyRegisterLate()
 	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
 }
 
-typedef void (*ActionFn)();
-static ActionFn s_ownShutdown = 0;
-static ActionFn s_shutdownProbe = 0;
+static ToyActionFn* s_ownShutdown = 0;
+static ToyActionFn* s_shutdownProbe = 0;
 static bool s_faultOnShutdown = false;
 
-TOY_EXPORT void ToySetShutdownProbe(ActionFn probe)
+TOY_EXPORT void ToySetShutdownProbe(ToyActionFn* probe)
 {
 	s_shutdownProbe = probe;
 }
@@ -314,7 +323,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
-#elif defined(TOY_FAULT_BEFORE)
+#elif defined(TOY_FAULT_BEFORE) || defined(TOY_FAULT_KEPT)
 
 static bool BeforeAdd(const FakeUnit*, int, int, int&)
 {
@@ -325,8 +334,22 @@ static bool BeforeAdd(const FakeUnit*, int, int, int&)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
+#if defined(TOY_FAULT_BEFORE)
 	Describe(info, "Toy Fault Before", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+#else
+	Describe(info, "Toy Fault Kept", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+#endif
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
+	return true;
+}
+
+#elif defined(TOY_KEPT)
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Kept", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
 	return true;
 }
 
@@ -366,8 +389,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_REENTRANT)
 
-typedef bool (*HostCallFn)();
-static HostCallFn s_hostCall = 0;
+static ToyHostCallFn* s_hostCall = 0;
 static int s_hostCallResult = -1;
 static bool s_breakNextCall = false;
 
@@ -382,7 +404,7 @@ static void AfterTwice(int, int&)
 		s_hostCallResult = s_hostCall() ? 1 : 0;
 }
 
-TOY_EXPORT void ToySetHostCall(HostCallFn call)
+TOY_EXPORT void ToySetHostCall(ToyHostCallFn* call)
 {
 	s_hostCall = call;
 }
