@@ -10,6 +10,12 @@
 #include "CvGameCoreUtils.h"
 #include "CvInternalGameCoreUtils.h"
 #include "CvGame.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
+#if defined(CIV_TURN_BENCH)
+#include "CivTurnBench.h"
+#endif
 #include "CvMap.h"
 #include "CvPlot.h"
 #include "CvPlayerAI.h"
@@ -1438,6 +1444,12 @@ void CvGame::assignStartingPlots()
 //	---------------------------------------------------------------------------
 void CvGame::update()
 {
+#if defined(CIV_HOST_API)
+	CivHostOnGameUpdate();
+#endif
+#if defined(CIV_TURN_BENCH)
+	CivTurnBench::UpdateScope benchScope(*this);
+#endif
 	if(IsWaitingForBlockingInput())
 	{
 		if(!GC.GetEngineUserInterface()->isDiploActive())
