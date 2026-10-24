@@ -19,7 +19,9 @@ SITE = os.path.join(OUT, "site")
 HAND_HOOKS = os.path.join(HERE, "hand-placed-hooks.md")
 NO_HISTORY = os.path.join(OUT, "no-history.txt")
 GUIDE = os.path.join(HERE, "task-guide.md")
+SUMMARIES = os.path.join(HERE, "class-summaries.md")
 THING = "reference/docs_engine.cpp/Thing/"
+OPTION = "reference/docs_engine.cpp/Setup.Option/"
 DECLARATIONS = {
     "Thing::Score(bool) const": [
         "static bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);",
@@ -72,8 +74,16 @@ def fixture_project(name, edits=()):
     return project(crlf_copy(sources, name), ["docs_engine.cpp"])
 
 
-def build_fixture(project, out, hand_hooks=HAND_HOOKS, history=NO_HISTORY, release=None, guide=GUIDE):
-    return build_docs.build(project, out, hand_hooks, history, release, task_guide=guide)
+def build_fixture(
+    project,
+    out,
+    hand_hooks_md=HAND_HOOKS,
+    history_path=NO_HISTORY,
+    release=None,
+    task_guide_md=GUIDE,
+    class_summaries_md=SUMMARIES,
+):
+    return build_docs.build(project, out, hand_hooks_md, history_path, release, task_guide_md, class_summaries_md)
 
 
 def build():
@@ -197,7 +207,7 @@ def stop_problems():
     with open(extra, "w", encoding="utf-8") as f:
         f.write(text + "\n## NotCalled\n\nNo engine function calls this one.\n")
     try:
-        build_fixture(fixture_project("extra"), os.path.join(OUT, "extra-site"), hand_hooks=extra)
+        build_fixture(fixture_project("extra"), os.path.join(OUT, "extra-site"), hand_hooks_md=extra)
         problems.append("a described hand-placed hook that nothing calls did not stop the build")
     except SystemExit as e:
         if "NotCalled" not in str(e):
@@ -205,7 +215,7 @@ def stop_problems():
     marked = os.path.join(OUT, "bom-hooks.md")
     with open(marked, "w", encoding="utf-8-sig") as f:
         f.write(text)
-    site = build_fixture(fixture_project("bom"), os.path.join(OUT, "bom-site"), hand_hooks=marked)
+    site = build_fixture(fixture_project("bom"), os.path.join(OUT, "bom-site"), hand_hooks_md=marked)
     if site.pages["hooks/index.html"].count("<h1>") != 1:
         problems.append("a hand-placed hooks file saved with a byte order mark shows its title twice")
     return problems
@@ -255,7 +265,7 @@ def history_problems():
 
     def run(name, release, edits=()):
         site = os.path.join(OUT, name + "-site")
-        return build_fixture(fixture_project(name, edits), site, history=path, release=release)
+        return build_fixture(fixture_project(name, edits), site, history_path=path, release=release)
 
     def refused(name, release, edits, reason):
         before = read(path)
@@ -314,7 +324,7 @@ def history_problems():
     with open(damaged, "w", encoding="utf-8") as f:
         f.write("release\t0.1.0\nnot a history line\n")
     try:
-        build_fixture(fixture_project("damaged"), os.path.join(OUT, "damaged-site"), history=damaged)
+        build_fixture(fixture_project("damaged"), os.path.join(OUT, "damaged-site"), history_path=damaged)
         problems.append("a damaged function history did not stop the build")
     except SystemExit as e:
         if "line 2 of" not in str(e):
@@ -340,11 +350,46 @@ def guide_problems(site):
         with open(guide, "w", encoding="utf-8") as f:
             f.write("# Guide\n\n- [[%s]]\n" % name)
         try:
-            build_fixture(fixture_project("guide"), os.path.join(OUT, "guide-site"), guide=guide)
+            build_fixture(fixture_project("guide"), os.path.join(OUT, "guide-site"), task_guide_md=guide)
             problems.append("a task guide naming %s did not stop the build" % name)
         except SystemExit as e:
             if "names %s," % name not in str(e):
                 problems.append("a task guide naming %s stopped the build with %r" % (name, str(e)))
+    return problems
+
+
+def summary_problems(site):
+    wanted = {
+        THING + "index.html": [
+            '<a href="Score-bool-const.html"><code>Thing::Score</code></a>',
+            '<a href="../Setup.Option/index.html"><code>Setup::Option</code></a>',
+            '<a href="../../../hooks/PopupRaised.html"><code>PopupRaised</code></a>',
+        ],
+        OPTION + "index.html": ['<a href="../Thing/index.html"><code>Thing</code></a>'],
+        "index.html": [
+            'Main classes: <a href="%sindex.html">Thing</a>, <a href="%sindex.html">Setup::Option</a>' % (THING, OPTION)
+        ],
+    }
+    problems = []
+    for path, texts in wanted.items():
+        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.pages[path]]
+    stops = [
+        ("Nobody", "## Nobody\n\nNo such class.\n", "classes summarized in %s that have no page: Nobody"),
+        ("Nothing", "## Thing\n\n[[Nothing]]\n", "%s names Nothing,"),
+        ("twice", "## Thing\n\nOne.\n\n## Thing\n\nTwo.\n", "%s has two sections named Thing"),
+    ]
+    for name, text, reason in stops:
+        summaries = os.path.join(OUT, "summaries-%s.md" % name)
+        with open(summaries, "w", encoding="utf-8") as f:
+            f.write("# Class summaries\n\n" + text)
+        try:
+            build_fixture(
+                fixture_project("summaries"), os.path.join(OUT, "summaries-site"), class_summaries_md=summaries
+            )
+            problems.append("the class summaries in %s did not stop the build" % summaries)
+        except SystemExit as e:
+            if reason % summaries not in str(e):
+                problems.append("the class summaries in %s stopped the build with %r" % (summaries, str(e)))
     return problems
 
 
@@ -385,7 +430,7 @@ def write_problems():
 if __name__ == "__main__":
     site = build()
     problems = naming_problems(site) + code_problems(site) + fact_problems(site) + search_problems(site)
-    problems += guide_problems(site) + stop_problems() + write_problems() + history_problems()
+    problems += guide_problems(site) + summary_problems(site) + stop_problems() + write_problems() + history_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)

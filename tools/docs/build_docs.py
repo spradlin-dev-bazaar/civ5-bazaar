@@ -25,6 +25,7 @@ import render  # noqa: E402
 DEFAULT_OUT = os.path.join(common.SOURCE_ROOT, "BuildTemp", "docs")
 HAND_HOOKS = os.path.join(common.REPO, "sdk", "hand-placed-hooks.md")
 TASK_GUIDE = os.path.join(common.REPO, "docs", "task-guide.md")
+CLASS_SUMMARIES = os.path.join(common.REPO, "docs", "class-summaries.md")
 HISTORY = os.path.join(common.REPO, "tools", "generator", "function-history.txt")
 NOTICE = os.path.join(common.REPO, "NOTICE")
 HREF = re.compile(r'href="([^"]*)"')
@@ -64,7 +65,15 @@ def write(site, out):
     shutil.copyfile(NOTICE, os.path.join(out, render.NOTICE_FILE))
 
 
-def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=None, task_guide=TASK_GUIDE):
+def build(
+    project,
+    out,
+    hand_hooks_md=HAND_HOOKS,
+    history_path=HISTORY,
+    release=None,
+    task_guide_md=TASK_GUIDE,
+    class_summaries_md=CLASS_SUMMARIES,
+):
     t = time.time()
     saved_release, entries = history.load(history_path)
     if release is not None:
@@ -73,7 +82,7 @@ def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=
     if release is not None:
         entries = history.update(saved_release, entries, engine.history_now(), release)
     engine.apply_history(entries)
-    site = pages.Site(engine, hand_hooks_md, task_guide)
+    site = pages.Site(engine, hand_hooks_md, task_guide_md, class_summaries_md)
     broken = broken_links(site)
     if broken:
         for path, href in broken[:20]:
