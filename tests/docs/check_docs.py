@@ -18,6 +18,7 @@ OUT = os.path.join(HERE, "out")
 SITE = os.path.join(OUT, "site")
 HAND_HOOKS = os.path.join(HERE, "hand-placed-hooks.md")
 NO_HISTORY = os.path.join(OUT, "no-history.txt")
+GUIDE = os.path.join(HERE, "task-guide.md")
 THING = "reference/docs_engine.cpp/Thing/"
 DECLARATIONS = {
     "Thing::Score(bool) const": [
@@ -71,8 +72,12 @@ def fixture_project(name, edits=()):
     return project(crlf_copy(sources, name), ["docs_engine.cpp"])
 
 
+def build_fixture(project, out, hand_hooks=HAND_HOOKS, history=NO_HISTORY, release=None, guide=GUIDE):
+    return build_docs.build(project, out, hand_hooks, history, release, task_guide=guide)
+
+
 def build():
-    return build_docs.build(fixture_project("fixture"), SITE, HAND_HOOKS, NO_HISTORY)
+    return build_fixture(fixture_project("fixture"), SITE)
 
 
 def fixture_line(text):
@@ -181,7 +186,7 @@ def stop_problems():
     problems = []
     broken = crlf_copy([("broken.cpp", b"int broken = ;\n")], "broken")
     try:
-        build_docs.build(project(broken, ["broken.cpp"]), os.path.join(OUT, "broken-site"), HAND_HOOKS, NO_HISTORY)
+        build_fixture(project(broken, ["broken.cpp"]), os.path.join(OUT, "broken-site"))
         problems.append("a parse error outside a function did not stop the build")
     except SystemExit as e:
         if "parse errors" not in str(e):
@@ -192,7 +197,7 @@ def stop_problems():
     with open(extra, "w", encoding="utf-8") as f:
         f.write(text + "\n## NotCalled\n\nNo engine function calls this one.\n")
     try:
-        build_docs.build(fixture_project("extra"), os.path.join(OUT, "extra-site"), extra, NO_HISTORY)
+        build_fixture(fixture_project("extra"), os.path.join(OUT, "extra-site"), hand_hooks=extra)
         problems.append("a described hand-placed hook that nothing calls did not stop the build")
     except SystemExit as e:
         if "NotCalled" not in str(e):
@@ -200,7 +205,7 @@ def stop_problems():
     marked = os.path.join(OUT, "bom-hooks.md")
     with open(marked, "w", encoding="utf-8-sig") as f:
         f.write(text)
-    site = build_docs.build(fixture_project("bom"), os.path.join(OUT, "bom-site"), marked, NO_HISTORY)
+    site = build_fixture(fixture_project("bom"), os.path.join(OUT, "bom-site"), hand_hooks=marked)
     if site.pages["hooks/index.html"].count("<h1>") != 1:
         problems.append("a hand-placed hooks file saved with a byte order mark shows its title twice")
     return problems
@@ -222,6 +227,7 @@ TOTAL_RETURNS_2 = (
     "CivHandPopupRaised(1);\n#endif\n\treturn 1;",
     "CivHandPopupRaised(1);\n#endif\n\treturn 2;",
 )
+MOVE_TOTAL = ("docs_engine.cpp", "int Thing::Total()", "// Moved down a line.\nint Thing::Total()")
 RELEASE_EDITS = [ADD_FUNCTION, HOOK_TOTAL, SPACE_RESET]
 
 
@@ -249,7 +255,7 @@ def history_problems():
 
     def run(name, release, edits=()):
         site = os.path.join(OUT, name + "-site")
-        return build_docs.build(fixture_project(name, edits), site, HAND_HOOKS, path, release)
+        return build_fixture(fixture_project(name, edits), site, history=path, release=release)
 
     def refused(name, release, edits, reason):
         before = read(path)
@@ -279,6 +285,10 @@ def history_problems():
         problems.append("building release 0.2.0 again changed the function history")
     if marked(again) != marked(second):
         problems.append("building release 0.2.0 again marked %s" % marked(again))
+    moved = run("release-2", "0.2.0", RELEASE_EDITS + [MOVE_TOTAL])
+    change = history.load(path)[1]["Thing::Total()"].changes[0]
+    if (change.first, change.last) != lines_of("release-2", "int Thing::Total()") or marked(moved) != marked(second):
+        problems.append("building release 0.2.0 again after Thing::Total() moved did not follow it")
     refused("release-2-edited", "0.2.0", RELEASE_EDITS + [TOTAL_RETURNS_2], "the code has changed since")
     unreleased = by_title(run("unreleased", None, RELEASE_EDITS + [TOTAL_RETURNS_2]), "Thing::Total()") or {}
     saved_total = history.load(path)[1].get(unreleased.get("history_key"))
@@ -298,15 +308,43 @@ def history_problems():
     plural = pages.change_mark(history.Change("0.4.0", "x.cpp", 1, 2, ("PopupRaised", "DealResolved")))
     if "(added hand-placed hooks PopupRaised, DealResolved)" not in plural:
         problems.append("a change that added two hand-placed hooks reads %r" % plural)
+    if history.fingerprint(["-", "-", "x"]) == history.fingerprint(["--", "x"]):
+        problems.append("the fingerprint joins - - x and -- x into the same code")
     damaged = os.path.join(OUT, "damaged-history.txt")
     with open(damaged, "w", encoding="utf-8") as f:
         f.write("release\t0.1.0\nnot a history line\n")
     try:
-        build_docs.build(fixture_project("damaged"), os.path.join(OUT, "damaged-site"), HAND_HOOKS, damaged)
+        build_fixture(fixture_project("damaged"), os.path.join(OUT, "damaged-site"), history=damaged)
         problems.append("a damaged function history did not stop the build")
     except SystemExit as e:
         if "line 2 of" not in str(e):
             problems.append("a damaged function history stopped the build with %r" % str(e))
+    return problems
+
+
+def guide_problems(site):
+    home = site.pages["index.html"]
+    wanted = [
+        '<a href="reference/docs_engine.cpp/Thing/Score-bool-const.html"><code>Thing::Score(bool)</code></a>',
+        '<a href="reference/docs_engine.cpp/Thing/Get.html"><code>Thing::Get</code></a>',
+        '<a href="hooks/PopupRaised.html"><code>PopupRaised</code></a>',
+        '<h2 id="things-to-do">Things to do</h2>',
+        '<h3 id="scores">Scores</h3>',
+        "#include &quot;CivPluginApi.h&quot;",
+    ]
+    problems = ["the front page does not contain %r" % text for text in wanted if text not in home]
+    if "##include" in home:
+        problems.append("the front page shifted the #include line in the guide's code as if it were a heading")
+    for name in ("Thing::Score", "Nothing"):
+        guide = os.path.join(OUT, "guide-naming-%s.md" % name.replace(":", ""))
+        with open(guide, "w", encoding="utf-8") as f:
+            f.write("# Guide\n\n- [[%s]]\n" % name)
+        try:
+            build_fixture(fixture_project("guide"), os.path.join(OUT, "guide-site"), guide=guide)
+            problems.append("a task guide naming %s did not stop the build" % name)
+        except SystemExit as e:
+            if "names %s," % name not in str(e):
+                problems.append("a task guide naming %s stopped the build with %r" % (name, str(e)))
     return problems
 
 
@@ -347,7 +385,7 @@ def write_problems():
 if __name__ == "__main__":
     site = build()
     problems = naming_problems(site) + code_problems(site) + fact_problems(site) + search_problems(site)
-    problems += stop_problems() + write_problems() + history_problems()
+    problems += guide_problems(site) + stop_problems() + write_problems() + history_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)

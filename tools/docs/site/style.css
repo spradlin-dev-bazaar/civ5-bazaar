@@ -92,6 +92,8 @@ nav.crumbs .sep { margin: 0 4px; }
 main { padding: 0 16px 32px; max-width: 1200px; }
 h1 { font-size: 24px; margin: 8px 0 16px; overflow-wrap: anywhere; font-family: Consolas, "Courier New", monospace; }
 h2 { font-size: 18px; margin: 28px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+h3 { font-size: 17px; margin: 24px 0 6px; }
+h4 { font-size: 15px; margin: 16px 0 4px; }
 
 dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 16px; }
 dl.facts dt { color: var(--muted); }

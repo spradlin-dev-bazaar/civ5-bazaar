@@ -44,7 +44,7 @@ def rel_link(page, target):
 
 
 class Site:
-    def __init__(self, engine, hand_hooks_md):
+    def __init__(self, engine, hand_hooks_md, task_guide):
         self.engine = engine
         self.homes = class_homes(engine.functions, engine.classes)
         self.listed_files = {fn["file"] for fn in engine.functions if not fn["owner"]} | set(self.homes.values())
@@ -61,7 +61,7 @@ class Site:
         self.class_and_file_pages()
         self.folder_pages()
         self.hook_pages(hand_hooks_md)
-        self.home_page()
+        self.home_page(task_guide)
 
     def class_dir(self, owner):
         return "%s/%s" % (file_dir(self.homes[owner]), owner.replace("::", "."))
@@ -283,7 +283,7 @@ class Site:
         body = "<h1>Hand-placed hooks</h1>" + to_html(intro) + render.entry_list(items)
         self.add(HOOKS_PAGE, "Hand-placed hooks", [("Hand-placed hooks", HOOKS_PAGE)], body)
 
-    def home_page(self):
+    def home_page(self, task_guide):
         functions = self.engine.functions
         counts = " (%d functions, %d of them hook points)" % (len(functions), sum(1 for fn in functions if is_hook(fn)))
         links = [
@@ -294,8 +294,26 @@ class Site:
             "<p>Every function in the game's code, with its code, the functions it calls and the functions that call "
             "it, and how to hook it from a plugin.</p>"
         )
-        body = "<h1>%s</h1>%s%s" % (render.esc(render.SITE_NAME), intro, render.entry_list(links))
+        with open(task_guide, encoding="utf-8-sig") as f:
+            guide = to_html(self.guide_links(f.read()), first_heading=2)
+        body = "<h1>%s</h1>%s%s" % (render.esc(render.SITE_NAME), intro, render.entry_list(links)) + guide
         self.add(HOME_PAGE, render.SITE_NAME, [], body)
+
+    def guide_links(self, text):
+        by_name = collections.defaultdict(list)
+        for fn in self.engine.functions:
+            by_name[fn["title"]].append(fn)
+            by_name[fn["title"].split("(")[0]].append(fn)
+
+        def link(m):
+            name = m.group(1)
+            if hook_page(name) in self.pages:
+                return "[`%s`](%s)" % (name, hook_page(name))
+            if len(by_name.get(name, [])) != 1:
+                raise SystemExit("docs: the task guide names %s, which is not one function or hand-placed hook" % name)
+            return "[`%s`](%s)" % (re.sub(r"\s+const$", "", name), by_name[name][0]["page"])
+
+        return re.sub(r"\[\[([^\]]+)\]\]", link, text)
 
     # The search index.
 
@@ -373,5 +391,6 @@ def snippet_start(data, def_start):
     return start
 
 
-def to_html(md):
-    return markdown.markdown(md, extensions=["tables", "fenced_code"])
+def to_html(md, first_heading=1):
+    toc = {"baselevel": first_heading}
+    return markdown.markdown(md, extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": toc})

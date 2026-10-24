@@ -24,6 +24,7 @@ import render  # noqa: E402
 
 DEFAULT_OUT = os.path.join(common.SOURCE_ROOT, "BuildTemp", "docs")
 HAND_HOOKS = os.path.join(common.REPO, "sdk", "hand-placed-hooks.md")
+TASK_GUIDE = os.path.join(common.REPO, "docs", "task-guide.md")
 HISTORY = os.path.join(common.REPO, "tools", "generator", "function-history.txt")
 NOTICE = os.path.join(common.REPO, "NOTICE")
 HREF = re.compile(r'href="([^"]*)"')
@@ -63,7 +64,7 @@ def write(site, out):
     shutil.copyfile(NOTICE, os.path.join(out, render.NOTICE_FILE))
 
 
-def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=None):
+def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=None, task_guide=TASK_GUIDE):
     t = time.time()
     saved_release, entries = history.load(history_path)
     if release is not None:
@@ -72,7 +73,7 @@ def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=
     if release is not None:
         entries = history.update(saved_release, entries, engine.history_now(), release)
     engine.apply_history(entries)
-    site = pages.Site(engine, hand_hooks_md)
+    site = pages.Site(engine, hand_hooks_md, task_guide)
     broken = broken_links(site)
     if broken:
         for path, href in broken[:20]:
@@ -93,9 +94,9 @@ def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=
         if saved_release is None:
             print("docs: release %s starts the function history" % release)
         else:
-            added = sum(1 for fn in engine.functions if fn["added_in"] == release)
-            changed = sum(1 for fn in engine.functions if any(c.release == release for c in fn["changed_in"]))
-            print("docs: release %s marks: %d added, %d changed" % (release, added, changed))
+            marked_added = sum(1 for fn in engine.functions if fn["added_in"] == release)
+            marked_changed = sum(1 for fn in engine.functions if any(c.release == release for c in fn["changed_in"]))
+            print("docs: release %s marks: %d added, %d changed" % (release, marked_added, marked_changed))
     return site
 
 
