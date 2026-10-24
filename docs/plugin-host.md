@@ -54,19 +54,21 @@ The numbers allow it: the host built from the Firaxis source exports about 14,50
 
 What makes it safe: both sides are built by the same compiler with the shared C runtime (`/MD`) and the same compile flags, so objects, strings and vectors cross the boundary unchanged. The flags must be byte-identical (the map-drawing crash of v40 came from one mismatched define); the SDK ships a property sheet that pins them.
 
-What makes it last: plugins compile the engine's headers into themselves, so field offsets, class sizes and vtable slots are baked into every plugin binary. From version one on, **class layouts and vtables never change**. New host-side state goes in side tables keyed by the object, never in the classes. VMC's compile-time switches are chosen once, compiled in, and toggled at runtime through the database as VMC already does.
+What makes it last: plugins compile the engine's headers into themselves, so field offsets, class sizes and vtable slots are baked into every plugin binary. From 1.0 on, **class layouts and vtables never change**. New host-side state goes in side tables keyed by the object, never in the classes. VMC's compile-time switches are chosen once, compiled in, and toggled at runtime through the database as VMC already does.
 
 ### 2. Additive builds and the handshake
 
-Every host build carries a host API version. A plugin records the API version it was built against. The rule: a host loads any plugin built against its own version or an earlier one. The host keeps that promise by only adding: new functions, new hook points, new side tables. Nothing shipped is removed, renamed or changed in meaning. If a break is ever unavoidable, the major version changes and older plugins are refused.
+Every host build carries a host API version. A plugin records the API version it was built against. The rule: a host loads any plugin built against its own version or an earlier one. The host keeps that promise by only adding: new functions, new hook points, new side tables. Nothing shipped is removed, renamed or changed in meaning. From 1.0 on, if a break is ever unavoidable, the major version changes and older plugins are refused. Before 1.0 a build may break the promise if it must; every plugin is then rebuilt against it.
 
-At load the host calls the plugin's single exported entry point:
+Each plugin exports the API version it was built against as data, which the template declares in one line. Before loading a plugin, the host reads that version from the file without running any of the plugin's code. A plugin built for a newer host, or for an older major, is not loaded. The refusal is logged, shown on the Plugins screen beside the plugin, and shown as an in-game notification naming the plugin and the two versions. Never a silent skip. Because the host decides before any plugin code runs, a plugin never checks the version itself, and a plugin that uses functions an older host lacks gets the same refusal instead of a Windows load error.
+
+Then the host loads the plugin and calls its single exported entry point:
 
 ```
 extern "C" bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin);
 ```
 
-The plugin fills in its name, version and the API version it was built against. A plugin built for a newer host, or for an older major, is not loaded. The refusal is logged, shown on the Plugins screen beside the plugin, and shown as an in-game notification naming the plugin and the two versions. Never a silent skip.
+The plugin fills in its name and version and registers its hooks.
 
 Data shared between host and plugin can grow without breaking older plugins: the host creates the handshake structures itself, so new fields go at the end and an older plugin leaves them at zero. Anything a plugin creates and hands to the host starts with its own size.
 
@@ -212,9 +214,10 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 
 ## Versioning and releases
 
-- Host releases on GitHub, tagged, each with its SDK zip and API version. A Workshop host is fine, because an updated host keeps loading older plugins; the Workshop page points to GitHub for the SDK.
+- Releases use semantic versioning: three numbers, major.minor.patch, such as 1.2.0. The first two are the API version. The minor number goes up when a release adds to the API, the patch number when a release only fixes things, and the major number only for a break. Each release is tagged with its version, such as `v1.2.0`, and published on GitHub with its SDK zip. A Workshop host is fine, because an updated host keeps loading older plugins; the Workshop page points to GitHub for the SDK.
+- 1.0 is the first public release. Builds before it are numbered 0.x and may break plugins if they must. We avoid that, and when it happens, every plugin we have is rebuilt against the new build.
 - A plugin release names the API version it was built against. The handshake catches mismatches.
-- Host builds only add. Layouts, vtables, hook signatures and function meanings are frozen; a major version change is the one exception and refuses older plugins.
+- From 1.0 on, host builds only add. Layouts, vtables, hook numbers and signatures, and function meanings are frozen; a major version change is the one exception and refuses older plugins.
 
 ## Phases
 
@@ -231,17 +234,19 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 - enable the toy plugin mod with the host mod disabled and see the Mods browser refuse it; then remove the dependency, start a vanilla game with the plugin mod enabled, and see the plugin do nothing and the database log stay clean.
 Exit: every item above seen working in a real game, and the timing numbers in this document.
 
-**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers), the docs step (writing the generated reference), the exports, the hand-placed hook set above, failure containment and the Plugins screen. Freeze the layouts. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
+**P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers), the exports, the hand-placed hook set above, failure containment, the Plugins screen, the version check before any plugin code runs, and a build check that fails when a class layout changes. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
+
+**P1.5 — developer documentation.** After P1 merges: the docs step that writes the generated reference, the task-based guide, the class summaries and the documentation site, as described under Developer documentation. Exit: the docs step builds the whole site on this machine, and the GitHub Action that publishes it is ready for the first release.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
-**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The task-based guide, the class summaries, and the documentation site. First GitHub release of the host and SDK from this repository and of the MCP plugin from its own, and the Workshop pages.
+**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The first public release, 1.0, of the host and SDK from this repository, the MCP plugin's first release from its own, and the Workshop pages. The layouts and the hook numbers freeze at that release.
 
 ## Risks
 
 - **Speed.** Every wrapped function is a real call plus a listener check, and nothing wrapped can be inlined. The hot paths call small functions millions of times a turn. P0 measures it on both compilers before anything is committed; the fallback is the same generator on a chosen subset.
 - **The generator's long tail.** A few hundred odd signatures could cost more than the rest together. P0 runs it over everything for that reason.
-- **The layout freeze is a discipline, not a mechanism.** One added field breaks every plugin. The build compares the exported layouts against the version one record and fails on any change.
+- **The layout freeze is a discipline, not a mechanism.** One added field breaks every plugin. The build compares the exported layouts against a saved record and fails on any change. Before 1.0, a change is accepted on purpose by saving the record again and rebuilding every plugin; from 1.0 on, it is not.
 - **Header functions are not hook points.** Listed in the SDK; a plugin that needs one replaces the caller instead.
 - **No isolation beyond containment.** A faulting plugin is caught and quarantined, but a plugin that corrupts state without faulting is not detectable.
 - **Wrap order.** Two plugins hooking one function in an order that matters is not detectable. The Plugins screen makes order visible and the player's to set; that is the whole answer.
