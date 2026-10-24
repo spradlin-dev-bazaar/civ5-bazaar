@@ -1,3 +1,5 @@
-# Python tools: the hook generator (libclang) and the lint check.
+# Python tools: the hook generator (libclang), the docs step (Pygments, Markdown) and the lint check.
 libclang==18.1.1
+markdown==3.10.3
+pygments==2.21.0
 ruff==0.17.1

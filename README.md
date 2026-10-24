@@ -30,6 +30,7 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 4. `tests\runtime\run.cmd` runs the automated tests, outside the game.
 5. `tests\ingame\package.py` lays out the host, VMC's files as a mod of their own, and the test plugins as mod folders in `tests\ingame\out\MODS`, ready to copy into the game's MODS folder. `pack.py` packs one of those folders into a package for uploading to the Steam Workshop.
 6. `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then builds its template plugin from that folder alone.
+7. `build-docs.cmd` writes the developer documentation site into `CvGameCoreSource\BuildTemp\docs`; open its `index.html` in a browser. `tests\docs\check_docs.py` checks the docs step against a small test engine.
 
 To measure how much the host slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and package with `package.py bench plain` or `package.py bench host`. Issue #3 has the results so far.
 

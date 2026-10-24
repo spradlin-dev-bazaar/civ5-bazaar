@@ -215,14 +215,20 @@ def analyze_tu(job):
             if record:
                 variables.append(record)
     bodies = [(fn["body_start"], fn["def_end"]) for fn in functions if fn["body_start"] is not None]
+    return {"rel": rel, "errors": parse_errors(tu, src, bodies), "functions": functions, "variables": variables}
+
+
+def parse_errors(tu, src, bodies):
+    """(file, line, message, inside one of src's function bodies) for each error clang reported."""
     errors = []
     for d in tu.diagnostics:
         if d.severity < ci.Diagnostic.Error:
             continue
         path = os.path.abspath(d.location.file.name) if d.location.file else ""
-        in_body = os.path.normcase(path) == os.path.normcase(src) and any(s <= d.location.offset < e for s, e in bodies)
+        in_src = os.path.normcase(path) == os.path.normcase(src)
+        in_body = in_src and any(s is not None and s <= d.location.offset < e for s, e in bodies)
         errors.append((path, d.location.line, d.spelling, in_body))
-    return {"rel": rel, "errors": errors, "functions": functions, "variables": variables}
+    return errors
 
 
 def function_record(c, data, rel, project):
