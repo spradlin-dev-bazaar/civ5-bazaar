@@ -587,29 +587,104 @@ namespace
 		return 0;
 	}
 
-	std::string RefusalReason(bool accepted, const CivPluginInfo& info, CivPluginStatus* status)
+	bool Fits(DWORD offset, unsigned __int64 bytes, DWORD imageSize)
 	{
-		char problem[256];
-		if (!accepted)
+		return offset <= imageSize && bytes <= imageSize - offset;
+	}
+
+	enum ExportRead
+	{
+		EXPORT_FOUND,
+		EXPORT_MISSING,
+		EXPORT_64_BIT,
+	};
+
+	// Copies a named data export out of a file mapped with LOAD_LIBRARY_AS_IMAGE_RESOURCE, where GetProcAddress does not
+	// work. A file that cannot be read counts as missing. No C++ objects may live in this frame, or __try is not allowed.
+	ExportRead CopyExportedData(HMODULE image, const char* name, void* out, DWORD size)
+	{
+		__try
 		{
-			*status = CIV_PLUGIN_ENTRY_DECLINED;
-			return "Declined to load.";
+			// Windows marks such a handle in its low bits.
+			const BYTE* base = (const BYTE*)((ULONG_PTR)image & ~(ULONG_PTR)3);
+			const IMAGE_NT_HEADERS32* nt = (const IMAGE_NT_HEADERS32*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
+			if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+				return EXPORT_64_BIT;
+			if (nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC || nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
+				return EXPORT_MISSING;
+			const DWORD imageSize = nt->OptionalHeader.SizeOfImage;
+			const IMAGE_DATA_DIRECTORY& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+			if (!dir.VirtualAddress || !Fits(dir.VirtualAddress, sizeof(IMAGE_EXPORT_DIRECTORY), imageSize))
+				return EXPORT_MISSING;
+			const IMAGE_EXPORT_DIRECTORY* exports = (const IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
+			const unsigned __int64 count = exports->NumberOfNames;
+			if (!Fits(exports->AddressOfNames, count * sizeof(DWORD), imageSize)
+				|| !Fits(exports->AddressOfNameOrdinals, count * sizeof(WORD), imageSize)
+				|| !Fits(exports->AddressOfFunctions, (unsigned __int64)exports->NumberOfFunctions * sizeof(DWORD), imageSize))
+				return EXPORT_MISSING;
+			const DWORD* names = (const DWORD*)(base + exports->AddressOfNames);
+			const WORD* ordinals = (const WORD*)(base + exports->AddressOfNameOrdinals);
+			const DWORD* functions = (const DWORD*)(base + exports->AddressOfFunctions);
+			const size_t nameBytes = strlen(name) + 1;
+			for (DWORD i = 0; i < exports->NumberOfNames; ++i)
+			{
+				if (!Fits(names[i], nameBytes, imageSize) || memcmp(base + names[i], name, nameBytes) != 0)
+					continue;
+				if (ordinals[i] >= exports->NumberOfFunctions)
+					return EXPORT_MISSING;
+				const DWORD rva = functions[ordinals[i]];
+				// A forwarded export's address points at the forwarding text, inside the export directory.
+				const bool forwarded = rva >= dir.VirtualAddress && rva - dir.VirtualAddress < dir.Size;
+				if (!rva || forwarded || !Fits(rva, size, imageSize))
+					return EXPORT_MISSING;
+				memcpy(out, base + rva, size);
+				return EXPORT_FOUND;
+			}
 		}
-		if (info.builtApiMajor != CIV_HOST_API_MAJOR)
+		__except (EXCEPTION_EXECUTE_HANDLER)
 		{
-			*status = CIV_PLUGIN_OTHER_MAJOR;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for Bazaar API %d.%d, which this Bazaar (API %d.%d) cannot run.",
-				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-			return problem;
 		}
-		if (info.builtApiMinor > CIV_HOST_API_MINOR)
+		return EXPORT_MISSING;
+	}
+
+	// Windows maps the file without running any of it or loading the DLLs it imports, so a refused plugin never runs.
+	bool RefusedForApiVersion(CivPluginRecord& rec)
+	{
+		HMODULE image = LoadLibraryExA(rec.path.c_str(), 0, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+		if (!image)
 		{
-			*status = CIV_PLUGIN_NEWER_API;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for a newer Bazaar (API %d.%d); this Bazaar is API %d.%d.",
-				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-			return problem;
+			Refuse(rec, CIV_PLUGIN_FILE_NOT_LOADED, Format("Windows could not open the file (error %lu).", GetLastError()));
+			return true;
 		}
-		return std::string();
+		CivApiVersion built = {0, 0};
+		const ExportRead read = CopyExportedData(image, CIV_PLUGIN_API_VERSION_NAME, &built, sizeof(built));
+		FreeLibrary(image);
+		if (read == EXPORT_64_BIT)
+		{
+			Refuse(rec, CIV_PLUGIN_FILE_NOT_LOADED, "It is a 64-bit DLL, and Civilization V can only load 32-bit ones.");
+			return true;
+		}
+		if (read == EXPORT_MISSING)
+		{
+			Refuse(rec, CIV_PLUGIN_NO_API_VERSION, "The file does not say which Bazaar it was built for (it has no "
+				CIV_PLUGIN_API_VERSION_NAME "), so it was built for an older Bazaar or is not a plugin.");
+			return true;
+		}
+		rec.builtApiMajor = built.major;
+		rec.builtApiMinor = built.minor;
+		if (built.major != CIV_HOST_API_MAJOR)
+		{
+			Refuse(rec, CIV_PLUGIN_OTHER_MAJOR, Format("Built for Bazaar API %d.%d, which this Bazaar (API %d.%d) cannot run.",
+				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
+			return true;
+		}
+		if (built.minor > CIV_HOST_API_MINOR)
+		{
+			Refuse(rec, CIV_PLUGIN_NEWER_API, Format("Built for a newer Bazaar (API %d.%d); this Bazaar is API %d.%d.",
+				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
+			return true;
+		}
+		return false;
 	}
 
 	void LoadOne(const std::string& requested)
@@ -632,6 +707,8 @@ namespace
 			Refuse(s_plugins[index], CIV_PLUGIN_STILL_IN_MEMORY, "It could not be shut down safely earlier, so it stays off until you restart Civilization V.");
 			return;
 		}
+		if (RefusedForApiVersion(s_plugins[index]))
+			return;
 
 		// Lets a plugin's own helper DLLs load from its folder rather than the game's.
 		HMODULE module = LoadLibraryExA(path.c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -652,15 +729,13 @@ namespace
 
 		// A plugin may keep this pointer for as long as its DLL is loaded.
 		CivHostInfo* host = new CivHostInfo;
-		host->apiMajor = CIV_HOST_API_MAJOR;
-		host->apiMinor = CIV_HOST_API_MINOR;
 		host->pluginIndex = index;
 		host->RegisterHook = &RegisterHook;
 		host->Log = &PluginLog;
 		host->RegisterHandHook = &RegisterHandHook;
 		s_plugins[index].module = module;
 		s_plugins[index].host = host;
-		CivPluginInfo info = { 0, 0, 0, 0 };
+		CivPluginInfo info = { 0, 0 };
 		EntryCall call = { entry, host, &info, false };
 		DiscardPending();
 		s_loadingConflict = false;
@@ -671,8 +746,6 @@ namespace
 		if (info.name && *info.name)
 			rec.name = info.name;
 		rec.version = info.version ? info.version : "";
-		rec.builtApiMajor = info.builtApiMajor;
-		rec.builtApiMinor = info.builtApiMinor;
 
 		if (!ran)
 		{
@@ -683,12 +756,10 @@ namespace
 			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
 			return;
 		}
-		CivPluginStatus status = CIV_PLUGIN_LOADED;
-		const std::string problem = RefusalReason(call.accepted, info, &status);
-		if (!problem.empty())
+		if (!call.accepted)
 		{
 			DiscardPending();
-			Refuse(rec, status, problem);
+			Refuse(rec, CIV_PLUGIN_ENTRY_DECLINED, "Declined to load.");
 			Unload(index);
 			return;
 		}

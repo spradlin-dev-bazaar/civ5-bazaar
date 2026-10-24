@@ -8,7 +8,12 @@
 
 #include <stdexcept>
 
+// toy_ordinals exports only what its .def file lists, with ordinals out of name order.
+#if defined(TOY_ORDINALS)
+#define TOY_EXPORT extern "C"
+#else
 #define TOY_EXPORT extern "C" __declspec(dllexport)
+#endif
 
 TOY_EXPORT ToyBeforeCallsFn ToyBeforeCalls;
 TOY_EXPORT ToyRegisterLateFn ToyRegisterLate;
@@ -23,15 +28,25 @@ TOY_EXPORT ToyBreakOnNextCallFn ToyBreakOnNextCall;
 TOY_EXPORT ToyStartThreadFn ToyStartThread;
 TOY_EXPORT ToyLeaveThreadRunningFn ToyLeaveThreadRunning;
 
+#if defined(TOY_NEWER) || defined(TOY_NEWER_IMPORTS)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1};
+#elif defined(TOY_MAJOR)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR + 1, 0};
+#elif defined(TOY_OLDER)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1};
+#elif defined(TOY_ORDINALS)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR};
+#elif !defined(TOY_NO_VERSION)
+CIV_PLUGIN_EXPORT_API_VERSION;
+#endif
+
 static const CivHostInfo* s_host = 0;
 static int s_beforeCalls = 0;
 
-static void Describe(CivPluginInfo* info, const char* name, int major, int minor)
+static void Describe(CivPluginInfo* info, const char* name)
 {
 	info->name = name;
 	info->version = "1.0";
-	info->builtApiMajor = major;
-	info->builtApiMinor = minor;
 }
 
 static int Register(int hookId, int kind, void* fn)
@@ -141,7 +156,7 @@ static void AfterName(const FakeUnit*, const std::string*& result)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Basic");
 	s_host->Log(s_host->pluginIndex, "starting");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
@@ -190,7 +205,7 @@ static int ReplaceGrow(int (*original)(const FakeUnit*, int), const FakeUnit* se
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Second", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Second");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_REPLACE, (void*)&ReplaceSubtract);
@@ -254,7 +269,7 @@ static void AfterUnannounced(int, int, int& result)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Shapes", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Shapes");
 	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
 	Register(CivHooks::FakeUnit_Scale::ID, CIV_HOOK_AFTER, (void*)&AfterScale);
 	Register(CivHooks::FakeUnit_Level::ID, CIV_HOOK_AFTER, (void*)&AfterLevel);
@@ -290,15 +305,16 @@ static int ReplaceGrow(int (*)(const FakeUnit*, int), const FakeUnit*, int)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Conflict", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Conflict");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	Register(CivHooks::FakeUnit_Grow::ID, CIV_HOOK_REPLACE, (void*)&ReplaceGrow);
 	LogResult("replace result", Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify));
 	return true;
 }
 
-#elif defined(TOY_NEWER) || defined(TOY_MAJOR)
+#elif defined(TOY_NEWER) || defined(TOY_MAJOR) || defined(TOY_NO_VERSION)
 
+// Bazaar must refuse these toys before running them; the log line and hooks show it if it does not.
 static void AfterAdd(const FakeUnit*, int, int, int& result)
 {
 	result = 999999;
@@ -308,10 +324,13 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 #if defined(TOY_NEWER)
-	Describe(info, "Toy Newer", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1);
+	Describe(info, "Toy Newer");
+#elif defined(TOY_MAJOR)
+	Describe(info, "Toy Major");
 #else
-	Describe(info, "Toy Major", CIV_HOST_API_MAJOR + 1, 0);
+	Describe(info, "Toy No Version");
 #endif
+	host->Log(host->pluginIndex, "starting");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	return true;
@@ -328,7 +347,7 @@ static void AfterAdd(const FakeUnit*, int, int, int& result)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Fault");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	return true;
 }
@@ -344,7 +363,7 @@ static int ReplaceLevel(int (*)(const FakeUnit*), const FakeUnit*)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Fault Replace", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Fault Replace");
 	Register(CivHooks::FakeUnit_Level::ID, CIV_HOOK_REPLACE, (void*)&ReplaceLevel);
 	return true;
 }
@@ -361,9 +380,9 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 #if defined(TOY_FAULT_BEFORE)
-	Describe(info, "Toy Fault Before", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Fault Before");
 #else
-	Describe(info, "Toy Fault Kept", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Fault Kept");
 #endif
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
 	return true;
@@ -374,7 +393,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Kept", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Kept");
 	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
 	return true;
 }
@@ -384,7 +403,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Entry Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Entry Fault");
 	volatile int zero = 0;
 	return 10 / zero == 1;
 }
@@ -394,7 +413,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Entry Break", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Entry Break");
 	__debugbreak();
 	return true;
 }
@@ -408,7 +427,7 @@ static void AfterSquare(int, int&)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Bench", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Bench");
 	Register(CivHooks::Square::ID, CIV_HOOK_AFTER, (void*)&AfterSquare);
 	return true;
 }
@@ -448,7 +467,7 @@ TOY_EXPORT void ToyBreakOnNextCall()
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Reentrant", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Reentrant");
 	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
 	return true;
 }
@@ -502,7 +521,7 @@ TOY_EXPORT void ToyLeaveThreadRunning()
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Threads", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Threads");
 	s_ownShutdown = &StopThread;
 	return true;
 }
@@ -518,12 +537,12 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 #if defined(TOY_DECLINE)
-	Describe(info, "Toy Decline", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Decline");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	return false;
 #else
-	Describe(info, "Toy Late Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Late Fault");
 	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	volatile int zero = 0;
@@ -551,7 +570,7 @@ static int ReplaceRangeSecond(int (*)(const FakeUnit*), const FakeUnit*)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Bad Hooks", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Bad Hooks");
 	LogResult("unknown id", Register(1000000, CIV_HOOK_AFTER, (void*)&AfterAdd));
 	LogResult("negative id", Register(-1, CIV_HOOK_AFTER, (void*)&AfterAdd));
 	LogResult("kind past the last", Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_REPLACE + 1, (void*)&AfterAdd));
@@ -575,7 +594,7 @@ static void AfterRange(const FakeUnit*, int&)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Throw", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Throw");
 	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
 	return true;
 }
@@ -593,7 +612,7 @@ static bool BeforeSubtract(const FakeUnit*, int a, int, int& result)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Veto", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Veto");
 	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_BEFORE, (void*)&BeforeSubtract);
 	return true;
 }
@@ -603,7 +622,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy No Shutdown", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy No Shutdown");
 	return true;
 }
 
@@ -661,13 +680,13 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 #if defined(TOY_HAND)
-	Describe(info, "Toy Hand", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Hand");
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&KeepsSlot);
 	RegisterHand(CIV_HAND_POPUP_RAISED, (void*)&HeardPopup);
 	RegisterHand(CIV_HAND_DEAL_RESOLVED, (void*)&HeardDeal);
 	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
 #else
-	Describe(info, "Toy Hand Second", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Hand Second");
 #endif
 	RegisterHand(CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER, (void*)&PlaysPlayer);
 	RegisterHand(CIV_HAND_NOTIFICATION_ADDED, (void*)&HeardNotification);
@@ -686,7 +705,7 @@ static bool FaultWhenAsked(int)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Hand Fault", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Hand Fault");
 	RegisterHand(CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER, (void*)&FaultWhenAsked);
 	return true;
 }
@@ -716,12 +735,37 @@ static void HeardOrdersCancelled(CvUnit*, int reason)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Hand Replace", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Hand Replace");
 	Register(CivHooks::FakeUnit_CancelOrders::ID, CIV_HOOK_REPLACE, (void*)&ReplaceCancelOrders);
 	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRange);
 	Register(CivHooks::FakeUnit_Reach::ID, CIV_HOOK_REPLACE, (void*)&ReplaceReach);
 	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
 	return true;
+}
+
+#elif defined(TOY_OLDER) || defined(TOY_ORDINALS)
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+#if defined(TOY_OLDER)
+	Describe(info, "Toy Older");
+#else
+	Describe(info, "Toy Ordinals");
+#endif
+	return true;
+}
+
+#elif defined(TOY_NEWER_IMPORTS)
+
+// Provided by no DLL, as a function an older Bazaar lacks would be: Windows cannot load this toy at all.
+extern "C" __declspec(dllimport) int ToyAbsentFunction();
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Newer Imports");
+	return ToyAbsentFunction() == 0;
 }
 
 #elif defined(TOY_NO_ENTRY)

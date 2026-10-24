@@ -8,6 +8,8 @@
 
 #define PLUGIN_EXPORT extern "C" __declspec(dllexport)
 
+CIV_PLUGIN_EXPORT_API_VERSION;
+
 static const CivHostInfo* s_host = 0;
 
 // Writes a line to Logs\Bazaar.log, headed with this plugin's name.
@@ -58,12 +60,6 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	s_host = host;
 	plugin->name = "Template Plugin";
 	plugin->version = "1";
-	plugin->builtApiMajor = CIV_HOST_API_MAJOR;
-	plugin->builtApiMinor = CIV_HOST_API_MINOR;
-	// An older Bazaar lacks some of what this plugin uses. Stop here; Bazaar then refuses the plugin and names both versions.
-	if (host->apiMajor != CIV_HOST_API_MAJOR || host->apiMinor < CIV_HOST_API_MINOR)
-		return true;
-
 	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
 	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame),

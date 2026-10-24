@@ -20,6 +20,14 @@ namespace
 		return line;
 	}
 
+	// Mirrors the host's line for a plugin that loaded.
+	std::string LoadedLine(const char* pluginName, int major, int minor)
+	{
+		char line[128];
+		_snprintf_s(line, sizeof(line), _TRUNCATE, "Plugin %s 1.0 loaded (built for API %d.%d).", pluginName, major, minor);
+		return line;
+	}
+
 	int AfterHookCount(int hookId)
 	{
 		int count = 0;
@@ -45,15 +53,29 @@ namespace
 void TestLoading()
 {
 	const char* const names[] = {"toy_basic.dll", "toy_second.dll", "toy_shapes.dll", "toy_conflict.dll", "toy_newer.dll",
-		"toy_major.dll", "toy_no_entry.dll", "toy_missing.dll", "toy_entry_fault.dll"};
+		"toy_major.dll", "toy_no_version.dll", "toy_newer_imports.dll", "toy_older.dll", "toy_ordinals.dll", "toy_no_entry.dll",
+		"toy_missing.dll", "toy_entry_fault.dll"};
 	StartWith(names);
 
 	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_LOADED), "a current plugin loads");
 	Check(HasStatus("toy_second.dll", CIV_PLUGIN_LOADED), "a second plugin loads beside it");
 	Check(HasStatus("toy_newer.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a newer host is refused");
 	Check(ReportRow("toy_newer.dll").problems.find("newer Bazaar") != std::string::npos, "the Plugins screen says why a plugin built for a newer host was refused");
-	Check(LogHas("[Toy Newer] shutting down"), "a refused plugin is shut down before it is unloaded");
+	Check(!LogHas("[Toy Newer]"), "a plugin built for a newer host never runs: its version is read from its file");
 	Check(HasStatus("toy_major.dll", CIV_PLUGIN_OTHER_MAJOR), "a plugin built for another major version is refused");
+	Check(!LogHas("[Toy Major]"), "a plugin built for another major version never runs");
+	Check(HasStatus("toy_no_version.dll", CIV_PLUGIN_NO_API_VERSION), "a plugin that does not export its API version is refused");
+	Check(ReportRow("toy_no_version.dll").problems.find("which Bazaar") != std::string::npos, "the Plugins screen says the plugin does not say which Bazaar it was built for");
+	Check(!LogHas("[Toy No Version]"), "a plugin that does not export its API version never runs");
+	Check(HasStatus("toy_newer_imports.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a newer host that uses a function this host lacks is refused by its version, not by a Windows load error");
+	const HMODULE unloadable = LoadLibraryExA(OutFile("toy_newer_imports.dll").c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+	Check(!unloadable, "Windows itself cannot load toy_newer_imports.dll, so only its version could have refused it");
+	if (unloadable)
+		FreeLibrary(unloadable);
+	Check(LogHas(LoadedLine("Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR).c_str()), "the host reads the version a plugin exports");
+	Check(HasStatus("toy_older.dll", CIV_PLUGIN_LOADED), "a plugin built for an older minor version loads");
+	Check(LogHas(LoadedLine("Toy Older", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1).c_str()), "the host reads an older plugin's own version");
+	Check(HasStatus("toy_ordinals.dll", CIV_PLUGIN_LOADED), "a plugin whose exports are numbered out of name order loads: its version is found by name");
 	Check(HasStatus("toy_no_entry.dll", CIV_PLUGIN_NO_ENTRY), "a DLL without the entry point is refused");
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
 	Check(HasStatus("toy_entry_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD), "a plugin that faults while loading is refused");
@@ -207,8 +229,6 @@ void TestTurnedAwayAfterRegistering()
 	Check(LogHas("[Toy Decline] shutting down"), "a plugin that declined is shut down");
 	Check(!IsInMemory("toy_decline.dll"), "a plugin that declined is released");
 	CheckTurnedAwayAfterRegistering("toy_late_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD, "a plugin that faults after registering a hook is refused");
-	CheckTurnedAwayAfterRegistering("toy_newer.dll", CIV_PLUGIN_NEWER_API, "a plugin built for a newer host is refused after registering a hook");
-	CheckTurnedAwayAfterRegistering("toy_major.dll", CIV_PLUGIN_OTHER_MAJOR, "a plugin built for another major version is refused after registering a hook");
 }
 
 void TestVetoAndReplace()

@@ -11,7 +11,7 @@ Bazaar replaces Civilization V's core DLL and loads plugin DLLs that hook the ga
 ## 1. Find the SDK and read the guide
 
 - The SDK is the folder named by the `BAZAAR_SDK` environment variable. If that is unset, ask the user where the Bazaar SDK is. In Bazaar's own repository it is `sdk\out\Bazaar SDK`, which running `sdk\build_sdk.py` after a host build lays out.
-- Read `%BAZAAR_SDK%\README.md` in full before writing any code, and `%BAZAAR_SDK%\hand-placed-hooks.md` when choosing hooks. The parameter rules, vetoes and the version check are easy to get subtly wrong, and wrong code compiles fine.
+- Read `%BAZAAR_SDK%\README.md` in full before writing any code, and `%BAZAAR_SDK%\hand-placed-hooks.md` when choosing hooks. The parameter rules and vetoes are easy to get subtly wrong, and wrong code compiles fine.
 - Check the guide's "What you need" against the machine: `%VS90COMNTOOLS%` set (Visual C++ 2008), the Civilization V SDK, and ModBuddy's build steps in `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy\Civ5Mod.targets`. If something is missing, tell the user what to install, using the guide's links. Installing software is their call.
 
 ## 2. Make the plugin folder with the script

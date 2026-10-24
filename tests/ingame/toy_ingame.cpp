@@ -9,6 +9,12 @@
 
 #define TOY_EXPORT extern "C" __declspec(dllexport)
 
+#if defined(TOY_NEWER)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1};
+#else
+CIV_PLUGIN_EXPORT_API_VERSION;
+#endif
+
 static const CivHostInfo* s_host = 0;
 
 static void Log(const char* format, ...)
@@ -21,12 +27,10 @@ static void Log(const char* format, ...)
 	s_host->Log(s_host->pluginIndex, line);
 }
 
-static void Describe(CivPluginInfo* info, const char* name, int major, int minor)
+static void Describe(CivPluginInfo* info, const char* name)
 {
 	info->name = name;
 	info->version = "1.0";
-	info->builtApiMajor = major;
-	info->builtApiMinor = minor;
 }
 
 typedef int (*ScoreFn)(const CvPlayer*, bool, bool);
@@ -60,7 +64,7 @@ static int ReplaceScore(ScoreFn original, const CvPlayer* self, bool bFinal, boo
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Gold", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Gold");
 	Register(CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn, "before CvPlayer::doTurn");
 	Register(CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_AFTER, (void*)&AfterDoTurn, "after CvPlayer::doTurn");
 	Register(CivHooks::CvPlayer_GetScore::ID, CIV_HOOK_REPLACE, (void*)&ReplaceScore, "replace CvPlayer::GetScore");
@@ -82,7 +86,7 @@ static int ReplaceScore(ScoreFn, const CvPlayer*, bool, bool)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Rival", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Rival");
 	Register(CivHooks::CvPlayer_GetScore::ID, CIV_HOOK_REPLACE, (void*)&ReplaceScore, "replace CvPlayer::GetScore");
 	return true;
 }
@@ -101,7 +105,7 @@ static void AfterDoTurn(CvPlayer* self)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Crash", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Crash");
 	Register(CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_AFTER, (void*)&AfterDoTurn, "after CvPlayer::doTurn");
 	return true;
 }
@@ -111,7 +115,8 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Newer", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1);
+	Describe(info, "Toy Newer");
+	Log("this ran, so Bazaar did not refuse it by its version first");
 	return true;
 }
 
@@ -176,7 +181,7 @@ static void AfterRegisterGame(lua_State* L)
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Hand", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Hand");
 	RegisterHand(CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER, (void*)&PlaysPlayer, "IsPluginControlledPlayer");
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&KeepsSlot, "KeepDeadSlotOpen");
 	RegisterHand(CIV_HAND_POPUP_RAISED, (void*)&HeardPopup, "PopupRaised");
@@ -206,7 +211,7 @@ static int ReplaceAddNotification(AddNotificationFn original, CvNotifications* s
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-	Describe(info, "Toy Hand Replace", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Describe(info, "Toy Hand Replace");
 	Register(CivHooks::CvNotifications_Add::ID, CIV_HOOK_REPLACE, (void*)&ReplaceAddNotification, "replace CvNotifications::Add");
 	return true;
 }

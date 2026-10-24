@@ -64,7 +64,7 @@ For example, to make every player's score count double, you add an after-hook to
 
 2. Copy `Build\Template Plugin` into your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
 3. In the game's Mods menu, enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and Template Plugin, then start a game.
-4. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line like `Plugin Template Plugin 1 loaded (built for API 0.2).` From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting.
+4. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line that starts with `Plugin Template Plugin 1 loaded`. From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting.
 
 ## Step 2: make it your own
 
@@ -102,7 +102,7 @@ When the game enables mods, Bazaar loads every plugin listed in `DllPlugins`, on
 
 ### The entry function: CivPluginEntry
 
-When Bazaar loads your plugin, it calls the function your DLL exports as `CivPluginEntry`, once. In it, your plugin fills in its name and version, checks that this Bazaar is new enough, and registers its hooks. Here is the template's:
+When Bazaar loads your plugin, it calls the function your DLL exports as `CivPluginEntry`, once. In it, your plugin fills in its name and version and registers its hooks. Here is the template's:
 
 ```cpp
 PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin)
@@ -110,12 +110,6 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	s_host = host;
 	plugin->name = "Template Plugin";
 	plugin->version = "1";
-	plugin->builtApiMajor = CIV_HOST_API_MAJOR;
-	plugin->builtApiMinor = CIV_HOST_API_MINOR;
-	// An older Bazaar lacks some of what this plugin uses. Stop here; Bazaar then refuses the plugin and names both versions.
-	if (host->apiMajor != CIV_HOST_API_MAJOR || host->apiMinor < CIV_HOST_API_MINOR)
-		return true;
-
 	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
 	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame),
@@ -126,8 +120,8 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
 - **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook` and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
-- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version, and the version of Bazaar's plugin API it was built against, `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR`.
-- **The `if`** returns early when this Bazaar is too old for the plugin. It returns `true` on purpose: Bazaar has the version numbers set just above, compares them itself, and refuses the plugin with a message naming both versions. Returning `false` would show only "Declined to load." and hide the reason. See [Bazaar versions](#bazaar-versions).
+- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version.
+- **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
 - **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration, and `(void*)&BeforeDoTurn` passes the hook function's address; [Registering a hook](#registering-a-hook) explains each argument. Hooks can only be registered from `CivPluginEntry`.
 - **Returning `true`** loads the plugin. Returning `false` tells Bazaar not to load it, and the Plugins screen shows it as Not loaded: "Declined to load."
 
@@ -418,11 +412,11 @@ Most plugins can leave this part until one of these comes up.
 
 ### Bazaar versions
 
-Bazaar's plugin API has a version in two parts, major and minor: `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR` in `CivPluginApi.h`. Your plugin reports the version it was built against in `CivPluginEntry`.
+Bazaar's plugin API has a version in two parts, major and minor: `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR` in `CivPluginApi.h`. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;` exports the version your plugin was built against. Every plugin needs it, written once, outside any function, in one of its `.cpp` files.
 
-Bazaar runs a plugin built for its own version or an older one. It refuses a plugin built for a newer version, or for a different major version, and says so in its log, on the Plugins screen and in a notice in the game.
+Bazaar runs a plugin built for its own version or an older one. It refuses a plugin built for a newer version, or for a different major version, and says so in its log, on the Plugins screen and in a notice in the game. Before 1.0, a new Bazaar may also change the API in a way that needs your plugin rebuilt with the new SDK.
 
-Bazaar only learns which version your plugin was built for from `CivPluginEntry`, so on an older Bazaar that function still runs, and parts of `host` may be missing: an older Bazaar's `CivHostInfo` struct ends before the newer members, such as `RegisterHandHook`. That is why the template checks the version first and returns before using anything else. Bazaar then refuses the plugin with a message naming both versions.
+Bazaar reads the version from your DLL file before running any of your plugin's code, so a plugin it refuses never runs. That includes a plugin that uses functions an older Bazaar lacks, which Windows could not load: Bazaar refuses it with a message naming both versions instead. A DLL without the line is refused as built for an older Bazaar.
 
 ### Cleaning up: CivPluginShutdown
 
@@ -437,7 +431,7 @@ PLUGIN_EXPORT void CivPluginShutdown()
 
 Bazaar calls it before it unloads your plugin: when the player goes back to the main menu, or reloads the plugins from the Plugins screen. Bazaar removes your hooks itself.
 
-Bazaar also calls it after your plugin crashed or was refused, so it must work even if `CivPluginEntry` stopped partway.
+Bazaar also calls it when your plugin crashed or was refused after `CivPluginEntry` ran, so it must work even if `CivPluginEntry` stopped partway.
 
 If one of your threads is still running when it returns, Bazaar leaves your DLL in memory, because unloading it would crash that thread, and your plugin stays off until Civilization V restarts. The same happens if `CivPluginShutdown` itself crashes.
 
