@@ -17,7 +17,16 @@ import generate  # noqa: E402
 
 
 def function(
-    name, displayname=None, cls=None, namespaces=(), linkage="EXTERNAL", file="CvUnit.cpp", const=False, params=()
+    name,
+    displayname=None,
+    cls=None,
+    namespaces=(),
+    linkage="EXTERNAL",
+    file="CvUnit.cpp",
+    const=False,
+    params=(),
+    result_type="void",
+    static=False,
 ):
     return {
         "name": name,
@@ -28,6 +37,8 @@ def function(
         "file": file,
         "const": const,
         "params": [{"type": t} for t in params],
+        "result_type": result_type,
+        "static_method": static,
     }
 
 
@@ -135,23 +146,66 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(registry.claim(function("C"))[1], 6)
         registry.save()
         reread = generate.Registry(self.path)
-        self.assertEqual(reread.entries["B()"], (5, "B"), "a function no longer claimed keeps its row")
+        self.assertEqual(reread.entries[("B()", "")], (5, "B"), "a function no longer claimed keeps its row")
         self.assertEqual(reread.claim(function("D"))[1], 7)
 
     def test_the_saved_list_is_in_id_order_and_reads_back_the_same(self):
         self.write("10\tA\tA()\n9\tB\tB()\n")
         registry = generate.Registry(self.path)
-        registry.claim(function("C"))
+        registry.claim(function("C", result_type="int"))
         registry.save()
         with open(self.path, "rb") as f:
-            self.assertEqual(f.read(), b"9\tB\tB()\n10\tA\tA()\n11\tC\tC()\n")
+            self.assertEqual(f.read(), b"9\tB\tB()\n10\tA\tA()\n11\tC\tC()\tint\n")
         self.assertEqual(generate.Registry(self.path).entries, registry.entries)
 
+    def test_a_row_written_before_shapes_were_recorded_keeps_its_id_and_takes_the_shape(self):
+        self.write("0\tA\tA()\n")
+        registry = generate.Registry(self.path)
+        self.assertEqual(registry.claim(function("A", result_type="int"))[1], 0)
+        registry.save()
+        with open(self.path, "rb") as f:
+            self.assertEqual(f.read(), b"0\tA\tA()\tint\n")
+
+    def test_a_function_whose_return_type_or_staticness_changes_gets_a_new_id(self):
+        self.write("0\tA\tA()\tint\n")
+        registry = generate.Registry(self.path)
+        for fn in (function("A", result_type="bool"), function("A", result_type="int", static=True)):
+            key, hook_id, name = registry.claim(fn)
+            self.assertEqual(key, "A()")
+            self.assertNotEqual((hook_id, name), (0, "A"))
+        self.assertEqual(registry.entries[("A()", "int")], (0, "A"), "the old shape keeps its row")
+        self.assertEqual(registry.claimed, {1, 2})
+        self.assertEqual(registry.reshaped, 2)
+
+    def test_the_plugin_header_leaves_out_a_gone_hook_and_names_the_one_that_replaced_it(self):
+        self.write("0\tA\tA()\tint\n1\tB\tB()\tint\n")
+        registry = generate.Registry(self.path)
+        _, new_id, new_name = registry.claim(function("A", result_type="bool"))
+        hooks = [{"hook_id": new_id, "signature": "bool A()"}]
+        generate.write_plugin_header(types.SimpleNamespace(build_dir=self.folder), registry, hooks)
+        with open(os.path.join(self.folder, "sdk", "CivHooks.h")) as f:
+            header = f.read()
+        self.assertIn("\tnamespace %s { enum { ID = %d }; } // bool A()\n" % (new_name, new_id), header)
+        self.assertIn(
+            "\t// A (id 0) is no longer a hook point: its function changed, and its hook is now %s.\n" % new_name,
+            header,
+        )
+        self.assertIn("\t// B (id 1) is no longer a hook point.\n", header)
+        self.assertNotIn("namespace A {", header)
+        self.assertNotIn("namespace B {", header)
+
     def test_a_repeated_id_name_or_function_is_refused(self):
-        for text in ("0\tA\tA()\n0\tB\tB()\n", "0\tA\tA()\n1\tA\tB()\n", "0\tA\tA()\n1\tB\tA()\n"):
+        for text in (
+            "0\tA\tA()\n0\tB\tB()\n",
+            "0\tA\tA()\n1\tA\tB()\n",
+            "0\tA\tA()\n1\tB\tA()\n",
+            "0\tA\tA()\tint\n1\tB\tA()\tint\n",
+        ):
             self.write(text)
             with self.assertRaises(RuntimeError, msg=repr(text)):
                 generate.Registry(self.path)
+        self.write("0\tA\tA()\tint\n1\tA_bool\tA()\tbool\n")
+        self.assertEqual(len(generate.Registry(self.path).entries), 2, "one function in two shapes is two rows")
 
     def test_a_line_that_is_not_id_name_function_is_refused(self):
         for text in ("x\tA\tA()\n", "0\tA\n", "\u00b2\tA\tA()\n"):
@@ -213,8 +267,8 @@ class EditProducerTest(unittest.TestCase):
 
     def test_a_pure_virtual_original_is_not_pure_and_an_operator_takes_its_word(self):
         data = b"class CvUnit {\n\tvirtual void f() = 0;\n\tbool operator==(int x);\n};"
-        fn, _ = self.member(data, "f", ["virtual", "void", "f", "(", ")", "=", "0"])
-        self.assertEqual(generate.orig_declaration(fn, generate.PathDict())[2], "; virtual void CivOrig_f ( )")
+        fn, _ = self.member(data, "f", ["void", "f", "(", ")", "=", "0"])
+        self.assertEqual(generate.orig_declaration(fn, generate.PathDict())[2], "; void CivOrig_f ( )")
         op, _ = self.member(data, "operator==", ["bool", "operator", "==", "(", "int", "x", ")"])
         self.assertEqual(generate.orig_declaration(op, generate.PathDict())[2], "; bool CivOrigOp_eq ( int x )")
 
@@ -255,6 +309,12 @@ class EditProducerTest(unittest.TestCase):
         fn["decl"] = {"file": "unit.h"}
         self.assertEqual(generate.free_function_declarations(fn, data, True), "")
 
+    def test_a_declaration_that_would_put_an_if_mid_line_is_refused(self):
+        data = b"int Helper(int a\n#if X\n, int b\n#endif\n)\n{"
+        fn = self.free(data, "Helper", params=[("int a", "a"), ("int b", "b")])
+        with self.assertRaises(generate.Skip):
+            generate.free_function_declarations(fn, data, True)
+
     def test_a_qualified_free_function_declares_its_original_inside_its_namespace(self):
         data = b"void Gfx::draw(int n)\n{"
         fn = self.free(data, "draw", namespaces=["Gfx"], params=[("int n", "n")])
@@ -282,6 +342,13 @@ class EditProducerTest(unittest.TestCase):
         edits = generate.PathDict()
         self.assertEqual(generate.mark_exports(functions, generate.PathDict(), edits), (2, 1))
         self.assertEqual(edits[path], [(0, 0, "CIV_HOST_API ")])
+
+
+class PathDictTest(unittest.TestCase):
+    def test_a_path_is_found_in_any_case_and_with_either_slash(self):
+        files = generate.PathDict()
+        files[os.path.join(tempfile.gettempdir(), "Engine", "CvUnit.h")] = 1
+        self.assertEqual(files[os.path.join(tempfile.gettempdir(), "engine", "CVUNIT.H").replace("\\", "/")], 1)
 
 
 class SignatureTest(unittest.TestCase):

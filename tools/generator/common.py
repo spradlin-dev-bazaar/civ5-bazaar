@@ -48,6 +48,10 @@ CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS", "_MT", "_DLL", "_CPPU
 
 PLUGIN_DEFINES = ["CIV_HOST_API=__declspec(dllimport)"] + LAYOUT_DEFINES + ENGINE_DEFINES
 
+# The host's mod, which the plugin and Lua mod templates depend on.
+HOST_MOD_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
+HOST_MOD_NAME = "Bazaar Multi-DLL Mod Loader"
+
 
 class Project:
     """A tree of C++ sources to hook: the engine, or a small test fixture."""

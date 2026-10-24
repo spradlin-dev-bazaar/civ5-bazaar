@@ -494,9 +494,11 @@ void CivHostOnGameUpdate()
 	CvNotifications* notifications = GET_PLAYER(active).GetNotifications();
 	if (!notifications)
 		return;
-	for (size_t i = 0; i < s_pendingNotices.size(); ++i)
-		notifications->Add(NOTIFICATION_GENERIC, s_pendingNotices[i].second.c_str(), s_pendingNotices[i].first.c_str(), -1, -1, -1);
-	s_pendingNotices.clear();
+	// A plugin's notification hook can crash here, and the crash's own notice must not move the strings being sent.
+	std::vector<std::pair<std::string, std::string> > sending;
+	sending.swap(s_pendingNotices);
+	for (size_t i = 0; i < sending.size(); ++i)
+		notifications->Add(NOTIFICATION_GENERIC, sending[i].second.c_str(), sending[i].first.c_str(), -1, -1, -1);
 }
 
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.

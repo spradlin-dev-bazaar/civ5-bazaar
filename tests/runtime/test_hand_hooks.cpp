@@ -15,6 +15,14 @@ namespace
 	{
 		return text.find(part) != std::string::npos;
 	}
+
+	int LogCount(const char* text)
+	{
+		int count = 0;
+		for (int i = LogIndex(text); i >= 0; i = LogIndex(text, i + 1))
+			++count;
+		return count;
+	}
 }
 
 void TestHandHooks()
@@ -44,7 +52,7 @@ void TestHandHooks()
 	team.push_back(1);
 	team.push_back(6);
 	CivHandPopupRaised(team, 11, 0, 0, 0, false, true, 0);
-	Check(LogHas("[Toy Hand] popup 1 11 0 0 0 0 1 []") && LogHas("[Toy Hand] popup 6 11 0 0 0 0 1 []"),
+	Check(LogCount("[Toy Hand] popup 1 11 0 0 0 0 1 []") == 1 && LogCount("[Toy Hand] popup 6 11 0 0 0 0 1 []") == 1,
 		"a popup for a team reaches the plugin once for each of the team's players, and missing text arrives empty");
 	CivHandNotificationAdded(1, 7, "A message", "A summary", 4, 5, 6, 8);
 	Check(LoggedInOrder("[Toy Hand] notification 1 7 [A message] [A summary] 4 5 6 8", "[Toy Hand Second] notification 1 7 [A message] [A summary] 4 5 6 8"),
@@ -80,9 +88,13 @@ void TestPossibleConflicts()
 	const CivPluginReportRow replacer = ReportRow("toy_hand_replace.dll");
 	Check(replacer.failed && Contains(replacer.problems, "This plugin replaces FakeUnit::CancelOrders(...), which runs the UnitOrdersCancelled hook that Toy Hand, higher in the list, uses."),
 		"the Plugins screen names the function, the hook and the other plugin");
-	Check(replacer.conflictsWith.size() == 1 && replacer.conflictsWith[0] == "toy_hand.dll", "the Plugins screen knows which plugin it conflicts with");
+	Check(Contains(replacer.problems, "This plugin replaces FakeUnit::PlayedByPlugin(...), which runs the IsPluginControlledPlayer hook"),
+		"each function the conflict runs through is named");
+	Check(replacer.conflictsWith.size() == 1 && replacer.conflictsWith[0] == "toy_hand.dll",
+		"the Plugins screen knows which plugin it conflicts with, once although they conflict at two functions");
 	const CivPluginReportRow user = ReportRow("toy_hand.dll");
-	Check(!user.failed && user.problems.empty() && user.conflictsWith.empty(), "the plugin higher in the list loads with no warning");
+	Check(HasStatus("toy_hand.dll", CIV_PLUGIN_LOADED) && !user.failed && user.problems.empty() && user.conflictsWith.empty(),
+		"the plugin higher in the list loads with no warning");
 	ClearLog();
 	unit.CancelOrders(CIV_ORDERS_NO_PATH);
 	Check(unit.m_notified == CIV_ORDERS_NO_PATH && LogHas("[Toy Hand] orders cancelled"), "the held-back replacement does not run, so the hook inside the original does");
@@ -121,7 +133,8 @@ void TestPossibleConflicts()
 	Check(!chosen.failed && Contains(chosen.problems, "You chose to use this plugin with Toy Hand anyway"), "the Plugins screen says the pair was loaded together by choice");
 	Check(chosen.conflictsWith.size() == 1, "the Plugins screen can still offer to take the choice back");
 	const CivPluginRecord* record = Find("toy_hand_replace.dll");
-	Check(record && record->problems.empty() && record->notes.size() == 1, "the choice is a note for the Plugins screen, not a problem announced in the game");
+	Check(record && record->problems.empty() && record->notes.size() == 2,
+		"the choice is a note for the Plugins screen, one for each function, not a problem announced in the game");
 	ClearLog();
 	unit.CancelOrders(CIV_ORDERS_NO_PATH);
 	Check(unit.m_notified == -1 && !LogHas("[Toy Hand] orders cancelled"), "with both loaded, the replacement runs and the hook inside the original does not");

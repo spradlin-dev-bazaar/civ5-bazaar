@@ -172,9 +172,9 @@ namespace
 		return ran;
 	}
 
-	void LogCrash(const unsigned int* code)
+	void LogCrash(const void* owner)
 	{
-		const std::vector<std::string> lines = CivCrashReport(code);
+		const std::vector<std::string> lines = CivCrashReport(owner);
 		for (size_t i = 0; i < lines.size(); ++i)
 			Log("%s", lines[i].c_str());
 	}
@@ -325,6 +325,12 @@ namespace
 			return CIV_HOOK_NOT_ALLOWED;
 		if (hookId < 0 || hookId >= g_CivHookPointCount || !fn)
 			return CIV_HOOK_BAD_ID;
+		if (!g_CivHookLive[hookId])
+		{
+			Log("Plugin %s asked for hook %d (%s), which this Bazaar no longer has: the function changed or is gone. Rebuild the plugin with the current SDK.",
+				DisplayName(plugin), hookId, g_CivHookPointNames[hookId]);
+			return CIV_HOOK_BAD_ID;
+		}
 		if (kind < CIV_HOOK_BEFORE || kind > CIV_HOOK_REPLACE)
 			return CIV_HOOK_BAD_KIND;
 		if (kind == CIV_HOOK_REPLACE)
@@ -373,6 +379,7 @@ namespace
 			}
 			else if (p.kind == CIV_HOOK_AFTER)
 			{
+				// After-hooks run in reverse load order, so each plugin's goes in front.
 				e->next = hp.after;
 				hp.after = e;
 			}
@@ -409,6 +416,24 @@ namespace
 	{
 		EntryCall& c = *static_cast<EntryCall*>(p);
 		c.accepted = c.entry(c.host, c.info);
+	}
+
+	// A plugin's name and version may point anywhere, even after its entry function crashed partway.
+	// No C++ objects may live in this frame, or __try is not allowed.
+	bool CopyPluginText(const char* text, char* out, size_t size)
+	{
+		out[0] = 0;
+		__try
+		{
+			if (text)
+				strncpy_s(out, size, text, _TRUNCATE);
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			out[0] = 0;
+			return false;
+		}
 	}
 
 	// No C++ objects may live in this frame, or __try is not allowed.
@@ -461,7 +486,6 @@ namespace
 		LONG basePriority;
 	};
 
-	// No C++ objects may live in this frame, or __try is not allowed.
 	// A stack value counts only if it could be a return address into the DLL: the bytes before it are one of
 	// the x86 CALL forms. Ordinary numbers that merely fall inside the DLL's address range then rarely match.
 	bool IsReturnInto(DWORD value, const BYTE* start, const BYTE* end)
@@ -530,8 +554,10 @@ namespace
 	bool ThreadStillInside(HMODULE module)
 	{
 		QueryThreadFn query = (QueryThreadFn)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationThread");
+		if (!query)
+			return true;
 		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-		if (!query || snapshot == INVALID_HANDLE_VALUE)
+		if (snapshot == INVALID_HANDLE_VALUE)
 			return true;
 		const BYTE* start = reinterpret_cast<const BYTE*>(module);
 		const IMAGE_NT_HEADERS* headers = reinterpret_cast<const IMAGE_NT_HEADERS*>(
@@ -755,9 +781,11 @@ namespace
 		const bool ran = GuardedEntry(&call, &code);
 
 		CivPluginRecord& rec = s_plugins[index];
-		if (info.name && *info.name)
-			rec.name = info.name;
-		rec.version = info.version ? info.version : "";
+		char text[256];
+		if (CopyPluginText(info.name, text, sizeof(text)) && *text)
+			rec.name = text;
+		CopyPluginText(info.version, text, sizeof(text));
+		rec.version = text;
 
 		if (!ran)
 		{

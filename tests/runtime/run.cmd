@@ -17,7 +17,7 @@ rem The two layout defines must match common.LAYOUT_DEFINES, or strings and vect
 set FLAGS=/nologo /O2 /Oy /Ob2 /GS- /MD /EHsc /W3 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0 /DCIV_HOST_API= /I"%HERE%..\..\host" /I"%GEN%\src\fixture" /I"%GEN%\sdk"
 cl %FLAGS% /Fo"%OUT%\\" /Fe"%OUT%\harness.exe" "%HERE%harness.cpp" "%HERE%test_plugins.cpp" "%HERE%test_lifecycle.cpp" "%HERE%test_plugins_screen.cpp" "%HERE%test_hand_hooks.cpp" "%GEN%\src\fixture\fake_engine.cpp" "%GEN%\src\fixture\CivHookTable.cpp" "%HERE%..\..\host\CivHostRuntime.cpp" "%HERE%..\..\host\CivHostCrash.cpp" "%HERE%..\..\host\CivHostHand.cpp" "%HERE%..\..\host\CivHostOrder.cpp" "%HERE%..\..\host\CivHostSetup.cpp" >"%OUT%\build.log"
 if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
-for %%T in (BASIC SECOND SHAPES CONFLICT NEWER MAJOR NO_VERSION OLDER FAULT_REPLACE FAULT_BEFORE FAULT_KEPT KEPT ENTRY_FAULT ENTRY_BREAK BENCH REENTRANT THREADS NO_ENTRY DECLINE LATE_FAULT BAD_HOOKS THROW VETO NO_SHUTDOWN HAND HAND_SECOND HAND_FAULT HAND_REPLACE) do (
+for %%T in (BASIC SECOND SHAPES CONFLICT NEWER MAJOR NO_VERSION OLDER FAULT_REPLACE FAULT_BEFORE FAULT_KEPT KEPT ENTRY_FAULT ENTRY_BREAK BENCH REENTRANT THREADS NO_ENTRY DECLINE LATE_FAULT BAD_HOOKS THROW VETO NO_SHUTDOWN HAND HAND_SECOND HAND_FAULT HAND_REPLACE EMPTY_NAME) do (
 	cl %FLAGS% /LD /DTOY_%%T /Fo"%OUT%\toy_%%T.obj" /Fe"%OUT%\toy_%%T.dll" "%HERE%toy_plugins.cpp" >>"%OUT%\build.log"
 	if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
 )
@@ -25,12 +25,20 @@ for %%T in (FAULT OVERFLOW) do (
 	cl %FLAGS% /Zi /LD /DTOY_%%T /Fo"%OUT%\toy_%%T.obj" /Fd"%OUT%\toy_%%T_compile.pdb" /Fe"%OUT%\toy_%%T.dll" "%HERE%toy_plugins.cpp" /link /DEBUG /PDB:"%OUT%\toy_%%T.pdb" >>"%OUT%\build.log"
 	if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
 )
-rem toy_newer_imports links against a DLL that is never built, so Windows cannot load it.
+rem These toys link against a DLL that is never built, so Windows cannot load them.
 (echo LIBRARY toy_absent_host.dll& echo EXPORTS& echo ToyAbsentFunction)>"%OUT%\toy_absent_host.def"
 lib /nologo /machine:x86 /def:"%OUT%\toy_absent_host.def" /out:"%OUT%\toy_absent_host.lib" >>"%OUT%\build.log"
 if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
-cl %FLAGS% /LD /DTOY_NEWER_IMPORTS /Fo"%OUT%\toy_newer_imports.obj" /Fe"%OUT%\toy_newer_imports.dll" "%HERE%toy_plugins.cpp" "%OUT%\toy_absent_host.lib" >>"%OUT%\build.log"
-if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
+for %%T in (NEWER_IMPORTS LOAD_FAILS) do (
+	cl %FLAGS% /LD /DTOY_%%T /Fo"%OUT%\toy_%%T.obj" /Fe"%OUT%\toy_%%T.dll" "%HERE%toy_plugins.cpp" "%OUT%\toy_absent_host.lib" >>"%OUT%\build.log"
+	if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
+)
+rem VS2008 Express builds no 64-bit DLL, so a 64-bit one from Windows stands in. A 32-bit cmd sees the 64-bit folder only as
+rem Sysnative.
+set WIN64=%SystemRoot%\System32
+if exist "%SystemRoot%\Sysnative\version.dll" set WIN64=%SystemRoot%\Sysnative
+copy /y "%WIN64%\version.dll" "%OUT%\toy_64bit.dll" >nul
+if errorlevel 1 (echo could not copy a 64-bit DLL from %WIN64% & exit /b 1)
 (echo LIBRARY toy_ordinals.dll& echo EXPORTS& echo CivPluginShutdown @1& echo CivPluginEntry @2& echo CivPluginApiVersion @3 DATA)>"%OUT%\toy_ordinals.def"
 cl %FLAGS% /LD /DTOY_ORDINALS /Fo"%OUT%\toy_ordinals.obj" /Fe"%OUT%\toy_ordinals.dll" "%HERE%toy_plugins.cpp" /link /DEF:"%OUT%\toy_ordinals.def" >>"%OUT%\build.log"
 if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)

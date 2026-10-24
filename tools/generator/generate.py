@@ -205,6 +205,13 @@ def collapse(code):
     return " ".join(code.split())
 
 
+def one_line(sig):
+    """The signature collapsed onto one line, which an #if inside it cannot be."""
+    if any(DIRECTIVE.match(line) for line in sig.split("\n")):
+        raise Skip("#if inside a free function's signature")
+    return collapse(sig)
+
+
 def qualifier_start(fn, data):
     """Offset where a written qualifier such as `CvTypes::` begins, or the name's own start."""
     before = text(data, fn["def_start"], fn["name_start"])
@@ -227,7 +234,7 @@ def free_function_declarations(fn, data, exported):
         sig = wrapper_signature(fn, data)
         rel_q = q - fn["def_start"]
         rel_end = fn["name_end"] - fn["def_start"]
-        orig_decl = collapse(sig[:rel_q] + orig_name(fn) + sig[rel_end:]) + ";"
+        orig_decl = one_line(sig[:rel_q] + orig_name(fn) + sig[rel_end:]) + ";"
         semantic, lexical = fn["namespaces"], fn["lex_namespaces"]
         if semantic[: len(lexical)] != lexical:
             raise Skip("qualified definition outside its namespace")
@@ -237,7 +244,7 @@ def free_function_declarations(fn, data, exported):
         return namespace_open(inner) + orig_decl + " " + namespace_close(inner) + " "
     if fn["decl"] is None:
         marker = "CIV_HOST_API " if exported else ""
-        return marker + collapse(wrapper_signature(fn, data, keep_defaults=True)) + "; "
+        return marker + one_line(wrapper_signature(fn, data, keep_defaults=True)) + "; "
     return ""
 
 
@@ -289,6 +296,7 @@ def hooked_lines(is_void, self_type, types, names, call):
     if is_void:
         lines.append("\t\t\t\t%s;" % call)
     else:
+        # Only a reference result can be empty: one a veto left unset runs the original after all (CivHookResult).
         lines += ["\t\t\t\tciv_res.Set(%s);" % call, "\t\t\tif (civ_res.Empty())", "\t\t\t\tciv_res.Set(%s);" % call]
     lines.append("\t\t\tCivHookRunAfter(civ_hp, %s, &civ_C::After, &civ_c);" % ID_PLACEHOLDER)
     if not is_void:
@@ -417,48 +425,65 @@ def hook_name(fn, taken):
     return name
 
 
+def hook_shape(fn):
+    """What a plugin's hook depends on besides the key: whether the function is static, and what it returns, as libclang
+    spells it so that reformatting the source changes nothing."""
+    return ("static " if fn["static_method"] else "") + fn["result_type"]
+
+
 class Registry:
-    """The committed id-to-function list. Ids are only ever added."""
+    """The committed id-to-function list. Ids are only ever added; a function whose shape changes gets a new one."""
 
     def __init__(self, path):
         self.path = path
         self.entries = {}
         ids = set()
         self.names = set()
+        self.claimed = set()
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 for number, line in enumerate(f, 1):
                     if not line.strip():
                         continue
-                    fields = line.rstrip("\n").split("\t", 2)
-                    if len(fields) != 3 or not re.fullmatch(r"[0-9]+", fields[0]):
-                        raise RuntimeError("%s line %d is not 'id<TAB>name<TAB>function'" % (path, number))
+                    fields = line.rstrip("\n").split("\t", 3)
+                    if len(fields) not in (3, 4) or not re.fullmatch(r"[0-9]+", fields[0]):
+                        raise RuntimeError("%s line %d is not 'id<TAB>name<TAB>function<TAB>shape'" % (path, number))
                     hook_id, name, key = int(fields[0]), fields[1], fields[2]
+                    shape = fields[3] if len(fields) == 4 else ""
                     # A merge of two branches that both added hooks can repeat an id, which would make one
                     # function's hooks run on another.
-                    if hook_id in ids or name in self.names or key in self.entries:
+                    if hook_id in ids or name in self.names or (key, shape) in self.entries:
                         raise RuntimeError("%s line %d repeats an id, name or function seen earlier" % (path, number))
                     ids.add(hook_id)
                     self.names.add(name)
-                    self.entries[key] = (hook_id, name)
+                    self.entries[(key, shape)] = (hook_id, name)
         self.next_id = max([i for i, _ in self.entries.values()] or [-1]) + 1
         self.added = 0
+        self.reshaped = 0
 
     def claim(self, fn):
-        key = hook_key(fn)
-        if key not in self.entries:
+        key, shape = hook_key(fn), hook_shape(fn)
+        if (key, shape) not in self.entries and (key, "") in self.entries:
+            # A row written before shapes were recorded.
+            self.entries[(key, shape)] = self.entries.pop((key, ""))
+        if (key, shape) not in self.entries:
+            if any(k == key for k, _ in self.entries):
+                self.reshaped += 1
             name = hook_name(fn, self.names)
-            self.entries[key] = (self.next_id, name)
+            self.entries[(key, shape)] = (self.next_id, name)
             self.next_id += 1
             self.names.add(name)
             self.added += 1
-        return key, self.entries[key][0], self.entries[key][1]
+        hook_id, name = self.entries[(key, shape)]
+        self.claimed.add(hook_id)
+        return key, hook_id, name
 
     def save(self):
-        rows = sorted((hook_id, name, key) for key, (hook_id, name) in self.entries.items())
+        rows = sorted((hook_id, name, key, shape) for (key, shape), (hook_id, name) in self.entries.items())
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "w", encoding="utf-8", newline="\n") as f:
-            f.writelines("%d\t%s\t%s\n" % row for row in rows)
+            for hook_id, name, key, shape in rows:
+                f.write("%d\t%s\t%s%s\n" % (hook_id, name, key, "\t" + shape if shape else ""))
 
     def count(self):
         return self.next_id
@@ -621,7 +646,7 @@ def hand_hook_sites(hooks, files, root):
 
 
 def write_table(project, registry, sites):
-    by_id = dict((hook_id, key) for key, (hook_id, _) in registry.entries.items())
+    by_id = dict((hook_id, key) for (key, _), (hook_id, _) in registry.entries.items())
     lines = [
         '#include "CivHostHooks.h"',
         '#include "CivPluginApi.h"',
@@ -636,6 +661,9 @@ def write_table(project, registry, sites):
     lines += ['\t"%s",' % by_id.get(i, "(unused)").replace("\\", "\\\\") for i in range(registry.count())]
     if not registry.count():
         lines.append('\t"",')
+    lines += ["};", "", "extern const unsigned char g_CivHookLive[] =", "{"]
+    live = ["1" if i in registry.claimed else "0" for i in range(registry.count())] or ["0"]
+    lines += ["\t" + ", ".join(live[i : i + 40]) + "," for i in range(0, len(live), 40)]
     lines += ["};", "", "extern const CivHandHookSite g_CivHandHookSites[] =", "{"]
     lines += ["\t{ %s, %d }," % site for site in sites] or ["\t{ -1, -1 },"]
     lines += ["};", "const int g_CivHandHookSiteCount = %d;" % len(sites)]
@@ -658,9 +686,15 @@ def write_plugin_header(project, registry, hooks):
         "namespace CivHooks",
         "{",
     ]
-    for hook_id, name in sorted(registry.entries.values()):
-        signature = signatures.get(hook_id, "no longer a hook point, so it never runs")
-        lines.append("\tnamespace %s { enum { ID = %d }; } // %s" % (name, hook_id, signature))
+    live_names = dict((key, name) for (key, _), (hook_id, name) in registry.entries.items() if hook_id in signatures)
+    for (key, _), (hook_id, name) in sorted(registry.entries.items(), key=lambda item: item[1]):
+        if hook_id in signatures:
+            lines.append("\tnamespace %s { enum { ID = %d }; } // %s" % (name, hook_id, signatures[hook_id]))
+            continue
+        # Left out, so a plugin rebuilt against this SDK stops at its old name rather than being refused in the game.
+        replacement = live_names.get(key)
+        changed = ": its function changed, and its hook is now %s" % replacement if replacement else ""
+        lines.append("\t// %s (id %d) is no longer a hook point%s." % (name, hook_id, changed))
     lines.append("}")
     out_dir = os.path.join(project.build_dir, "sdk")
     os.makedirs(out_dir, exist_ok=True)
@@ -741,15 +775,6 @@ def write_engine_build_files(project):
         f.write(sln)
 
 
-def write_hook_list(project, hooks):
-    rows = [
-        {"id": fn["hook_id"], "name": fn["hook_name"], "key": fn["hook_key"], "file": fn["file"], "line": fn["line"]}
-        for fn in hooks
-    ]
-    with open(os.path.join(project.build_dir, "hooks.json"), "w") as f:
-        json.dump(sorted(rows, key=lambda r: r["id"]), f, indent=0)
-
-
 def run(project):
     functions, variables = load_analysis(project)
     files, edits = PathDict(), PathDict()
@@ -761,7 +786,6 @@ def run(project):
     registry.save()
     write_table(project, registry, hand_hook_sites(hooks, files, project.root))
     write_plugin_header(project, registry, hooks)
-    write_hook_list(project, hooks)
     if project.vcproj:
         write_engine_build_files(project)
 
@@ -770,6 +794,8 @@ def run(project):
         "hook points %d (new %d, no longer present %d), marked for export: functions %d, shared variables %d"
         % (len(hooks), registry.added, vanished, marked, shared)
     )
+    if registry.reshaped:
+        print("  new numbers for functions whose return type or static changed: %d" % registry.reshaped)
     if missed or missed_shared:
         print("  export marker not placed (declaration not written literally): %d" % (missed + missed_shared))
     for reason, n in sorted(skipped.items(), key=lambda kv: -kv[1]):

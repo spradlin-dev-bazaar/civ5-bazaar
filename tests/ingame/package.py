@@ -32,8 +32,8 @@ PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
 VMC_DIR = os.path.join(common.REPO, "mod", "vmc")
 FRONTEND_DIR = os.path.join(common.REPO, "frontend")
 
-HOST_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
-HOST_NAME = "Bazaar Multi-DLL Mod Loader"
+HOST_ID = common.HOST_MOD_ID
+HOST_NAME = common.HOST_MOD_NAME
 BENCH_ID = "d9b32c9d-2f72-42f0-b53e-50b86d1ed3c7"
 BENCH_DLLS = {
     "plain": os.path.join(PLAIN_OUT, "CvGameCoreDLL_Expansion2Win32Mod.dll"),
@@ -179,7 +179,8 @@ def write_modinfo(
 ):
     """Write a mod's description file; files are (path, import flag) pairs inside folder, references and dependencies
     (id, title) or (id, title, version), credits extra (property, text) pairs. A mod affects saved games if it has a
-    DLL, unless affects_saves says otherwise.
+    DLL or changes the database, unless affects_saves says otherwise: a loaded save switches on only the database
+    changes of the mods it lists.
 
     A test mod depends on the host unless it names its own dependencies."""
     if dependencies is None:
@@ -188,13 +189,17 @@ def write_modinfo(
         mod_line(*d) for d in dependencies
     ]
     if affects_saves is None:
-        affects_saves = bool(dll)
+        affects_saves = bool(dll or updates)
     with open(os.path.join(folder, "%s (v %d).modinfo" % (name, version)), "w", encoding="utf-8") as f:
         f.write('<?xml version="1.0" encoding="utf-8"?>\n<Mod id=%s version="%d">\n' % (quoteattr(mod_id), version))
         credit_lines = "".join("    <%s>%s</%s>\n" % (tag, escape(text), tag) for tag, text in credits)
         f.write(
             PROPERTIES.format(
-                name=name, teaser=teaser, authors=escape(authors), credits=credit_lines, affects=int(affects_saves)
+                name=escape(name),
+                teaser=escape(teaser),
+                authors=escape(authors),
+                credits=credit_lines,
+                affects=int(affects_saves),
             )
         )
         f.write("  <Dependencies>\n" + "".join(dependencies) + "  </Dependencies>\n")

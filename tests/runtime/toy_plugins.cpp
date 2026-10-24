@@ -568,6 +568,8 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_BAD_HOOKS)
 
+#include "ToyGoneHook.h"
+
 static void AfterAdd(const FakeUnit*, int, int, int& result)
 {
 	result += 700000;
@@ -592,6 +594,11 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	LogResult("kind past the last", Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_REPLACE + 1, (void*)&AfterAdd));
 	LogResult("negative kind", Register(CivHooks::FakeUnit_add::ID, -1, (void*)&AfterAdd));
 	LogResult("no function", Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, 0));
+	LogResult("hook point that is gone", Register(TOY_GONE_HOOK_ID, CIV_HOOK_AFTER, (void*)&AfterAdd));
+	LogResult("an index not its own",
+		host->RegisterHook(host->pluginIndex + 1, CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd));
+	LogResult("hand-placed hook for an index not its own",
+		host->RegisterHandHook(host->pluginIndex + 1, CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes));
 	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeFirst);
 	LogResult("second replace", Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeSecond));
 	LogResult("hand-placed hook past the last", RegisterHand(CIV_HAND_HOOK_COUNT, (void*)&SayYes));
@@ -647,11 +654,31 @@ static bool BeforeSubtract(const FakeUnit*, int a, int, int& result)
 	return true;
 }
 
+static bool BeforeScale(const FakeUnit*, int v, int, int&)
+{
+	return v == 99;
+}
+
+static bool BeforeName(const FakeUnit*, const std::string*&)
+{
+	return true;
+}
+
+static bool BeforeGreet(const FakeUnit*, std::string who, std::string& result)
+{
+	if (who == "veto")
+		result = "Vetoed";
+	return who == "veto" || who == "quiet";
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Veto");
 	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_BEFORE, (void*)&BeforeSubtract);
+	Register(CivHooks::FakeUnit_Scale::ID, CIV_HOOK_BEFORE, (void*)&BeforeScale);
+	Register(CivHooks::FakeUnit_name::ID, CIV_HOOK_BEFORE, (void*)&BeforeName);
+	Register(CivHooks::FakeUnit_Greet::ID, CIV_HOOK_BEFORE, (void*)&BeforeGreet);
 	return true;
 }
 
@@ -770,11 +797,18 @@ static void HeardOrdersCancelled(CvUnit*, int reason)
 	LogResult("heard its own cancelled orders", reason);
 }
 
+// A second function running a hand-placed hook Toy Hand uses, so the two plugins conflict at two places.
+static bool ReplacePlayedByPlugin(bool (*original)(const FakeUnit*, int), const FakeUnit* self, int player)
+{
+	return original(self, player);
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Hand Replace");
 	Register(CivHooks::FakeUnit_CancelOrders::ID, CIV_HOOK_REPLACE, (void*)&ReplaceCancelOrders);
+	Register(CivHooks::FakeUnit_PlayedByPlugin::ID, CIV_HOOK_REPLACE, (void*)&ReplacePlayedByPlugin);
 	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRange);
 	Register(CivHooks::FakeUnit_Reach::ID, CIV_HOOK_REPLACE, (void*)&ReplaceReach);
 	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
@@ -794,7 +828,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
-#elif defined(TOY_NEWER_IMPORTS)
+#elif defined(TOY_NEWER_IMPORTS) || defined(TOY_LOAD_FAILS)
 
 // Provided by no DLL, as a function an older Bazaar lacks would be: Windows cannot load this toy at all.
 extern "C" __declspec(dllimport) int ToyAbsentFunction();
@@ -802,8 +836,22 @@ extern "C" __declspec(dllimport) int ToyAbsentFunction();
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
+#if defined(TOY_NEWER_IMPORTS)
 	Describe(info, "Toy Newer Imports");
+#else
+	Describe(info, "Toy Load Fails");
+#endif
 	return ToyAbsentFunction() == 0;
+}
+
+#elif defined(TOY_EMPTY_NAME)
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	info->name = "";
+	info->version = reinterpret_cast<const char*>(1);
+	return true;
 }
 
 #elif defined(TOY_NO_ENTRY)

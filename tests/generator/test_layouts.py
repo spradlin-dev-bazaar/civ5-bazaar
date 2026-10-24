@@ -330,7 +330,13 @@ class RunTest(unittest.TestCase):
         self.assertEqual(self.saved(), ((0, 3), layouts.parse_report(report(UNIT))))
 
     def test_without_a_release_tag_the_advice_says_where_to_put_one(self):
-        self.assertIn("git checkout <last release tag> -- ", "\n".join(layouts.frozen_advice(None)))
+        self.assertIn("git checkout <last release tag> -- ", "\n".join(layouts.frozen_advice((1, 0), None)))
+
+    def test_until_1_0_is_tagged_a_0_x_record_is_changed_by_going_back_to_0(self):
+        for tag in (None, "v0.9.0"):
+            self.assertIn("back to 0", "\n".join(layouts.frozen_advice((0, 9), tag)), tag)
+        self.assertNotIn("back to 0", "\n".join(layouts.frozen_advice((0, 9), "v1.0.0")))
+        self.assertNotIn("back to 0", "\n".join(layouts.frozen_advice((0, 9), "v1-beta")))
 
     def test_accept_of_a_gone_class_is_allowed_once_frozen_and_keeps_the_version(self):
         self.freeze(UNIT, CITY)

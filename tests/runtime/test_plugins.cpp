@@ -79,7 +79,7 @@ void TestLoading()
 {
 	const char* const names[] = {"toy_basic.dll", "toy_second.dll", "toy_shapes.dll", "toy_conflict.dll", "toy_newer.dll",
 		"toy_major.dll", "toy_no_version.dll", "toy_newer_imports.dll", "toy_older.dll", "toy_ordinals.dll", "toy_no_entry.dll",
-		"toy_missing.dll", "toy_entry_fault.dll"};
+		"toy_missing.dll", "toy_entry_fault.dll", "toy_load_fails.dll", "toy_64bit.dll", "toy_empty_name.dll"};
 	StartWith(names);
 
 	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_LOADED), "a current plugin loads");
@@ -103,6 +103,16 @@ void TestLoading()
 	Check(HasStatus("toy_ordinals.dll", CIV_PLUGIN_LOADED), "a plugin whose exports are numbered out of name order loads: its version is found by name");
 	Check(HasStatus("toy_no_entry.dll", CIV_PLUGIN_NO_ENTRY), "a DLL without the entry point is refused");
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
+	Check(HasStatus("toy_load_fails.dll", CIV_PLUGIN_FILE_NOT_LOADED)
+			&& ReportRow("toy_load_fails.dll").problems.find("Windows could not load the file (error 126).") != std::string::npos,
+		"a current plugin Windows cannot load, here for a DLL it imports from that is missing, is refused with Windows' error");
+	Check(HasStatus("toy_64bit.dll", CIV_PLUGIN_FILE_NOT_LOADED)
+			&& ReportRow("toy_64bit.dll").problems.find("It is a 64-bit DLL") != std::string::npos,
+		"a 64-bit DLL is refused as one, not as a DLL built for another Bazaar");
+	Check(HasStatus("toy_empty_name.dll", CIV_PLUGIN_LOADED) && ReportRow("toy_empty_name.dll").name == "toy_empty_name.dll",
+		"a plugin that gives an empty name is named by its file");
+	Check(Find("toy_empty_name.dll") && Find("toy_empty_name.dll")->version.empty(),
+		"a version that points nowhere is read as none, and the plugin still loads");
 	Check(HasStatus("toy_entry_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD), "a plugin that faults while loading is refused");
 	Check(IsQuarantined("toy_entry_fault.dll"), "a plugin that faults while loading is quarantined");
 	Check(LogHas("    #00 toy_entry_fault.dll+0x"), "a plugin that faults while loading has its call stack logged");
@@ -278,6 +288,14 @@ void TestRegistration()
 	Check(LogHas(ResultLine("Toy Bad Hooks", "kind past the last", CIV_HOOK_BAD_KIND).c_str()), "registering a hook of a kind past the last is refused");
 	Check(LogHas(ResultLine("Toy Bad Hooks", "negative kind", CIV_HOOK_BAD_KIND).c_str()), "registering a hook of a negative kind is refused");
 	Check(LogHas(ResultLine("Toy Bad Hooks", "no function", CIV_HOOK_BAD_ID).c_str()), "registering a hook with no function is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "hook point that is gone", CIV_HOOK_BAD_ID).c_str()),
+		"registering a hook point whose function is gone is refused");
+	Check(LogHas("Plugin Toy Bad Hooks asked for hook ") && LogHas("which this Bazaar no longer has"),
+		"the log says a plugin asked for a hook point that is gone and needs rebuilding");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "an index not its own", CIV_HOOK_NOT_ALLOWED).c_str()),
+		"registering a hook under an index not the plugin's own is refused");
+	Check(LogHas(ResultLine("Toy Bad Hooks", "hand-placed hook for an index not its own", CIV_HOOK_NOT_ALLOWED).c_str()),
+		"registering a hand-placed hook under an index not the plugin's own is refused");
 	Check(LogHas(ResultLine("Toy Bad Hooks", "second replace", CIV_HOOK_REPLACE_TAKEN).c_str()),
 		"a plugin replacing the same function twice has the second replacement refused");
 	Check(HasStatus("toy_bad_hooks.dll", CIV_PLUGIN_LOADED), "a plugin whose bad registrations were refused still loads");
@@ -308,6 +326,10 @@ void TestVetoAndReplace()
 	FakeUnit unit;
 	Check(unit.Subtract(7, 2) == 50, "a replacement runs when no before-hook vetoes");
 	Check(unit.Subtract(99, 1) == 77, "a veto skips the replacement as well as the original, and the call returns the veto's result");
+	Check(unit.Scale(99, 3) == 0 && unit.Scale(4, 3) == 12, "a veto that sets no result returns the type's default");
+	Check(unit.name() == "Warrior", "a veto that sets no reference result runs the original after all, since a reference can't be empty");
+	Check(unit.Greet("veto") == "Vetoed" && unit.Greet("quiet").empty() && unit.Greet("Bob") == "Hello Bob",
+		"a function returning a class returns the veto's result, or an empty one when the veto sets none");
 }
 
 void TestExceptions()

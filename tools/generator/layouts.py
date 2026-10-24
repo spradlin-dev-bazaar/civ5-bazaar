@@ -208,9 +208,16 @@ def last_release_tag():
     return done.stdout.strip() if done.returncode == 0 else None
 
 
-def frozen_advice(tag):
+def frozen_advice(recorded_version, tag):
     """The way out when a changed class is refused, which cannot tell a released major version from one still being
     worked on."""
+    released = re.match(r"v(\d+)", tag or "")
+    if recorded_version[0] == 0 and not (released and int(released.group(1)) >= 1):
+        return [
+            "1.0 freezes the layouts the 0.x versions left, and no 1.0 release is tagged yet. To change a class",
+            "for it, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h back to 0, run build-hooked.cmd accept-layouts,",
+            "then set it to 1 again and rebuild every plugin.",
+        ]
     return [
         "From 1.0 on, a class can change only in a new major version. Either:",
         "- raise CIV_HOST_API_MAJOR in host\\CivPluginApi.h, then run build-hooked.cmd accept-layouts and rebuild every"
@@ -278,7 +285,7 @@ def check(project):
         elif accept_allowed(recorded_version, version):
             print("To change them on purpose, run build-hooked.cmd accept-layouts, then rebuild every plugin.")
         else:
-            print("\n".join(frozen_advice(last_release_tag())))
+            print("\n".join(frozen_advice(recorded_version, last_release_tag())))
         return 1
     if new or not recorded_version:
         write_record(recorded_version or version, recorded + new)
@@ -294,7 +301,7 @@ def accept(project):
     changed = any(now for _, _, now in lost)
     if changed and not accept_allowed(recorded_version, version):
         print_lost(lost, recorded, current)
-        print("\n".join(frozen_advice(last_release_tag())))
+        print("\n".join(frozen_advice(recorded_version, last_release_tag())))
         return 1
     saved = version if changed or not recorded_version else recorded_version
     write_record(saved, current)

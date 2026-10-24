@@ -222,6 +222,7 @@ void TestReplacedSetup()
 	Check(first.xmlSource == rasXml, "it says which file it copied");
 
 	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_READONLY);
+	// This copy is read-only too, and the next copy must still overwrite it.
 	CivCopyReplacedSetup(mods, game, own, withRas, true);
 	Check(!CivCopyReplacedSetup(mods, game, own, withRas, true).copy.empty(), "a read-only source does not stop the next copy");
 	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_NORMAL);

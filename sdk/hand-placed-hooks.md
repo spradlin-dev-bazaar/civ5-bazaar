@@ -29,7 +29,7 @@ An announcement: the game raised a popup for this player, or would have if they 
 | `BUTTONPOPUP_NEW_ERA`, for a team | the era | | | | | |
 | `BUTTONPOPUP_BARBARIAN_CAMP_REWARD` | the gold | | | | | |
 
-The city-state greeting depends on VMC's `GLOBAL_CS_GIFTS` option. With it on, the values are as in the table, and the text is the kind of gift: CULTURE, FAITH, GOLD, FOOD or UNIT. With it off, data2 is the gold given, data3 is the faith given, and the text is empty.
+The city-state greeting depends on VMC's `GLOBAL_CS_GIFTS` option. With it on, the values are as in the table, and the text is the kind of gift: CULTURE, FAITH, GOLD, FOOD or UNIT, or UNKNOWN when none of those applies. With it off, data2 is the gold given, data3 is the faith given, and the text is empty.
 
 ## NotificationAdded
 
@@ -51,4 +51,4 @@ An announcement: the game cancelled a unit's orders. The values are the unit and
 | `CIV_ORDERS_ROUTE_BLOCKED` | the next tile on the road being built can no longer be entered |
 | `CIV_ORDERS_NO_PATH` | no path leads to the destination any more |
 | `CIV_ORDERS_PATH_LONGER` | the way there now takes more than two turns longer than when the move began |
-| `CIV_ORDERS_DESTINATION_BLOCKED` | the unit would end this turn on its destination, which it can no longer enter |
+| `CIV_ORDERS_DESTINATION_BLOCKED` | the unit would end this turn on its destination, which it can no longer enter, on a move ordered before this turn |

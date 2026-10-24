@@ -31,6 +31,8 @@ extern CivHookPoint g_CivHookPoints[];
 extern unsigned char g_CivHookActive[];
 extern const int g_CivHookPointCount;
 extern const char* const g_CivHookPointNames[];
+// Zero for a number whose function is gone or changed shape, which a plugin built against an older SDK may still ask for.
+extern const unsigned char g_CivHookLive[];
 
 // A hand-placed hook keeps its plugins in the before list, in load order.
 extern CivHookPoint g_CivHandHookPoints[];

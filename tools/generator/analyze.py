@@ -26,6 +26,13 @@ CLASS_KINDS = (CK.CLASS_DECL, CK.STRUCT_DECL)
 TEMPLATE_KINDS = (CK.CLASS_TEMPLATE, CK.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION, CK.FUNCTION_TEMPLATE)
 # Windows calls these under its loader lock, or before any plugin can have loaded.
 LOADER_ENTRY_POINTS = {"DllMain", "DllGetGameContext"}
+# Bazaar starts, unloads its plugins and answers the Plugins screen from inside these, so a plugin's hook on one could
+# keep it from doing so.
+HOST_ENTRY_POINTS = {
+    ("CvDllGameContext", "Init"),
+    ("CvDllGameContext", "Uninit"),
+    ("CvDllWorldBuilderMapLoader", "GetMapPreview"),
+}
 VARIABLE_SCOPES = (CK.TRANSLATION_UNIT, CK.NAMESPACE, CK.CLASS_DECL, CK.STRUCT_DECL)
 SCALAR_KINDS = {
     ci.TypeKind.BOOL,
@@ -207,7 +214,7 @@ def analyze_tu(job):
             record = variable_record(c, project)
             if record:
                 variables.append(record)
-    bodies = [(fn["body_start"], fn["def_end"]) for fn in functions]
+    bodies = [(fn["body_start"], fn["def_end"]) for fn in functions if fn["body_start"] is not None]
     errors = []
     for d in tu.diagnostics:
         if d.severity < ci.Diagnostic.Error:
@@ -244,6 +251,8 @@ def function_record(c, data, rel, project):
         reasons.append("conversion operator")
     if c.spelling in LOADER_ENTRY_POINTS:
         reasons.append("DLL entry point")
+    if (rec["class"], c.spelling) in HOST_ENTRY_POINTS:
+        reasons.append("calls into Bazaar")
     if c.spelling.startswith(("operator new", "operator delete")):
         reasons.append("allocation operator")
     if c.kind == CK.FUNCTION_TEMPLATE or templated:
@@ -362,8 +371,7 @@ def run(project):
     return results
 
 
-def known_errors():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "known-parse-errors.txt")
+def known_errors(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "known-parse-errors.txt")):
     with open(path, encoding="utf-8") as f:
         return set(tuple(line.rstrip("\n").split("\t", 1)) for line in f if line.strip() and not line.startswith("#"))
 

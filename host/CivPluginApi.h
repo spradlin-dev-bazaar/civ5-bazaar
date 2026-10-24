@@ -101,5 +101,6 @@ typedef void (*CivPluginShutdownFn)();
 #define CIV_PLUGIN_ENTRY_NAME "CivPluginEntry"
 // Optional, for anything your plugin holds outside the host (threads, sockets, files); the host removes your hooks itself.
 // If your plugin crashes or is refused after its entry function ran, it still needs to be shut down, so it needs to be able to shut down from a partially-loaded state.
-// If one of your threads is still running after it returns, your DLL stays in memory until Civilization V restarts.
+// If one of your threads is still running inside your DLL after it returns, your DLL stays in memory until Civilization V restarts.
+// Threads in other DLLs your plugin loaded are not checked, so stop them too.
 #define CIV_PLUGIN_SHUTDOWN_NAME "CivPluginShutdown"

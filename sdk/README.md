@@ -120,7 +120,7 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
 - **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook` and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
-- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version.
+- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version. Bazaar copies them when `CivPluginEntry` returns, so point both at text that still exists then, such as a string in quotes, not a local buffer.
 - **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
 - **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration, and `(void*)&BeforeDoTurn` passes the hook function's address; [Registering a hook](#registering-a-hook) explains each argument. Hooks can only be registered from `CivPluginEntry`.
 - **Returning `true`** loads the plugin. Returning `false` tells Bazaar not to load it, and the Plugins screen shows it as Not loaded: "Declined to load."
@@ -345,6 +345,8 @@ static int CountMyCities(lua_State* L)
 ```
 
 Add it in `AfterRegisterGame` the same way, and Lua code can call `Game.CountMyCities()`.
+
+Bazaar's crash protection covers your hooks, not your Lua functions. A crash in a Lua function crashes the game, and a plugin Bazaar has turned off after a crash in a hook keeps its Lua functions, which Lua can still call. Keep them short, and don't let them rely on state a crashed hook may have left half-changed.
 
 ## Using VMC's events and options
 

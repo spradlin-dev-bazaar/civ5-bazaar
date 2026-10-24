@@ -50,6 +50,30 @@ def key_format_problems(hooks):
     return problems + ["%r says const twice" % key for key in hooks if "const const" in key]
 
 
+def shape_format_problems():
+    """A libclang change to how it spells a type would give every function with such a type a new hook number."""
+    shapes = dict(generate.Registry(os.path.join(BUILD, "hook-ids.txt")).entries.keys())
+    expected = {
+        "FakeUnit::name() const": "const std::string &",
+        "FakeUnit::Twice(int)": "static int",
+        "FakeUnit::Level() const": "const int",
+    }
+    return ["%r has the shape %r, not %r" % (k, shapes.get(k), v) for k, v in expected.items() if shapes.get(k) != v]
+
+
+def gone_hook_problems():
+    """The third run leaves Extra gone: CivHooks.h says so instead of naming it, and the toys get its number."""
+    entries = generate.Registry(os.path.join(BUILD, "hook-ids.txt")).entries
+    gone = [hook_id for (key, _), (hook_id, _) in entries.items() if key == "Extra(int)"]
+    with open(os.path.join(BUILD, "sdk", "CivHooks.h")) as f:
+        header = f.read()
+    problems = ["Extra is still a namespace in CivHooks.h"] if "namespace Extra " in header else []
+    problems += [] if "// Extra (id " in header else ["CivHooks.h does not say Extra is gone"]
+    with open(os.path.join(BUILD, "sdk", "ToyGoneHook.h"), "w") as f:
+        f.write("#define TOY_GONE_HOOK_ID %d\n" % (gone[0] if gone else -1))
+    return problems + ([] if len(gone) == 1 else ["Extra has %d rows" % len(gone)])
+
+
 def export_marker_problems():
     """A global variable and a static member variable are marked for export in the generated header."""
     with open(os.path.join(BUILD, "src", "fixture", "fake_engine.h")) as f:
@@ -66,6 +90,7 @@ if __name__ == "__main__":
     second = generate_hooks(["aaa_extra.cpp", "fake_engine.cpp"])
     third = generate_hooks(["fake_engine.cpp"])
     problems = registry_problems(first, second, third) + key_format_problems(first) + export_marker_problems()
+    problems += shape_format_problems() + gone_hook_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)
