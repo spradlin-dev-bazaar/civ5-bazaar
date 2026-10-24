@@ -27,6 +27,7 @@ TOY_EXPORT ToyHostCallResultFn ToyHostCallResult;
 TOY_EXPORT ToyBreakOnNextCallFn ToyBreakOnNextCall;
 TOY_EXPORT ToyStartThreadFn ToyStartThread;
 TOY_EXPORT ToyLeaveThreadRunningFn ToyLeaveThreadRunning;
+TOY_EXPORT ToyExplodeLineFn ToyExplodeLine;
 
 #if defined(TOY_NEWER) || defined(TOY_NEWER_IMPORTS)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1};
@@ -338,10 +339,25 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_FAULT)
 
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static int s_explodeLine = 0;
+
+static __declspec(noinline) int Explode()
 {
 	int* volatile nowhere = 0;
-	result += *nowhere;
+	return *nowhere;
+}
+
+TOY_EXPORT int ToyExplodeLine()
+{
+	return s_explodeLine;
+}
+
+// The statement after the call starts a new line, so the return address names that line rather than the call's.
+static void AfterAdd(const FakeUnit*, int, int, int& result)
+{
+	s_explodeLine = __LINE__ + 1;
+	Explode();
+	result = 7;
 }
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
@@ -356,8 +372,8 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 static int ReplaceLevel(int (*)(const FakeUnit*), const FakeUnit*)
 {
-	int* volatile nowhere = 0;
-	return *nowhere;
+	int (*volatile nothing)() = 0;
+	return nothing() + 1;
 }
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
@@ -581,6 +597,28 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	LogResult("hand-placed hook past the last", RegisterHand(CIV_HAND_HOOK_COUNT, (void*)&SayYes));
 	LogResult("negative hand-placed hook", RegisterHand(-1, (void*)&SayYes));
 	LogResult("hand-placed hook with no function", RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, 0));
+	return true;
+}
+
+#elif defined(TOY_OVERFLOW)
+
+static int Deeper(int depth)
+{
+	volatile char room[512];
+	room[depth % 512] = 1;
+	return depth < 0 ? 0 : Deeper(depth + 1) + room[0];
+}
+
+static void AfterRange(const FakeUnit*, int& result)
+{
+	result += Deeper(0);
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Overflow");
+	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
 	return true;
 }
 

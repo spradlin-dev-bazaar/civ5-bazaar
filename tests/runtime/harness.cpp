@@ -204,12 +204,17 @@ void ClearLog()
 	s_log.clear();
 }
 
-int LogIndex(const char* text)
+int LogIndex(const char* text, int from)
 {
-	for (size_t i = 0; i < s_log.size(); ++i)
+	for (size_t i = from > 0 ? (size_t)from : 0; i < s_log.size(); ++i)
 		if (s_log[i].find(text) != std::string::npos)
 			return (int)i;
 	return -1;
+}
+
+std::string LogLine(int index)
+{
+	return index >= 0 && index < (int)s_log.size() ? s_log[index] : std::string();
 }
 
 bool LogHas(const char* text)

@@ -20,3 +20,4 @@ typedef int ToyHostCallResultFn();
 typedef void ToyBreakOnNextCallFn();
 typedef void ToyStartThreadFn(int throughRuntime);
 typedef void ToyLeaveThreadRunningFn();
+typedef int ToyExplodeLineFn();

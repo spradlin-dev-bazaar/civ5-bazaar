@@ -703,6 +703,7 @@ def write_engine_build_files(project):
     extra = []
     for path in [
         os.path.join(common.HOST_DIR, "CivHostRuntime.cpp"),
+        os.path.join(common.HOST_DIR, "CivHostCrash.cpp"),
         os.path.join(common.HOST_DIR, "CivHostHand.cpp"),
         os.path.join(common.HOST_DIR, "CivHostOrder.cpp"),
         os.path.join(common.HOST_DIR, "CivHostSetup.cpp"),

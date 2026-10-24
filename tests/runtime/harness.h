@@ -36,7 +36,8 @@ bool IsQuarantined(const char* fileName);
 bool IsInMemory(const char* fileName);
 
 void ClearLog();
-int LogIndex(const char* text);
+int LogIndex(const char* text, int from = 0);
+std::string LogLine(int index);
 bool LogHas(const char* text);
 int FaultCount();
 

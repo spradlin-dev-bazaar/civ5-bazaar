@@ -1,10 +1,12 @@
 // Loading plugins, running their hooks, catching their crashes, and sharing memory with them.
 #include "harness.h"
 #include "CivHooks.h"
+#include "CivHostCrash.h"
 #include "CivHostHand.h"
 #include "CivHostHooks.h"
 #include "fake_engine.h"
 
+#include <dbghelp.h>
 #include <malloc.h>
 #include <stdio.h>
 
@@ -48,6 +50,29 @@ namespace
 		Check(AfterHookCount(CivHooks::FakeUnit_add::ID) == 1, (name + ": only the next plugin's hook is registered").c_str());
 		Check(!CivHandKeepDeadSlotOpen(1), (name + ": its hand-placed hook never runs").c_str());
 	}
+
+	int s_waiting = 0;
+	int s_later = 0;
+
+	int RecordTwice(const EXCEPTION_POINTERS* info)
+	{
+		CivCrashRecord(EXCEPTION_ACCESS_VIOLATION, info, &s_waiting);
+		CivCrashRecord(EXCEPTION_ACCESS_VIOLATION, info, &s_later);
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
+
+	// No C++ objects may live in this frame, or __try is not allowed.
+	void CrashRecordedTwice()
+	{
+		__try
+		{
+			int* volatile nowhere = 0;
+			*nowhere = 1;
+		}
+		__except (RecordTwice(GetExceptionInformation()))
+		{
+		}
+	}
 }
 
 void TestLoading()
@@ -80,6 +105,8 @@ void TestLoading()
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
 	Check(HasStatus("toy_entry_fault.dll", CIV_PLUGIN_FAULTED_AT_LOAD), "a plugin that faults while loading is refused");
 	Check(IsQuarantined("toy_entry_fault.dll"), "a plugin that faults while loading is quarantined");
+	Check(LogHas("    #00 toy_entry_fault.dll+0x"), "a plugin that faults while loading has its call stack logged");
+	Check(LogHas("  It stopped at toy_entry_fault.dll+0x"), "a fault that touched no memory says only where it stopped");
 	Check(HasStatus("toy_conflict.dll", CIV_PLUGIN_REPLACE_CONFLICT), "a plugin replacing a function another plugin already replaces is turned off");
 	Check(!IsInMemory("toy_conflict.dll"), "a plugin turned off for replacing a taken function is unloaded");
 	Check(LogHas(ResultLine("Toy Conflict", "replace result", CIV_HOOK_REPLACE_TAKEN).c_str()), "the refused plugin is told why");
@@ -158,11 +185,24 @@ void TestQuarantine()
 	StartWith(names);
 	FakeUnit unit;
 	const int before = FaultCount();
+	// Without the flags a report adds, so a report that leaves them set is caught whatever ran before.
+	const DWORD options = SymGetOptions() & ~(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS);
+	SymSetOptions(options);
 	const int result = unit.add(2, 3);
 	Check(FaultCount() == before + 2, "faulting before- and after-hooks are both caught and reported");
+	Check(SymGetOptions() == options, "a crash report puts back dbghelp's settings, which the game's own crash handling shares");
 	Check(result == 110, "the other plugins' hooks still run on the same call");
 	Check(IsQuarantined("toy_fault.dll"), "a faulting plugin is quarantined");
 	Check(ReportRow("toy_fault.dll").problems.find("Faulted") != std::string::npos, "a quarantined plugin's row gives the fault");
+	Check(LogHas("  It read address 0x00000000, at toy_fault.dll+0x"), "the log says what memory the crash touched, and where in the plugin");
+	const int top = LogIndex("    #00 toy_fault.dll+0x");
+	Check(top >= 0 && LogLine(top).find(" (Explode, toy_plugins.cpp line ") != std::string::npos, "a frame in a plugin built with its .pdb names the function and the source line");
+	char caller[64];
+	_snprintf_s(caller, sizeof(caller), _TRUNCATE, " (AfterAdd, toy_plugins.cpp line %d)", Call(TOY_FUNCTION("toy_fault.dll", ToyExplodeLine), -1));
+	Check(LogLine(top + 1).find("    #01 toy_fault.dll+0x") == 0 && LogLine(top + 1).find(caller) != std::string::npos, "a caller's frame names the line of its call, not the line after it");
+	Check(LogLine(top + 2).find("    #02 harness.exe+0x") == 0, "the call stack goes on from the plugin into the code that called it");
+	const int unnamed = LogIndex("    #00 toy_fault_before.dll+0x");
+	Check(unnamed >= 0 && LogLine(unnamed).find('(') == std::string::npos, "a frame in a plugin without its .pdb names no function, rather than a wrong exported one");
 	ClearLog();
 	Check(unit.add(2, 3) == 110, "the other plugins' hooks still run once the faulting ones are quarantined");
 	Check(!LogHas("Plugin Toy Fault: Faulted") && !LogHas("Plugin Toy Fault Before: Faulted"), "a quarantined plugin's hooks never run again");
@@ -175,6 +215,36 @@ void TestQuarantine()
 	Check(level == 7 && g_levelCalls == calls + 1, "when a replacement faults, the original runs instead, once");
 	Check(unit.Level() == 7 && g_levelCalls == calls + 2, "the original keeps running once the replacement is quarantined");
 	Check(FaultCount() == before + 3, "a quarantined replacement does not fault again");
+	Check(LogHas("  It ran code at address 0x00000000."), "a call through a null function pointer is logged as running code there");
+	const int nowhere = LogIndex("    #00 0x00000000");
+	Check(nowhere >= 0 && LogLine(nowhere + 1).find("    #01 toy_fault_replace.dll+0x") == 0, "the call stack of a call through a null pointer starts again at its caller");
+
+	const char* const first[] = {"toy_fault.dll"};
+	StartWith(first);
+	const HMODULE freed = (HMODULE)Find("toy_fault.dll")->module;
+	unit.add(2, 3);
+	const char* const second[] = {"toy_overflow.dll"};
+	StartWith(second);
+	Check(Find("toy_overflow.dll")->module == freed, "the second toy loads where the first one was, so the next check means something");
+	unit.Range();
+	const int reused = LogIndex("    #00 toy_overflow.dll+0x");
+	Check(reused >= 0 && LogLine(reused).find(" (Deeper, toy_plugins.cpp line ") != std::string::npos,
+		"a plugin loaded where another was freed is named from its own .pdb, not the freed plugin's");
+
+	// toy_fault_before's crash makes the crash log record the DLL loaded behind Bazaar's back, before it is freed.
+	StartWithNone();
+	const HMODULE behind = LoadLibraryExA(OutFile("toy_fault.dll").c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+	const char* const recorder[] = {"toy_fault_before.dll"};
+	StartWith(recorder);
+	unit.add(2, 3);
+	StartWithNone();
+	FreeLibrary(behind);
+	StartWith(second);
+	Check(behind && Find("toy_overflow.dll")->module == behind, "the plugin loads where the DLL freed behind Bazaar's back was");
+	unit.Range();
+	const int unrecorded = LogIndex("    #00 toy_overflow.dll+0x");
+	Check(unrecorded >= 0 && LogLine(unrecorded).find('(') == std::string::npos,
+		"a plugin loaded where a DLL was freed behind Bazaar's back names no function, rather than that DLL's");
 }
 
 void TestStrings()
@@ -255,7 +325,26 @@ void TestExceptions()
 	Check(range == original + 1000, "the hooks after the one that threw still run, on the original's result");
 	Check(IsQuarantined("toy_throw.dll"), "the plugin that threw is quarantined");
 	Check(ReportRow("toy_throw.dll").problems.find("0xE06D7363") != std::string::npos, "the Plugins screen gives the C++ exception's code");
+	const int threw = LogIndex("Plugin Toy Throw: Faulted");
+	const int thrower = LogIndex("toy_throw.dll+0x", threw);
+	Check(threw >= 0 && thrower > threw && LogLine(thrower).find("    #") == 0, "the call stack of a C++ exception reaches the plugin function that threw it");
 	ClearLog();
 	Check(unit.Range() == original + 1000, "the other plugin's hook keeps running after the quarantine");
 	Check(!LogHas("Plugin Toy Throw: Faulted"), "the hook that threw never runs again");
+
+	const char* const overflowing[] = {"toy_overflow.dll"};
+	StartWith(overflowing);
+	const int beforeOverflow = FaultCount();
+	unit.Range();
+	Check(FaultCount() == beforeOverflow + 1 && IsQuarantined("toy_overflow.dll"), "a plugin that runs out of stack is caught and quarantined");
+	Check(LogHas("Plugin Toy Overflow: Faulted (code 0xC00000FD)"), "the log gives the stack overflow's code");
+	Check(LogHas("    #00 toy_overflow.dll+0x") && LogHas("    #63 toy_overflow.dll+0x"), "a stack overflow's call stack is walked, as far as the frames shown go");
+	Check(LogHas("    (more frames not shown)"), "a call stack cut short says so");
+	Check(unit.Range() == original, "the game's function keeps working after a plugin's stack overflow");
+
+	CrashRecordedTwice();
+	const std::vector<std::string> laterLines = CivCrashReport(&s_later);
+	const std::vector<std::string> waitingLines = CivCrashReport(&s_waiting);
+	Check(laterLines.size() == 1 && laterLines[0] == "  The call stack was not recorded, because another plugin's crash was still being reported.", "a crash during another crash's report says its stack was not recorded");
+	Check(waitingLines.size() > 2 && waitingLines[1] == "  Call stack, innermost first, as file+offset:", "the first crash keeps its own record and call stack");
 }

@@ -1,3 +1,4 @@
+#include "CivHostCrash.h"
 #include "CivHostHooks.h"
 #include "CivHostRuntime.h"
 
@@ -125,7 +126,7 @@ namespace
 		return s_plugins[plugin].name.c_str();
 	}
 
-	int FaultFilter(unsigned int code)
+	int FaultFilter(unsigned int code, const EXCEPTION_POINTERS* info, const void* owner)
 	{
 		switch (code)
 		{
@@ -140,6 +141,7 @@ namespace
 		case EXCEPTION_PRIV_INSTRUCTION:
 		case EXCEPTION_STACK_OVERFLOW:
 		case 0xE06D7363: // a C++ exception escaping the plugin
+			CivCrashRecord(code, info, owner);
 			return EXCEPTION_EXECUTE_HANDLER;
 		}
 		return EXCEPTION_CONTINUE_SEARCH;
@@ -156,7 +158,7 @@ namespace
 			{
 				thunk(ctx);
 			}
-			__except (FaultFilter(*code = GetExceptionCode()))
+			__except (FaultFilter(*code = GetExceptionCode(), GetExceptionInformation(), code))
 			{
 				ran = false;
 			}
@@ -170,19 +172,27 @@ namespace
 		return ran;
 	}
 
+	void LogCrash(const unsigned int* code)
+	{
+		const std::vector<std::string> lines = CivCrashReport(code);
+		for (size_t i = 0; i < lines.size(); ++i)
+			Log("%s", lines[i].c_str());
+	}
+
 	// The player hears about a plugin's first fault only; later ones are logged.
-	void Quarantine(int plugin, int hookId, const char* where, unsigned int code)
+	void Quarantine(int plugin, int hookId, const char* where, const unsigned int* code)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
 		char problem[512];
-		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", code, where);
+		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", *code, where);
 		Log("Plugin %s: %s", rec.name.c_str(), problem);
+		LogCrash(code);
 		if (rec.quarantined)
 			return;
 		rec.quarantined = true;
 		rec.problems.push_back(problem);
 		if (s_faultSink)
-			s_faultSink(plugin, rec.name.c_str(), hookId, code);
+			s_faultSink(plugin, rec.name.c_str(), hookId, *code);
 	}
 
 	bool CallPlugin(const CivHookEntry* e, int hookId, CivHookThunk thunk, void* ctx)
@@ -191,7 +201,7 @@ namespace
 		unsigned int code = 0;
 		if (GuardedCall(thunk, ctx, &code))
 			return true;
-		Quarantine(e->plugin, hookId, HookName(hookId), code);
+		Quarantine(e->plugin, hookId, HookName(hookId), &code);
 		return false;
 	}
 
@@ -431,7 +441,7 @@ namespace
 		unsigned int code = 0;
 		if (!shutdown || GuardedCall(&ShutdownThunk, &shutdown, &code))
 			return true;
-		Quarantine(plugin, -1, "its shutdown function", code);
+		Quarantine(plugin, -1, "its shutdown function", &code);
 		return false;
 	}
 
@@ -546,6 +556,7 @@ namespace
 		const bool threadLeft = clean && ThreadStillInside((HMODULE)rec.module);
 		if (clean && !threadLeft)
 		{
+			CivCrashForgetModule((HMODULE)rec.module);
 			FreeLibrary((HMODULE)rec.module);
 			delete rec.host;
 			Log("Plugin %s unloaded.", rec.name.c_str());
@@ -723,6 +734,7 @@ namespace
 		if (!entry)
 		{
 			Refuse(s_plugins[index], CIV_PLUGIN_NO_ENTRY, "The file has no " CIV_PLUGIN_ENTRY_NAME " function, so it is not a plugin.");
+			CivCrashForgetModule(module);
 			FreeLibrary(module);
 			return;
 		}
@@ -754,6 +766,7 @@ namespace
 			DiscardPending();
 			rec.quarantined = true;
 			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
+			LogCrash(&code);
 			return;
 		}
 		if (!call.accepted)

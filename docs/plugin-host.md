@@ -122,7 +122,7 @@ Rules fixes currently inside the DLL that are **not** MCP:
 
 C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
 
-- the host logs the plugin and the function; the call stack, as the MCP mod's crash handler logs it today, comes in P1;
+- the host logs the plugin, the function, what memory the fault touched and the call stack;
 - the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
 - an in-game notification names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable and that any save should go to a new slot, and says the details are in Logs\Bazaar.log. A pop-up in the middle of the screen is planned instead (issue #4);
 - the game keeps running.

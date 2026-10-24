@@ -394,7 +394,7 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
   - Not loaded, with the reason: for example "Declined to load.", a newer Bazaar is needed, the DLL was not found in the MODS folder, or a clash with another plugin;
   - Turned off after a crash;
   - Skipped: the player unchecked it.
-- **If your plugin crashes inside a hook,** the game carries on. Bazaar turns your plugin off until the player goes back to the main menu, and shows a "Plugin disabled" notice. A common cause is a hook whose parameters do not match the game's function.
+- **If your plugin crashes inside a hook,** the game carries on. Bazaar turns your plugin off until the player goes back to the main menu, and shows a "Plugin disabled" notice. A common cause is a hook whose parameters do not match the game's function. `Bazaar.log` then says where it crashed: what memory it touched, and the call stack, innermost first. Each line gives the DLL and an offset into it, such as `MyPlugin.dll+0x00001A2B`. On the machine you built the plugin on, while the `.pdb` file the build wrote is still where the build put it, the line also names the function and the source line, such as `(BeforeDoTurn, MyPlugin.cpp line 42)`. Without the `.pdb`, as on a player's machine, the call stack may skip some calls, but its first line is always where the crash happened.
 
 ## Publishing
 
