@@ -159,7 +159,7 @@ namespace
 			LogLine("Could not write the BazaarPlugins table, so the Plugins screen cannot list the plugins.");
 	}
 
-	// No DllPlugins table means no plugin mod is active; false means the table could not be read.
+	// No DllPlugins table means no plugins are listed; false means the table could not be read.
 	bool ListedPluginFiles(std::vector<std::string>* files)
 	{
 		Database::Results tables;

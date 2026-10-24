@@ -37,6 +37,7 @@ public:
 
 	int m_notified;
 	std::string m_name;
+	static int s_created;
 };
 
 extern int g_levelCalls;

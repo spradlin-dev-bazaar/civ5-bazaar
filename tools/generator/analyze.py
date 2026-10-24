@@ -26,6 +26,7 @@ CLASS_KINDS = (CK.CLASS_DECL, CK.STRUCT_DECL)
 TEMPLATE_KINDS = (CK.CLASS_TEMPLATE, CK.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION, CK.FUNCTION_TEMPLATE)
 # Windows calls these under its loader lock, or before any plugin can have loaded.
 LOADER_ENTRY_POINTS = {"DllMain", "DllGetGameContext"}
+VARIABLE_SCOPES = (CK.TRANSLATION_UNIT, CK.NAMESPACE, CK.CLASS_DECL, CK.STRUCT_DECL)
 SCALAR_KINDS = {
     ci.TypeKind.BOOL,
     ci.TypeKind.CHAR_U,
@@ -194,11 +195,18 @@ def analyze_tu(job):
     tu = idx.parse(src, args=project.clang_args(), options=ci.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
     with open(src, "rb") as f:
         data = f.read()
-    functions = []
+    functions, variables = [], []
+
+    def in_this_file(c):
+        return c.location.file and os.path.normcase(os.path.abspath(c.location.file.name)) == os.path.normcase(src)
+
     for c in tu.cursor.walk_preorder():
-        if c.kind in FUNCTION_KINDS and c.is_definition() and c.location.file:
-            if os.path.normcase(os.path.abspath(c.location.file.name)) == os.path.normcase(src):
-                functions.append(function_record(c, data, rel, project))
+        if c.kind in FUNCTION_KINDS and c.is_definition() and in_this_file(c):
+            functions.append(function_record(c, data, rel, project))
+        elif c.kind == CK.VAR_DECL and c.is_definition() and in_this_file(c):
+            record = variable_record(c, project)
+            if record:
+                variables.append(record)
     bodies = [(fn["body_start"], fn["def_end"]) for fn in functions]
     errors = []
     for d in tu.diagnostics:
@@ -207,7 +215,7 @@ def analyze_tu(job):
         path = os.path.abspath(d.location.file.name) if d.location.file else ""
         in_body = os.path.normcase(path) == os.path.normcase(src) and any(s <= d.location.offset < e for s, e in bodies)
         errors.append((path, d.location.line, d.spelling, in_body))
-    return {"rel": rel, "errors": errors, "functions": functions}
+    return {"rel": rel, "errors": errors, "functions": functions, "variables": variables}
 
 
 def function_record(c, data, rel, project):
@@ -295,8 +303,20 @@ def function_record(c, data, rel, project):
     return rec
 
 
+def variable_record(c, project):
+    """A variable defined here and first declared elsewhere in the project, normally a header, which plugins reach
+    through the export marker. Not one whose first declaration gives its value: users compile that value in, and it
+    cannot be imported."""
+    if c.semantic_parent is None or c.semantic_parent.kind not in VARIABLE_SCOPES:
+        return None
+    ex = export_declaration(c, project)
+    if ex is None or ex["is_definition"] or any(t.spelling == "=" for t in c.canonical.get_tokens()):
+        return None
+    return {"usr": c.get_usr(), "name": c.spelling, "export_decl": ex}
+
+
 def export_declaration(defn, project):
-    """Where to put the export marker: the start of the function's first declaration."""
+    """Where to put the export marker: the start of the first declaration."""
     if defn.linkage != ci.LinkageKind.EXTERNAL:
         return None
     canon = defn.canonical
@@ -323,9 +343,10 @@ def run(project):
         json.dump(results, f)
     funcs = [fn for r in results for fn in r["functions"]]
     hookable = [fn for fn in funcs if not fn["skip"]]
+    variables = sum(len(r["variables"]) for r in results)
     print(
-        "translation units %d, functions %d, hookable %d, seconds %.0f"
-        % (len(results), len(funcs), len(hookable), time.time() - t)
+        "translation units %d, functions %d, hookable %d, shared variables %d, seconds %.0f"
+        % (len(results), len(funcs), len(hookable), variables, time.time() - t)
     )
     reasons = {}
     for fn in funcs:

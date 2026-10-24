@@ -1,8 +1,8 @@
 # Hand-placed hooks
 
-A hand-placed hook is a spot inside an engine function where Bazaar calls plugins. A plugin registers for one in its entry function with `RegisterHandHook(pluginIndex, hook, function)`, using a `CIV_HAND_*` number and a function of the type `host/CivPluginApi.h` names for it. Plugins are called in load order. A question stops at the first plugin that answers yes. An announcement reaches every plugin that registered for it.
+A hand-placed hook is a spot inside an engine function where Bazaar calls plugins. A plugin registers for one in its entry function with `RegisterHandHook(pluginIndex, hook, function)`, using a `CIV_HAND_*` number and a function of the type `CivPluginApi.h` names for it. Plugins are called in load order. A question stops at the first plugin that answers yes. An announcement reaches every plugin that registered for it.
 
-A replacement that does not run the original also stops the spots inside it from running. When that could happen between two plugins, Bazaar holds one of them back; see "Replacements and the hooks inside them" in plugin-host.md.
+A replacement that does not run the original also stops the spots inside it from running. When that could happen between two plugins, Bazaar holds one of them back; see "What a replacement skips" in the plugin guide.
 
 ## IsPluginControlledPlayer
 

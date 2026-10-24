@@ -86,6 +86,14 @@ def hand_hook_problems():
     return [] if sites == expected else ["hand-placed hook sites %s, expected %s" % (sites, expected)]
 
 
+def export_marker_problems():
+    """A global variable and a static member variable are marked for export in the generated header."""
+    with open(os.path.join(BUILD, "src", "fixture", "fake_engine.h")) as f:
+        header = f.read()
+    expected = ["CIV_HOST_API extern int g_levelCalls;", "CIV_HOST_API static int s_created;"]
+    return ["%r is not marked for export" % line for line in expected if line not in header]
+
+
 if __name__ == "__main__":
     problems = naming_problems() + duplicate_problems() + hand_hook_problems()
     registry = os.path.join(BUILD, "hook-ids.txt")
@@ -94,7 +102,7 @@ if __name__ == "__main__":
     first = generate_hooks(["fake_engine.cpp"])
     second = generate_hooks(["aaa_extra.cpp", "fake_engine.cpp"])
     third = generate_hooks(["fake_engine.cpp"])
-    problems += registry_problems(first, second, third)
+    problems += registry_problems(first, second, third) + export_marker_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)

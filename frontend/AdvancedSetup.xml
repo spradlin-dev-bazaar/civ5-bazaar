@@ -8,7 +8,7 @@
       </Box>
       <!-- The stack measures a one-line label too short, so the name gets a box of fixed height. -->
       <Box Anchor="L,T" Size="800,32" Color="White.0">
-        <CheckBox ID="UseBox" ButtonTexture="assets/UI/Art/Controls/CheckBox2TheBox.dds" Anchor="L,C" IsChecked="1" ConsumeMouse="1" ToolTip="Untick to skip this plugin without turning off its mod." />
+        <CheckBox ID="UseBox" ButtonTexture="assets/UI/Art/Controls/CheckBox2TheBox.dds" Anchor="L,C" IsChecked="1" ConsumeMouse="1" ToolTip="Uncheck to skip this plugin without turning off its mod." />
         <Label ID="Title" Anchor="L,C" Offset="40,0" Font="TwCenMT22" TruncateWidth="680" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
         <Button ID="UpButton" Anchor="R,C" Offset="28,0" Style="ScrollBarUp" />
         <Button ID="DownButton" Anchor="R,C" Offset="4,0" Style="ScrollBarDown" />

@@ -264,10 +264,10 @@ namespace
 			}
 			heldBack = true;
 			if (c.pluginReplaces)
-				AddAndLog(plugin, rec.problems, Format("This plugin replaces %s, which runs the %s hook that %s, higher in the list, uses. If the version in this plugin does not run the game's own, %s never gets that hook, so this plugin was held back. If you know the two work together, tick Use both anyway.",
+				AddAndLog(plugin, rec.problems, Format("This plugin replaces %s, which runs the %s hook that %s, higher in the list, uses. If the version in this plugin does not run the game's own, %s never gets that hook, so this plugin was held back. If you know the two work together, check Use both anyway.",
 					function.c_str(), hook, otherName, otherName));
 			else
-				AddAndLog(plugin, rec.problems, Format("%s, higher in the list, replaces %s, which runs the %s hook this plugin uses. If the version in %s does not run the game's own, this plugin never gets that hook, so it was held back. If you know the two work together, tick Use both anyway.",
+				AddAndLog(plugin, rec.problems, Format("%s, higher in the list, replaces %s, which runs the %s hook this plugin uses. If the version in %s does not run the game's own, this plugin never gets that hook, so it was held back. If you know the two work together, check Use both anyway.",
 					otherName, function.c_str(), hook, otherName));
 		}
 		s_possibleConflicts.clear();

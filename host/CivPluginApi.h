@@ -2,6 +2,10 @@
 
 // The contract between the host and plugin DLLs. Structures here only ever grow at the end.
 
+#ifdef _UNICODE
+#error Set your project's Character Set to Use Multi-Byte Character Set, as Bazaar's is.
+#endif
+
 #define CIV_HOST_API_MAJOR 0
 #define CIV_HOST_API_MINOR 2
 
@@ -57,7 +61,7 @@ enum CivOrdersCancelledReason
 };
 
 typedef bool (*CivPlayerQueryFn)(int player);
-// What the values mean depends on the popup; docs/hand-placed-hooks.md lists them.
+// What the values mean depends on the popup; hand-placed-hooks.md lists them.
 typedef void (*CivPopupRaisedFn)(int player, int popupType, int data1, int data2, int data3, bool option1, bool option2, const char* text);
 typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
 typedef void (*CivDealResolvedFn)(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);

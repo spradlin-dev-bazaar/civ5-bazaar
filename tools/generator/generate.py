@@ -457,14 +457,17 @@ class Registry:
         return self.next_id
 
 
-def load_functions(project):
+def load_analysis(project):
+    """The analyzed functions and shared variables, each once."""
     with open(os.path.join(project.build_dir, "analysis.json")) as f:
         results = json.load(f)
-    functions = {}
+    functions, variables = {}, {}
     for r in results:
         for fn in r["functions"]:
             functions.setdefault(fn["usr"] + "@" + fn["file"], fn)
-    return list(functions.values())
+        for v in r["variables"]:
+            variables.setdefault(v["usr"], v)
+    return list(functions.values()), list(variables.values())
 
 
 def prepare_hook(fn, project, files):
@@ -500,13 +503,14 @@ def plan_hooks(functions, project, files, edits, registry):
         for path, start, end, insert in fn_edits:
             edits.setdefault(path, []).append((start, end, insert))
         src = os.path.join(project.root, fn["file"])
+        fn["signature"] = hooked_signature(fn, files[src])
         wrappers.setdefault(src, []).append((fn, code.replace(ID_PLACEHOLDER, str(fn["hook_id"]))))
         hooks.append(fn)
     return hooks, skipped, wrappers
 
 
 def mark_exports(functions, files, edits):
-    """Put the export marker on each function's first declaration. Returns (marked, missed)."""
+    """Put the export marker on the first declaration of each function or shared variable. Returns (marked, missed)."""
     marked, missed, sites = 0, 0, set()
     for fn in functions:
         ex = fn.get("export_decl")
@@ -627,17 +631,24 @@ def write_table(project, registry, sites):
         f.write("\n".join(lines) + "\n")
 
 
-def write_plugin_header(project, registry):
+def hooked_signature(fn, data):
+    result = "void" if fn["result"]["kind"] == "void" else return_text(fn, data)
+    return ("static " if fn["static_method"] else "") + result + " " + fn["hook_key"]
+
+
+def write_plugin_header(project, registry, hooks):
+    signatures = dict((fn["hook_id"], fn["signature"]) for fn in hooks)
     lines = [
         "#pragma once",
         "",
-        "// Generated: one namespace per hook point, with its id.",
+        "// Generated: one namespace per hook point, with its id and the function it hooks.",
         "",
         "namespace CivHooks",
         "{",
     ]
     for hook_id, name in sorted(registry.entries.values()):
-        lines.append("\tnamespace %s { enum { ID = %d }; }" % (name, hook_id))
+        signature = signatures.get(hook_id, "no longer a hook point, so it never runs")
+        lines.append("\tnamespace %s { enum { ID = %d }; } // %s" % (name, hook_id, signature))
     lines.append("}")
     out_dir = os.path.join(project.build_dir, "sdk")
     os.makedirs(out_dir, exist_ok=True)
@@ -727,26 +738,27 @@ def write_hook_list(project, hooks):
 
 
 def run(project):
-    functions = load_functions(project)
+    functions, variables = load_analysis(project)
     files, edits = PathDict(), PathDict()
     registry = Registry(project.registry)
     hooks, skipped, wrappers = plan_hooks(functions, project, files, edits, registry)
     marked, missed = mark_exports(functions, files, edits)
+    shared, missed_shared = mark_exports(variables, files, edits)
     write_mirror(project, files, edits, wrappers)
     registry.save()
     write_table(project, registry, hand_hook_sites(hooks, files, project.root))
-    write_plugin_header(project, registry)
+    write_plugin_header(project, registry, hooks)
     write_hook_list(project, hooks)
     if project.vcproj:
         write_engine_build_files(project)
 
     vanished = len(registry.entries) - len(hooks)
     print(
-        "hook points %d (new %d, no longer present %d), functions marked for export %d"
-        % (len(hooks), registry.added, vanished, marked)
+        "hook points %d (new %d, no longer present %d), marked for export: functions %d, shared variables %d"
+        % (len(hooks), registry.added, vanished, marked, shared)
     )
-    if missed:
-        print("  export marker not placed (declaration not written literally): %d" % missed)
+    if missed or missed_shared:
+        print("  export marker not placed (declaration not written literally): %d" % (missed + missed_shared))
     for reason, n in sorted(skipped.items(), key=lambda kv: -kv[1]):
         print("  skipped while generating, %s: %d" % (reason, n))
     return hooks

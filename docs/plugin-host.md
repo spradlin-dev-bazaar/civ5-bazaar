@@ -32,7 +32,7 @@ Plugin DLLs  (ordinary mods: one folder each, with plugins/<Name>.dll inside)
   <other>.dll            anything else that needs C++; Lua mods use VMC hooks instead
 ```
 
-The host finds plugins through the game's own mod system: each plugin mod inserts one row into a `DllPlugins` table (file name, host API version it was built against). At the point where VMC reads its own `CustomModOptions` table, the host reads `DllPlugins`, finds each file under the MODS folder, loads it in the order the Plugins screen saved, and runs the handshake below.
+The host finds plugins through the game's own mod system: each plugin mod inserts one row, its file name, into a `DllPlugins` table, which the host's own mod creates. At the point where VMC reads its own `CustomModOptions` table, the host reads `DllPlugins`, finds each file under the MODS folder, loads it in the order the Plugins screen saved, and runs the handshake below.
 
 ## Why VMC as the host base
 
@@ -42,13 +42,13 @@ Terms: VMC is used under whoward69's terms: it is never sold or used to make mon
 
 VMC is built from the same 1.0.3.276 SDK source as the MCP DLL, with a VS2015 solution wrapping a vs2010 project. This repository builds with VS2008 through its own build script, modelled on the MCP mod's `build-dll.cmd`, and adds VMC's extra files to the project.
 
-Mods made for VMC list VMC's mod ID as a reference, so that the game switches them on after VMC's database files. The game switches on mods with no live reference or dependency first, in the order of their folder names, and only then the mods that have one; a reference to a mod that is not switched on counts for nothing. So VMC's files ship as a mod of their own, Bazaar - VMC Bootstrap (required), under VMC's mod ID, and the host depends on it: mods made for VMC then load after VMC's files, and a mod that requires VMC can be switched on. It holds no DLL; the host DLL is the one that runs. The Workshop allows one mod per item, so it is a second item, listed under Required Items on the host's page, and Steam offers it to anyone who subscribes to the host. It counts as affecting saved games, because loading a save switches on only the mods the save lists.
+Mods made for VMC list VMC's mod ID as a reference, so that the game switches them on after VMC's database files. The game switches on mods with no live reference or dependency first, in the order of their folder names, and only then the mods that have one; a reference to a mod that is not switched on counts for nothing. So VMC's files ship as a mod of their own, Bazaar - VMC Bootstrap (required), under VMC's mod ID, and the host depends on it: mods made for VMC then load after VMC's files, and a mod that requires VMC can be switched on. It holds no DLL; the host DLL is the one that runs. The Workshop allows one mod per item, so it is a second item, listed under Required Items on the host's page, and Steam offers it to anyone who subscribes to the host. It counts as affecting saved games, because loading a save applies the database changes of only the mods the save lists.
 
 ## Host design
 
 ### 1. Everything exported, layouts frozen
 
-A plugin needs real access to players, units, cities, plots, deals, diplomacy, notifications and the globals (`GC`, `gDLL`). The host exports every engine function defined in a source file, except templates and functions private to one file. The build marks each one in its generated copy of the engine, so the committed engine files stay untouched; marking whole classes instead would make the compiler build member functions the game never uses, and some of those do not compile. Plugins link against the host's import library.
+A plugin needs real access to players, units, cities, plots, deals, diplomacy, notifications and the globals (`GC`, `gDLL`). The host exports every engine function defined in a source file, except templates and functions private to one file, and every global or static member variable a header declares, such as `gGlobals` behind `GC` and `CvPlayerAI::m_aPlayers` behind `GET_PLAYER`. The build marks each one in its generated copy of the engine, so the committed engine files stay untouched; marking whole classes instead would make the compiler build member functions the game never uses, and some of those do not compile. Plugins link against the host's import library.
 
 The numbers allow it: the host built from the Firaxis source exports about 14,500 functions (counted 2026-10-22), against a limit of 65,535 exports per DLL. The build prints the count.
 
@@ -84,11 +84,11 @@ Replace is exclusive: only one plugin can replace a function. When two plugins r
 
 Each hook has a number from a committed list, tools/generator/hook-ids.txt. A number always means the same function, and new functions only add numbers at the end, so a plugin built against an older host keeps working on a newer one. If a function's parameters change, it gets a new number, because a plugin written for the old parameters would break.
 
-The generator reads the headers and writes one wrapper per function with that function's real signature. It runs as part of every host build. Functions written in headers stay inline and are not hook points; the SDK lists them.
+The generator reads the headers and writes one wrapper per function with that function's real signature. It runs as part of every host build. Functions written in headers stay inline and are not hook points; the documentation lists them.
 
 Raw detouring is not used on host functions. It remains only for the closed executable, where the seat playback code already patches by pattern; that stays in the MCP plugin.
 
-**Hand-placed hooks.** A function boundary is not every interesting spot. Where the MCP server needs a spot inside a function, the engine source calls the host there, and plugins register for the spot by its number. Each has a fixed signature and one of two rules: a question stops at the first plugin that answers yes, and an announcement reaches every plugin that registered. Numbers only grow at the end, so adding one later is additive. Where the MCP server's change sits at the start or end of a function, a generated hook on that function does the job instead. docs/hand-placed-hooks.md describes each one.
+**Hand-placed hooks.** A function boundary is not every interesting spot. Where the MCP server needs a spot inside a function, the engine source calls the host there, and plugins register for the spot by its number. Each has a fixed signature and one of two rules: a question stops at the first plugin that answers yes, and an announcement reaches every plugin that registered. Numbers only grow at the end, so adding one later is additive. Where the MCP server's change sits at the start or end of a function, a generated hook on that function does the job instead. sdk/hand-placed-hooks.md describes each one.
 
 | Today's engine edit | Becomes |
 |---|---|
@@ -157,18 +157,15 @@ All three are per-plugin, and the SDK template ships with them filled in; the ho
 
 ## Plugin SDK
 
-A folder shipped with each host release (also the thing other developers download):
+A folder shipped with each host release (also the thing other developers download), laid out by `sdk/build_sdk.py`:
 
-- `include/` the host's headers (the engine's, with the export macro resolving to import, and private members made visible to plugin code, since a replacement copied from the host needs the access the original had);
-- `include/CivHooks.h` the generated hook registration for every function, with the before/after/replace signatures;
-- `lib/CivHost.lib` import library;
-- `CivPlugin.vsprops` the exact compiler and linker settings of the host build;
-- `api-version.h` the host API version;
-- `inlined-functions.md` the functions written in headers, which are not hook points;
-- `docs/` the generated reference and the guide (the same as the documentation site);
-- `plugin-template/` a minimal plugin that registers one before-hook and one hand-placed hook and logs a line;
-- `plugin-template/` also carries the mod description with the host dependency declared and the SQL that creates the `DllPlugins` table if missing and inserts the plugin's row;
-- `README.md` how to build, how the mod folder must look, how the `DllPlugins` row is written, how a refusal shows up, and the rule of thumb: use a hand-placed hook if one fits, a generated before/after hook otherwise, a replace only when you must (calling the original whenever you can), and ask for a hand-placed hook when you find yourself replacing a function other plugins would also want.
+- `include/` the engine's headers as the host was built from them, with the export marker resolving to import, the Firaxis headers they include, `CivPluginApi.h` (the handshake, the API version and the hand-placed hooks) and `CivHooks.h` (every hook's number, with the function's signature as a comment; typed declarations are issue #10);
+- `lib/` the host's import library, `CvGameCore_Expansion2.lib`, and the Firaxis libraries;
+- `CivPlugin.vsprops` the compiler and linker settings of the host build, with paths through the `BAZAAR_SDK` environment variable;
+- `README.md`, the plugin-writing guide (sdk/README.md), and `hand-placed-hooks.md`;
+- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook and one Lua method: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, and a `build.cmd` that builds the DLL, the mod folder and the Workshop package.
+
+Not in it yet: plugins cannot reach private and protected members, because the compiler names private functions differently from public ones, so the host would need to export them under their public names too. The list of functions written in headers and the generated reference come with the documentation site.
 
 ## Developer documentation
 
@@ -187,13 +184,13 @@ Functions written in headers are not hook points; each gets a page saying so, wi
 
 The pages form one tree: folder, file, class, function. Every class sits in one file, and a function outside any class sits directly under its file. Each page shows its place in the tree as a fixed trail of links, and each folder, file and class has a page listing what is in it. A search box reads a generated list of every name.
 
-Each hand-placed hook gets a page too: its section of docs/hand-placed-hooks.md, plus every place in the engine that calls it. One page lists them all.
+Each hand-placed hook gets a page too: its section of sdk/hand-placed-hooks.md, plus every place in the engine that calls it. One page lists them all.
 
 **Versions.** At each release, the docs step takes a fingerprint of every function's code, ignoring spaces and comments, and compares it with the list saved at the previous release in `tools/generator/function-history.txt`. The list also records which hand-placed hooks each function contains. A function not on the list is marked as added in this release. A function whose fingerprint changed is marked as changed in it; the mark names any hand-placed hook that was added and links to GitHub's line-by-line history of the function at that release. Then the step saves the new list. Only a release updates the list, so unreleased work is never marked; the first release is the starting point and marks nothing. Bazaar adds no fixes, so an engine function rarely changes, and usually only because a hand-placed hook went into it. That is the change a developer most needs to see, because a replacement copied from an older release would stop the new hook.
 
 **Written by hand.**
 
-- a description of each hand-placed hook in docs/hand-placed-hooks.md, written when the hook is added;
+- a description of each hand-placed hook in sdk/hand-placed-hooks.md, written when the hook is added;
 - a task-based guide as the front page: common goals ("change combat odds", "react to a city being captured"), each pointing to the hooks that serve it; it starts with the common needs and grows over time;
 - a short summary of each main class (player, city, unit, plot, deals, diplomacy): what it owns and where to look.
 
@@ -238,7 +235,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
-**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. A plugin-writing guide, the task-based guide, the class summaries, and the documentation site. First GitHub release of the host and SDK from this repository and of the MCP plugin from its own, and the Workshop pages.
+**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The task-based guide, the class summaries, and the documentation site. First GitHub release of the host and SDK from this repository and of the MCP plugin from its own, and the Workshop pages.
 
 ## Risks
 

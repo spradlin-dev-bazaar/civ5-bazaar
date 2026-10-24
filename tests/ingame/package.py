@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "generator"))
 import common  # noqa: E402
 
 PROJECT = common.engine_project()
-HOST_OUT = os.path.join(PROJECT.mirror_root, "BuildOutput", "VS2008_ModWin32")
+HOST_OUT = common.HOST_OUTPUT
 OUT = os.path.join(HERE, "out")
 VSVARS = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsvars32.bat"
 CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
@@ -64,6 +64,9 @@ print("Game.ToyHandPing: " .. (Game.ToyHandPing and Game.ToyHandPing() or "missi
 VMC_CHECK_XML = '<?xml version="1.0" encoding="utf-8"?>\n<Context>\n</Context>\n'
 # The id whoward69's VMC and the Community Patch share; mods made for either reference it.
 VMC_MOD_ID = "d1b6328c-ff44-4b0d-aad7-c657f83610cd"
+# Bazaar's mod creates the plugin list before any plugin mod is switched on, so the list's shape is Bazaar's. Plugins
+# create it too, so that without Bazaar they leave no error in the database log.
+DLL_PLUGINS_TABLE = "CREATE TABLE IF NOT EXISTS DllPlugins (File TEXT NOT NULL);\n"
 
 
 def vs_env():
@@ -260,8 +263,10 @@ def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
     depends on that mod, which makes the game switch it on first."""
     folder = new_mod_folder(name)
     shutil.copyfile(dll, os.path.join(folder, "CvGameCore_Expansion2.dll"))
+    with open(os.path.join(folder, "DllPlugins.sql"), "w") as f:
+        f.write(DLL_PLUGINS_TABLE)
     vmc_version = write_vmc_data_mod()
-    files = [("CvGameCore_Expansion2.dll", 1)]
+    files = [("CvGameCore_Expansion2.dll", 1), ("DllPlugins.sql", 0)]
     references = []
     if plugins_screen:
         files += copy_plugins_screen(folder)
@@ -272,7 +277,7 @@ def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
         mod_id,
         teaser,
         files,
-        [],
+        ["DllPlugins.sql"],
         dll="CvGameCore_Expansion2.dll",
         references=references,
         dependencies=[(VMC_MOD_ID, VMC_DATA_NAME, vmc_version)],
@@ -285,8 +290,8 @@ def write_toy_mod(dll_name, mod_name, mod_id):
     sql = dll_name + ".sql"
     shutil.copyfile(os.path.join(OUT, "build", dll), os.path.join(folder, dll))
     with open(os.path.join(folder, sql), "w") as f:
-        f.write("CREATE TABLE IF NOT EXISTS DllPlugins (File TEXT NOT NULL, ApiMajor INTEGER, ApiMinor INTEGER);\n")
-        f.write("INSERT INTO DllPlugins (File, ApiMajor, ApiMinor) VALUES ('%s', 0, 1);\n" % dll)
+        f.write(DLL_PLUGINS_TABLE)
+        f.write("INSERT INTO DllPlugins (File) VALUES ('%s');\n" % dll)
     write_modinfo(folder, mod_name, mod_id, "Test plugin for the %s." % HOST_NAME, [(dll, 0), (sql, 0)], [sql])
 
 
@@ -347,21 +352,13 @@ def main(args):
         "/W3",
         "/fp:strict",
         "/LD",
-        "/DCIV_HOST_API=__declspec(dllimport)",
-        "/DFXS_IS_DLL",
-        "/DWIN32",
-        "/DNDEBUG",
-        "/D_WINDOWS",
-        "/D_USRDLL",
-        "/DFINAL_RELEASE",
-        "/D_CRT_SECURE_NO_WARNINGS",
         "/wd4251",
         "/wd4275",
         "/I" + PROJECT.mirror_dir,
         "/I" + common.HOST_DIR,
         "/I" + os.path.join(PROJECT.build_dir, "sdk"),
     ]
-    flags += ["/D" + d for d in common.LAYOUT_DEFINES]
+    flags += ["/D" + d for d in common.PLUGIN_DEFINES]
     flags += ["/I" + os.path.join(common.SOURCE_ROOT, inc) for inc in common.SUPPORT_INCLUDE]
     libs = [os.path.join(HOST_OUT, "CvGameCore_Expansion2.lib")]
     libs += [os.path.join(common.SOURCE_ROOT, lib) for lib in common.SUPPORT_LIBS]
