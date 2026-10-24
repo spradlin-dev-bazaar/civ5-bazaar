@@ -19486,12 +19486,12 @@ void CvUnit::setPromotionReady(bool bNewValue)
 
 		if(m_bPromotionReady)
 		{
-			SetAutomateType(NO_AUTOMATE);
-			ClearMissionQueue();
-			SetActivityType(ACTIVITY_AWAKE);
 #if defined(CIV_HOST_API)
 			CivHandUnitOrdersCancelled(this, CIV_ORDERS_PROMOTION_READY);
 #endif
+			SetAutomateType(NO_AUTOMATE);
+			ClearMissionQueue();
+			SetActivityType(ACTIVITY_AWAKE);
 		}
 
 		if(bNewValue)
