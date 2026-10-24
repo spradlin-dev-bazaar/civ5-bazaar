@@ -236,7 +236,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 
 **P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers), the exports, the hand-placed hook set above, failure containment, the Plugins screen, the version check before any plugin code runs, and a build check that fails when a class layout changes. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
 
-**P1.5 — developer documentation.** After P1 merges: the docs step that writes the generated reference, the task-based guide, the class summaries and the documentation site, as described under Developer documentation. Exit: the docs step builds the whole site on this machine, and the GitHub Action that publishes it is ready for the first release.
+**P1.5 — developer documentation.** On its own branch, started from P1 while P1 finishes, and merged after P1: the docs step that writes the generated reference, the task-based guide, the class summaries and the documentation site, as described under Developer documentation. Exit: the docs step builds the whole site on this machine, and the GitHub Action that publishes it is ready for the first release.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
