@@ -109,6 +109,12 @@ def read(path):
         return f.read()
 
 
+def cached_read(files, path):
+    if path not in files:
+        files[path] = read(path)
+    return files[path]
+
+
 def text(data, start, end):
     return data[start:end].decode("cp1252")
 
@@ -339,7 +345,7 @@ def orig_declaration(fn, files):
     """Text declaring the renamed original inside its class, and where to insert it."""
     decl = fn["decl"]
     path = decl["file"]
-    data = files.setdefault(path, read(path))
+    data = cached_read(files, path)
     toks = decl["tokens"]
     out = []
     i = 0
@@ -479,7 +485,7 @@ def prepare_hook(fn, project, files):
     if (ex and ex["first_token"] == "friend") or (fn["decl"] and fn["decl"]["tokens"][0][0] == "friend"):
         raise Skip("friend function")
     src = os.path.join(project.root, fn["file"])
-    data = files.setdefault(src, read(src))
+    data = cached_read(files, src)
     exported = bool(ex and ex["is_definition"])
     edits = [(src, fn["name_start"], fn["name_end"], orig_name(fn))]
     if fn["class"]:
@@ -523,7 +529,7 @@ def mark_exports(functions, files, edits):
         site = (os.path.normcase(ex["file"]), ex["start"])
         if site in sites:
             continue
-        data = files.setdefault(ex["file"], read(ex["file"]))
+        data = cached_read(files, ex["file"])
         if text(data, ex["start"], ex["start"] + len(ex["first_token"])) != ex["first_token"]:
             missed += 1
             continue
