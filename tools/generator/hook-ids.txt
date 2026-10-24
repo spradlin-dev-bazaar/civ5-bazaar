@@ -14549,3 +14549,7 @@
 14548	cvStopWatch_EndPerfTest	cvStopWatch::EndPerfTest()	void
 14549	cvStopWatch_GetDeltaInSeconds	cvStopWatch::GetDeltaInSeconds() const	double
 14550	cvStopWatch_PerfLog	cvStopWatch::PerfLog(const char *, double)	void
+14551	CvNotifications_GetNotificationType	CvNotifications::GetNotificationType(int)	NotificationTypes
+14552	CvNotifications_GetNotificationExtraGameData	CvNotifications::GetNotificationExtraGameData(int)	int
+14553	CvNotifications_GetNotificationX	CvNotifications::GetNotificationX(int)	int
+14554	CvNotifications_GetNotificationY	CvNotifications::GetNotificationY(int)	int
