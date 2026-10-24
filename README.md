@@ -26,7 +26,7 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 
 1. Set up the Python tools once: `python -m venv .venv`, then `.venv\Scripts\pip install -r tools\generator\requirements.txt`.
 2. `build-dll.cmd` builds the plain game DLL from the Firaxis source.
-3. `build-hooked.cmd` generates the hook wrappers and builds the host DLL.
+3. `build-hooked.cmd` generates the hook wrappers, checks that no class plugins use has changed its layout, and builds the host DLL.
 4. `tests\runtime\run.cmd` runs the automated tests, outside the game.
 5. `tests\ingame\package.py` lays out the host, VMC's files as a mod of their own, and the test plugins as mod folders in `tests\ingame\out\MODS`, ready to copy into the game's MODS folder. `pack.py` packs one of those folders into a package for uploading to the Steam Workshop.
 6. `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then builds its template plugin from that folder alone.
