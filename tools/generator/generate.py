@@ -374,7 +374,8 @@ def orig_declaration(fn, files):
         pos += 1
     if data[pos : pos + 1] != b";":
         raise Skip("declaration does not end where expected")
-    return path, pos + 1, " " + " ".join(out) + ";"
+    # Inserted before the `;`, so it can never share an offset with an export marker on the next declaration.
+    return path, pos, "; " + " ".join(out)
 
 
 def named_scopes(fn):
@@ -424,7 +425,7 @@ class Registry:
                     if not line.strip():
                         continue
                     fields = line.rstrip("\n").split("\t", 2)
-                    if len(fields) != 3 or not fields[0].isdigit():
+                    if len(fields) != 3 or not re.fullmatch(r"[0-9]+", fields[0]):
                         raise RuntimeError("%s line %d is not 'id<TAB>name<TAB>function'" % (path, number))
                     hook_id, name, key = int(fields[0]), fields[1], fields[2]
                     # A merge of two branches that both added hooks can repeat an id, which would make one
@@ -533,9 +534,14 @@ def mark_exports(functions, files, edits):
 
 
 def apply_edits(data, edits):
+    """Each edit is (start, end, text) against the original data; texts inserted at one offset keep their order."""
     out = bytearray(data)
-    for start, end, repl in sorted(edits, key=lambda e: (e[0], e[1]), reverse=True):
+    limit = len(data)
+    for start, end, repl in reversed(sorted(edits, key=lambda e: (e[0], e[1]))):
+        if end > limit:
+            raise RuntimeError("generator: edits overlap at offset %d" % start)
         out[start:end] = repl.encode("cp1252")
+        limit = start
     return bytes(out)
 
 

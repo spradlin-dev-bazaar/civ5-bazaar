@@ -8,6 +8,8 @@ if not exist "%OUT%" mkdir "%OUT%"
 rem Toys dropped from the list below must not linger: the harness expects toy_missing.dll to be absent.
 del /q "%OUT%\*.dll" "%OUT%\*.obj" 2>nul
 
+"%HERE%..\..\.venv\Scripts\python.exe" -m unittest discover -s "%HERE%..\generator" >"%OUT%\unit.log" 2>&1
+if errorlevel 1 (type "%OUT%\unit.log" & exit /b 1)
 "%HERE%..\..\.venv\Scripts\python.exe" "%HERE%hook_fixture.py" >"%OUT%\generate.log"
 if errorlevel 1 (type "%OUT%\generate.log" & exit /b 1)
 

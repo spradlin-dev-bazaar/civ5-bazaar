@@ -43,47 +43,11 @@ def registry_problems(first, second, third):
     return problems
 
 
-def duplicate_problems():
-    path = os.path.join(BUILD, "duplicate-ids.txt")
-    os.makedirs(BUILD, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("0\tA\tfirst()\n0\tB\tsecond()\n")
-    try:
-        generate.Registry(path)
-    except RuntimeError:
-        return []
-    return ["a registry that repeats an id was accepted"]
-
-
-def naming_problems():
-    """Names that would not be valid, unreserved C++: a file name with a leading digit, a __ type."""
-    local = {"name": "Helper", "namespaces": [], "class": None, "linkage": "INTERNAL", "file": "2DGrid.cpp"}
-    local.update(params=[], const=False)
-    overload = {"name": "Pack", "namespaces": [], "class": "CvUnit", "linkage": "EXTERNAL", "file": "CvUnit.cpp"}
-    overload.update(params=[{"type": "unsigned __int64"}], const=False)
-    expected = [
-        (generate.hook_name(local, set()), "File_2DGrid_cpp_Helper"),
-        (generate.hook_name(overload, {"CvUnit_Pack"}), "CvUnit_Pack_with_unsigned_int64"),
-    ]
-    return ["%s, expected %s" % pair for pair in expected if pair[0] != pair[1]]
-
-
-def hand_hook_problems():
-    """Calls inside a hooked function's body count once per hand-placed hook and function; calls outside do not."""
-    data = (
-        b"void A() { CivHandPopupRaised(1); CivHandPopupRaised (2); }\n"
-        b"int x = CivHandDealResolved(4);\n"
-        b"void B() { CivHandIsPluginControlledPlayer(3); }\n"
-    )
-    a_start, a_end = data.index(b"{"), data.index(b"}") + 1
-    b_start = data.index(b"{", a_end)
-    hooks = [
-        {"file": "f.cpp", "body_start": a_start, "def_end": a_end, "hook_id": 9},
-        {"file": "f.cpp", "body_start": b_start, "def_end": len(data), "hook_id": 7},
-    ]
-    sites = generate.hand_hook_sites(hooks, {os.path.join("root", "f.cpp"): data}, "root")
-    expected = [("CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER", 7), ("CIV_HAND_POPUP_RAISED", 9)]
-    return [] if sites == expected else ["hand-placed hook sites %s, expected %s" % (sites, expected)]
+def key_format_problems(hooks):
+    """A libclang change to this format would give every function a new hook number."""
+    expected = ["FakeUnit::Grow(int) const", "FakeUnit::Grow(int, int) const"]
+    problems = ["no hook has the key %r" % key for key in expected if key not in hooks]
+    return problems + ["%r says const twice" % key for key in hooks if "const const" in key]
 
 
 def export_marker_problems():
@@ -95,14 +59,13 @@ def export_marker_problems():
 
 
 if __name__ == "__main__":
-    problems = naming_problems() + duplicate_problems() + hand_hook_problems()
     registry = os.path.join(BUILD, "hook-ids.txt")
     if os.path.exists(registry):
         os.remove(registry)
     first = generate_hooks(["fake_engine.cpp"])
     second = generate_hooks(["aaa_extra.cpp", "fake_engine.cpp"])
     third = generate_hooks(["fake_engine.cpp"])
-    problems += registry_problems(first, second, third) + export_marker_problems()
+    problems = registry_problems(first, second, third) + key_format_problems(first) + export_marker_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)
