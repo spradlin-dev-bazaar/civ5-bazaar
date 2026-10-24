@@ -27,7 +27,7 @@ Host DLL  (replacement CvGameCore_Expansion2.dll, one per game)
 Bazaar - VMC Bootstrap (required)  (a mod of its own: whoward69's database, text, Lua and art files, no DLL)
   VMC's mod ID, so mods made for VMC load after it; the host depends on it
 
-Plugin DLLs  (ordinary mods: one folder each, with plugins/<Name>.dll inside)
+Plugin DLLs  (ordinary mods: one folder each, with <Name>.dll at its top level)
   MCPServer.dll          the MCP server, its log window Lua, its tools
   <other>.dll            anything else that needs C++; Lua mods use VMC hooks instead
 ```
@@ -203,9 +203,9 @@ Functions are not described in bulk; a function with no hand-written description
 `Claude/` (37 files, ~11,800 lines, counted 2026-10-21), today part of the Local MCP Server mod in the civ5-mods repository, moves to a new repository of its own and becomes `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
 
 1. replace each engine edit with a hook registration from the table above;
-2. move the `CvLuaGame.cpp` methods into the plugin and register them through `RegisterLuaMethods`;
-3. keep the no-PCH drawing file's two defines in line with the SDK property sheet;
-4. package: `MCPServer.dll` under `plugins/`, `LLMLog.lua/.xml`, the `DllPlugins` XML row, the log window's UI entry point, the mod description;
+2. move the `CvLuaGame.cpp` methods into the plugin and add them to the `Game` table from an after-hook on `CvLuaGame::RegisterMembers`, as the template's `AfterRegisterGame` does;
+3. keep the no-PCH drawing file on the SDK property sheet's `_SECURE_SCL=0` and `_HAS_ITERATOR_DEBUGGING=0`, which the sheet sets for every file; the file must not override them;
+4. package: `MCPServer.dll` at the mod folder's top level, `LLMLog.lua/.xml`, the SQL that adds its `DllPlugins` row, the log window's UI entry point, the mod description;
 5. rename everything named Claude (the folder, files, classes, log names and on-screen text) to neutral names, since the plugin works with any AI model.
 
 The seat/playback code pokes the game executable's memory by pattern scan; that stays in the plugin and needs nothing from the host.

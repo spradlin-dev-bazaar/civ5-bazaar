@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: city-founded-log
+expected_outcome: |
+  A Lua mod made from the template that switches on no VMC option, because PlayerCityFounded is a base-game event, and prints the new city's name from a GameEvents.PlayerCityFounded handler; it builds.

@@ -60,6 +60,7 @@ For example, to make every player's score count double, you add an after-hook to
    | Civilization V was not found in the registry. | The script looked up where Steam installed Civilization V and found nothing. |
    | Your Documents folder was not found. | Windows did not report your Documents folder, so the build cannot find `My Games\Sid Meier's Civilization 5`. |
    | error MSB4019: The imported project "…\Firaxis\ModBuddy\Civ5Mod.targets" was not found. | ModBuddy's build steps are not installed yet. Start ModBuddy once from the Civilization V SDK, then build again. |
+   | error PRJ0020 : Tool 'Linker', Property 'Manifest File' contains invalid file name '…', or project file '…' was not found or not a valid project file. | The plugin folder's path is too long: Visual C++ 2008 fails once a path inside it, such as `src\out\obj\<file name>.dll.intermediate.manifest`, passes 260 characters. Move the plugin folder to a folder with a shorter path and build again. |
 
 2. Copy `Build\Template Plugin` into your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
 3. In the game's Mods menu, enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and Template Plugin, then start a game.
@@ -338,12 +339,13 @@ Lua and C++ exchange values on the Lua stack. `L` (`lua_State* L`, a pointer to 
 
 `AfterRegisterGame` has no `self` and no `result`, because `RegisterMembers` is static and returns `void`.
 
-A Lua function gets its arguments on the stack, starting at index 1: `lua_tointeger(L, 1)` reads the first one as an integer. It pushes its return values and returns how many it pushed, so `Hello` pushes one string and returns 1. This one returns the number of cities the active player (the player at this computer) has:
+A Lua function gets its arguments on the stack, starting at index 1: `lua_tointeger(L, 1)` reads the first one as an integer. It pushes its return values and returns how many it pushed, so `Hello` pushes one string and returns 1. This one returns the number of cities the active player (the player at this computer) has, or 0 when there is no active player:
 
 ```cpp
 static int CountMyCities(lua_State* L)
 {
-	lua_pushinteger(L, GET_PLAYER(GC.getGame().getActivePlayer()).getNumCities());
+	PlayerTypes active = GC.getGame().getActivePlayer();
+	lua_pushinteger(L, active == NO_PLAYER ? 0 : GET_PLAYER(active).getNumCities());
 	return 1;
 }
 ```
@@ -376,7 +378,7 @@ Your plugin can call any function the game's headers declare, use the game's glo
 | `GET_PLAYER(id)` | a reference to the player with that ID |
 | `GET_PLAYER(id).getNumCities()` | that player's number of cities |
 | `GET_TEAM(id)` | a reference to the team with that ID (a `TeamTypes` value) |
-| `GC.getBuildingInfo(building)` | a pointer to a building's details, or null for an invalid `BuildingTypes` value; `->GetDescription()` on it gives the building's name |
+| `GC.getBuildingInfo(building)` | a pointer to a building's details, or null for an invalid `BuildingTypes` value; `->GetDescription()` on it gives the building's name, already translated into the game's language |
 | `self->getName().c_str()` | in a hook on a `CvCity` method, the city's name as a C string, for a log line |
 
 `GET_PLAYER` and `GET_TEAM` return references, so their members are reached with `.`; pointers such as `self` use `->`.

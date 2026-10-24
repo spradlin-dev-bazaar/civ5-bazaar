@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: golden-age-gold
+expected_outcome: |
+  A Lua mod made from the template that switches on EVENTS_GOLDEN_AGE and, from a GameEvents.PlayerGoldenAge handler, gives 50 gold only when a golden age starts for a human player; it builds.

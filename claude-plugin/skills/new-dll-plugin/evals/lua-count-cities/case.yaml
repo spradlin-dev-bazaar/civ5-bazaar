@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: lua-count-cities
+expected_outcome: |
+  A plugin that adds Game.CountMyCities through an after-hook on CvLuaGame::RegisterMembers, pushes the active player's city count with lua_pushinteger and returns 1, and builds with build.cmd.

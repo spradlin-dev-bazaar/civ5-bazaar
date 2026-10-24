@@ -1,0 +1,12 @@
+{
+  "name": "civ5-bazaar",
+  "owner": { "name": "spradlin-dev" },
+  "description": "Skills for writing plugins and mods for Bazaar, the multi-DLL mod loader for Civilization V.",
+  "plugins": [
+    {
+      "name": "civ5-bazaar",
+      "source": "./claude-plugin",
+      "description": "Skills for writing plugins and mods for Bazaar, the multi-DLL mod loader for Civilization V."
+    }
+  ]
+}
