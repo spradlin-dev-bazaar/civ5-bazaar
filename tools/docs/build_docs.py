@@ -1,7 +1,7 @@
 """Write the developer documentation site: a page for each function, class, file and folder of the engine and for
 each hand-placed hook, all linked to each other. Every link is checked before anything is written.
 
-    python tools/docs/build_docs.py [--out FOLDER]
+    python tools/docs/build_docs.py [--out FOLDER] [--release VERSION]
 """
 
 import argparse
@@ -17,12 +17,14 @@ sys.path.insert(0, os.path.join(HERE, "..", "generator"))
 sys.path.insert(0, os.path.join(HERE, ".."))
 
 import common  # noqa: E402
+import history  # noqa: E402
 import model  # noqa: E402
 import pages  # noqa: E402
 import render  # noqa: E402
 
 DEFAULT_OUT = os.path.join(common.SOURCE_ROOT, "BuildTemp", "docs")
 HAND_HOOKS = os.path.join(common.REPO, "sdk", "hand-placed-hooks.md")
+HISTORY = os.path.join(common.REPO, "tools", "generator", "function-history.txt")
 NOTICE = os.path.join(common.REPO, "NOTICE")
 HREF = re.compile(r'href="([^"]*)"')
 
@@ -61,9 +63,15 @@ def write(site, out):
     shutil.copyfile(NOTICE, os.path.join(out, render.NOTICE_FILE))
 
 
-def build(project, out, hand_hooks_md=HAND_HOOKS):
+def build(project, out, hand_hooks_md=HAND_HOOKS, history_path=HISTORY, release=None):
     t = time.time()
+    saved_release, entries = history.load(history_path)
+    if release is not None:
+        history.check(release, saved_release)
     engine = model.Engine(project)
+    if release is not None:
+        entries = history.update(saved_release, entries, engine.history_now(), release)
+    engine.apply_history(entries)
     site = pages.Site(engine, hand_hooks_md)
     broken = broken_links(site)
     if broken:
@@ -80,14 +88,25 @@ def build(project, out, hand_hooks_md=HAND_HOOKS):
         print("  %d hook points are not in %s yet: build the host first" % (engine.added, project.registry))
     if engine.missing:
         print("docs: %d entries in %s are no longer hook points in the engine" % (engine.missing, project.registry))
+    if release is not None:
+        history.save(history_path, release, entries)
+        if saved_release is None:
+            print("docs: release %s starts the function history" % release)
+        else:
+            added = sum(1 for fn in engine.functions if fn["added_in"] == release)
+            changed = sum(1 for fn in engine.functions if any(c.release == release for c in fn["changed_in"]))
+            print("docs: release %s marks: %d added, %d changed" % (release, added, changed))
     return site
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", default=DEFAULT_OUT, help="the folder to write the site into (emptied first)")
+    parser.add_argument(
+        "--release", help="the release being made: mark what changed since the last one and save the function history"
+    )
     args = parser.parse_args()
-    build(common.engine_project(), args.out)
+    build(common.engine_project(), args.out, release=args.release)
     return 0
 
 

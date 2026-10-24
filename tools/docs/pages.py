@@ -20,6 +20,7 @@ BRANCH_LINE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b")
 FOLD_AFTER = 30
 HOME_PAGE = "index.html"
 HOOKS_PAGE = "hooks/index.html"
+GITHUB = "https://github.com/spradlin-dev/civ5-bazaar"
 
 
 def file_dir(rel):
@@ -133,6 +134,8 @@ class Site:
             rows.append(("Hook name", "<code>CivHooks::%s</code>" % render.esc(fn["hook_name"])))
         else:
             rows.append(("Not a hook point", render.esc("; ".join(fn["skip"]))))
+        rows.append(("Added in", render.esc(fn["added_in"])))
+        rows.append(("Changed in", ", ".join(change_mark(c) for c in fn["changed_in"])))
         overrides = [self.engine.by_usr[u] for u in fn["overrides"] if u in self.engine.by_usr]
         overriders = sorted(self.engine.overriders_of(fn), key=lambda f: f["title"])
         rows.append(("Overrides", ", ".join(self.function_link(path, f) for f in overrides)))
@@ -304,6 +307,15 @@ class Site:
 
     def search_index(self):
         return "window.BAZAAR_INDEX = %s;\n" % json.dumps(self.search_rows(), separators=(",", ":"))
+
+
+def change_mark(change):
+    blame = "%s/blame/v%s/%s#L%d-L%d" % (GITHUB, change.release, change.source, change.first, change.last)
+    mark = render.link(blame, change.release)
+    if change.added_hooks:
+        plural = "s" if len(change.added_hooks) > 1 else ""
+        mark += " (added hand-placed hook%s %s)" % (plural, render.esc(", ".join(change.added_hooks)))
+    return mark
 
 
 def class_homes(functions, classes):

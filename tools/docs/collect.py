@@ -7,6 +7,7 @@ import clang.cindex as ci
 
 import analyze
 import common
+import history
 
 CK = ci.CursorKind
 # Bazaar's build defines CIV_HOST_API; without it the engine's calls into Bazaar read as left out of the build, and no
@@ -123,6 +124,7 @@ def function_entry(c, project, texts, ranges, tu):
     rec["overrides"] = overridden(c) if c.kind == CK.CXX_METHOD and c.is_virtual_method() else []
     rec["pure"] = c.kind == CK.CXX_METHOD and c.is_pure_virtual_method() and not c.is_definition()
     rec["excluded"] = ranges[path]
+    rec["fingerprint"] = history.fingerprint(t.spelling for t in c.get_tokens() if t.kind != ci.TokenKind.COMMENT)
     return rec
 
 

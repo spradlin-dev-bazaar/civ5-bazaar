@@ -9,7 +9,9 @@ import re
 import analyze
 import build_vmc_reference as vmc
 import collect
+import common
 import generate
+import history
 
 HEADER_REASON = "written in a header"
 PURE_REASON = "it has no code of its own: it is pure virtual, so the classes that override it have the code"
@@ -36,6 +38,7 @@ class Engine:
             self.by_usr.setdefault(fn["usr"], fn)
         self.callers, self.overridden_by = self.cross_references()
         self.hand_sites = self.scan_bodies()
+        self.history_facts()
 
     def text(self, rel):
         if rel not in self.texts:
@@ -70,6 +73,36 @@ class Engine:
                 if usr in self.by_usr:
                     overridden_by[id(self.by_usr[usr])].append(fn)
         return callers, overridden_by
+
+    def history_facts(self):
+        """A function outside any class always carries its file, so its name never depends on whether another file
+        holds a twin."""
+        seen = set()
+        for fn in self.functions:
+            fn["history_key"] = generate.hook_key(fn)
+            if not fn["owner"]:
+                fn["history_key"] += " @" + fn["file"].replace(os.sep, "/")
+            if fn["history_key"] in seen:
+                raise SystemExit("docs: two functions share the history name %s" % fn["history_key"])
+            seen.add(fn["history_key"])
+            path = os.path.relpath(os.path.join(self.project.root, fn["file"]), common.REPO)
+            fn["source"] = path.replace(os.sep, "/")
+            fn["lines"] = (self.line_of(fn["file"], fn["def_start"]), self.line_of(fn["file"], fn["def_end"]))
+            fn["added_in"], fn["changed_in"] = "", []
+
+    def history_now(self):
+        return {
+            fn["history_key"]: history.Current(
+                fn["fingerprint"], tuple(sorted({h for h, _ in fn["hand_hooks"]})), fn["source"], *fn["lines"]
+            )
+            for fn in self.functions
+        }
+
+    def apply_history(self, entries):
+        for fn in self.functions:
+            entry = entries.get(fn["history_key"])
+            if entry:
+                fn["added_in"], fn["changed_in"] = entry.added, entry.changes
 
     def callers_of(self, fn):
         return list(self.callers[id(fn)].values())
