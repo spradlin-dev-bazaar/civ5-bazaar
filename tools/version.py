@@ -36,7 +36,7 @@ def parse(text, name):
 
 def read(path=VERSION_FILE):
     with open(path, encoding="utf-8-sig") as f:
-        return parse(f.read(), layouts.shown(path))
+        return parse(f.read(), common.shown(path))
 
 
 def numbers(release):
@@ -53,23 +53,12 @@ def plugin_version(path=PLUGIN_JSON):
         return json.load(f).get("version", "missing")
 
 
-def set_api_version(major, minor, path=layouts.API_HEADER):
-    with open(path, encoding="cp1252", newline="") as f:
-        text = f.read()
-    for name, value in (("MAJOR", major), ("MINOR", minor)):
-        text, count = re.subn(r"^(#define CIV_HOST_API_%s )\d+" % name, r"\g<1>%d" % value, text, flags=re.M)
-        if count != 1:
-            raise SystemExit("version: %s does not define CIV_HOST_API_%s exactly once" % (layouts.shown(path), name))
-    with open(path, "w", encoding="cp1252", newline="") as f:
-        f.write(text)
-
-
 def set_plugin_version(release, path=PLUGIN_JSON):
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
     text, count = re.subn(r'("version"\s*:\s*")[^"]*"', r'\g<1>%s"' % release, text)
     if count != 1:
-        raise SystemExit('version: %s does not have exactly one "version"' % layouts.shown(path))
+        raise SystemExit('version: %s does not have exactly one "version"' % common.shown(path))
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(text)
 
@@ -81,11 +70,11 @@ def disagreements(version, api, plugin):
     if api != (major, minor):
         found.append(
             "the plugin API version in %s is %d.%d, not %d.%d"
-            % (layouts.shown(layouts.API_HEADER), api[0], api[1], major, minor)
+            % (common.shown(layouts.API_HEADER), api[0], api[1], major, minor)
         )
     if plugin != version.release:
         found.append(
-            "the Claude plugin's version in %s is %s, not %s" % (layouts.shown(PLUGIN_JSON), plugin, version.release)
+            "the Claude plugin's version in %s is %s, not %s" % (common.shown(PLUGIN_JSON), plugin, version.release)
         )
     return found
 

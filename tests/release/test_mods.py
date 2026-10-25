@@ -4,6 +4,7 @@ python -m unittest discover -s tests/release
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -100,6 +101,15 @@ class LayoutTest(unittest.TestCase):
             for tag, text in vmc.credits:
                 self.assertEqual(properties.findtext(tag), text)
             self.assertEqual(properties.findtext("AffectsSavedGames"), str(int(vmc.affects_saves)))
+
+
+class WorkshopTextTest(unittest.TestCase):
+    def test_the_workshop_texts_name_the_vmc_version_the_bootstrap_carries(self):
+        workshop = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "workshop")
+        for name in ("bazaar.txt", "vmc-bootstrap.txt"):
+            with open(os.path.join(workshop, name), encoding="utf-8") as f:
+                named = set(re.findall(r"(?:VMC|Mod Components),? version (\d+)", f.read()))
+            self.assertEqual(named, {str(mods.vmc_mod_parts().version)}, name)
 
 
 @unittest.skipUnless(os.path.isfile(mods.TAR), "needs Windows' tar.exe")

@@ -49,7 +49,7 @@ PART_WAY = (
 HOOK_LINE = re.compile(r"^\tnamespace (\w+) \{ enum \{ ID = (\d+) \}; \}", re.M)
 EXPORT_LINE = re.compile(r"^ +\d+ +[0-9A-F]+ +[0-9A-F]{8} (\S+)", re.M)
 EXPORT_COUNT = re.compile(r"^ +(\d+) number of names$", re.M)
-API_VERSION_LINE = re.compile(r"#define CIV_HOST_API_(MAJOR|MINOR) ")
+API_VERSION_LINE = re.compile(layouts.API_NUMBER % "(?:MAJOR|MINOR)")
 MAX_LISTED = 20
 
 Difference = collections.namedtuple("Difference", "what added removed")
@@ -111,7 +111,7 @@ def on_github(tag):
 def last_release():
     """The last release's tag, or None before the first release."""
     tag = layouts.last_release_tag()
-    if tag is None and git("ls-remote", "--tags", "origin", "refs/tags/v*"):
+    if tag is None and git("ls-remote", "--tags", "origin", "refs/tags/" + layouts.RELEASE_TAGS):
         stop("GitHub has release tags that are not here: run git fetch --tags")
     if tag is not None and not on_github(tag):
         stop(
@@ -153,7 +153,7 @@ def parse_list(text, name):
 
 
 def read_list(path):
-    return parse_list(read_text(path), layouts.shown(path))
+    return parse_list(read_text(path), common.shown(path))
 
 
 def write_list(path, release, lines):
@@ -169,10 +169,10 @@ def saved_release():
         return None
     if len(present) == 1:
         (missing,) = set((HOOKS_LIST, EXPORTS_LIST)) - set(present)
-        stop("%s is missing: put it back from git" % layouts.shown(missing))
+        stop("%s is missing: put it back from git" % common.shown(missing))
     releases = [read_list(path)[0] for path in present]
     if releases[0] != releases[1]:
-        stop("%s and %s were saved by different releases" % (layouts.shown(HOOKS_LIST), layouts.shown(EXPORTS_LIST)))
+        stop("%s and %s were saved by different releases" % (common.shown(HOOKS_LIST), common.shown(EXPORTS_LIST)))
     return releases[0]
 
 
@@ -259,14 +259,14 @@ def layout_difference(then_text, now_text):
 
 def differences(tag, hooks, exports):
     def saved(path):
-        return parse_list(at_tag(tag, path), "%s at %s" % (layouts.shown(path), tag))[1]
+        return parse_list(at_tag(tag, path), "%s at %s" % (common.shown(path), tag))[1]
 
     api_then = api_statements(at_tag(tag, layouts.API_HEADER, "cp1252"))
     api_now = api_statements(read_text(layouts.API_HEADER, "cp1252"))
     return [
         difference("hooks", saved(HOOKS_LIST), hooks),
         difference("exported names", saved(EXPORTS_LIST), exports),
-        ordered_difference(layouts.shown(layouts.API_HEADER), api_then, api_now),
+        ordered_difference(common.shown(layouts.API_HEADER), api_then, api_now),
         layout_difference(at_tag(tag, layouts.RECORD, "cp1252"), read_text(layouts.RECORD, "cp1252")),
     ]
 
@@ -341,27 +341,19 @@ def release_files(release):
     )
 
 
-def write_zip(path, folder, top="", extra=()):
-    """folder's files under top inside the zip, then extra (name, source) files beside them."""
+def write_zip(path, folder, top=""):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for dirpath, _, filenames in sorted(os.walk(folder)):
             for name in sorted(filenames):
                 full = os.path.join(dirpath, name)
                 z.write(full, posixpath.join(top, os.path.relpath(full, folder).replace(os.sep, "/")))
-        for name, source in extra:
-            z.write(source, posixpath.join(top, name))
 
 
 def write_release_files(current, out, release_marks):
     if os.path.isdir(STAGE):
         shutil.rmtree(STAGE)
     docs = os.path.join(STAGE, "docs")
-    try:
-        build_docs.build(common.engine_project(), docs, release=current.release if release_marks else None)
-    except SystemExit as e:
-        if not release_marks:
-            raise
-        raise SystemExit("%s\nrelease: if that says the code has changed since, prepare the release again" % e)
+    build_docs.build(common.engine_project(), docs, release=current.release if release_marks else None)
     if os.path.isdir(out):
         shutil.rmtree(out)
     os.makedirs(out)
@@ -380,8 +372,7 @@ def write_release_files(current, out, release_marks):
         if problem:
             stop(problem)
     write_zip(os.path.join(out, names.sdk), build_sdk.SDK, top=os.path.basename(build_sdk.SDK))
-    # The docs site carries NOTICE.txt already: its pages link to it.
-    write_zip(os.path.join(out, names.docs), docs, extra=[mods.LICENSE_FILE])
+    write_zip(os.path.join(out, names.docs), docs)
     return names
 
 
@@ -391,7 +382,7 @@ def require_build_as_prepared(current):
         if read_list(path)[1] != now:
             stop(
                 "this build's %s differ from %s, saved when the release was prepared: prepare the release again"
-                % (what, layouts.shown(path))
+                % (what, common.shown(path))
             )
     _, base, diffs = choose((hooks, exports))
     if diffs is not None:
@@ -439,7 +430,7 @@ def prepare(major):
     try:
         version.write(new)
         new_major, new_minor, _ = version.numbers(new.release)
-        version.set_api_version(new_major, new_minor)
+        layouts.set_api_version(new_major, new_minor)
         version.set_plugin_version(new.release)
         require_numbers_agree()
         restore_history(tag)
@@ -457,17 +448,30 @@ def prepare(major):
     return 0
 
 
+def require_releasable(current):
+    require_main()
+    if saved_release() != current.release:
+        stop(
+            "the lists in %s were not saved at %s: prepare the release and merge it first"
+            % (common.shown(RELEASED), current.release)
+        )
+    if on_github(tag_of(current.release)):
+        stop("%s is already tagged, so it is already released: prepare the next release" % current.release)
+
+
+def require_unchanged_by_build():
+    changed = git("status", "--porcelain")
+    if changed:
+        stop(
+            "building changed these files, so main does not hold the release as it was built. Put the changes on"
+            " main through a pull request, then run build again:\n" + changed
+        )
+
+
 def build(trial):
     current = version.read()
     if not trial:
-        require_main()
-        if saved_release() != current.release:
-            stop(
-                "the lists in %s were not saved at %s: prepare the release and merge it first"
-                % (layouts.shown(RELEASED), current.release)
-            )
-        if on_github(tag_of(current.release)):
-            stop("%s is already tagged, so it is already released: prepare the next release" % current.release)
+        require_releasable(current)
     require_numbers_agree()
     run("building the host", ["cmd", "/c", BUILD_HOOKED])
     if not trial:
@@ -480,12 +484,7 @@ def build(trial):
     if trial:
         say("the trial files of %s are in %s:" % (current.release, out))
     else:
-        changed = git("status", "--porcelain")
-        if changed:
-            stop(
-                "building changed these files, so main does not hold the release as it was built. Put the changes on"
-                " main through a pull request, then run build again:\n" + changed
-            )
+        require_unchanged_by_build()
         head = git("rev-parse", "HEAD")
         with open(os.path.join(out, BUILT_FROM), "w") as f:
             f.write(head + "\n")

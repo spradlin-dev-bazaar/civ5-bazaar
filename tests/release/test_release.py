@@ -7,6 +7,7 @@ python -m unittest discover -s tests/release
 import contextlib
 import io
 import os
+import re
 import sys
 import tempfile
 import types
@@ -196,13 +197,9 @@ class NumberTest(unittest.TestCase):
         self.assertIn("run it with --major", str(stop.exception))
 
     def test_major_starts_the_next_major_version(self):
-        for base, diffs in (
-            (version.Version("0.3.2", 4), changes()),
-            (version.Version("1.2.3", 9), changes(["x"], ["y"])),
-        ):
-            with self.subTest(base=base):
-                expected = ("%d.0.0" % (version.numbers(base.release)[0] + 1), base.mod + 1)
-                self.assertEqual(release.next_version(base, diffs, major=True), expected)
+        self.assertEqual(release.next_version(version.Version("0.3.2", 4), changes(), major=True), ("1.0.0", 5))
+        major = release.next_version(version.Version("1.2.3", 9), changes(["x"], ["y"]), major=True)
+        self.assertEqual(major, ("2.0.0", 10))
 
 
 class ChooseTest(unittest.TestCase):
@@ -240,11 +237,12 @@ class ChooseTest(unittest.TestCase):
     def test_release_tags_only_on_github_stop(self):
         with (
             mock.patch.object(release.layouts, "last_release_tag", return_value=None),
-            mock.patch.object(release, "git", return_value="abc123\trefs/tags/v0.3.0"),
+            mock.patch.object(release, "git", return_value="abc123\trefs/tags/v0.3.0") as git,
         ):
             with self.assertRaises(SystemExit) as stop:
                 release.last_release()
         self.assertIn("git fetch --tags", str(stop.exception))
+        git.assert_called_once_with("ls-remote", "--tags", "origin", "refs/tags/v[0-9]*")
 
     def test_a_build_that_no_longer_calls_for_versions_number_stops(self):
         lists = (["0\tCvCity_init", "1\tCvUnit_kill"], ["DllGetGameContext"])
@@ -263,6 +261,21 @@ class ChooseTest(unittest.TestCase):
                 with self.assertRaises(SystemExit) as stop:
                     release.require_build_as_prepared(version.Version("0.3.1", 2))
                 self.assertIn("calls for release 0.4.0", str(stop.exception))
+
+    def test_a_build_prepared_with_major_passes(self):
+        lists = (["0\tCvCity_init"], ["DllGetGameContext"])
+        with tempfile.TemporaryDirectory() as folder:
+            hooks, exports = os.path.join(folder, "hooks.txt"), os.path.join(folder, "exports.txt")
+            release.write_list(hooks, "1.0.0", lists[0])
+            release.write_list(exports, "1.0.0", lists[1])
+            with (
+                mock.patch.object(release, "HOOKS_LIST", hooks),
+                mock.patch.object(release, "EXPORTS_LIST", exports),
+                mock.patch.object(release, "current_lists", return_value=lists),
+                mock.patch.object(release, "last_release", return_value="v0.3.0"),
+                mock.patch.object(release, "at_tag", self.at_tag),
+            ):
+                release.require_build_as_prepared(version.Version("1.0.0", 2))
 
     def test_a_build_that_needs_a_major_version_says_so(self):
         lists = (["0\tCvCity_init"], ["DllGetGameContext"])
@@ -293,22 +306,30 @@ class ChooseTest(unittest.TestCase):
         self.assertIn("git tag -d v0.4.0", str(stop.exception))
 
     def test_a_reordered_api_header_since_the_tag_is_a_change(self):
-        header = release.read_text(release.layouts.API_HEADER, "cp1252")
-        first, second = "\tCIV_HOOK_BEFORE = 0,\n", "\tCIV_HOOK_AFTER = 1,\n"
-        self.assertIn(first + second, header)
-        self.SAVED = dict(self.SAVED, **{"CivPluginApi.h": header.replace(first + second, second + first)})
-        _, _, diffs = self.choose("v0.3.0", (["0\tCvCity_init"], ["DllGetGameContext"]))
+        swapped = API_HEADER.replace("FIRST,\n\tCIV_HAND_SECOND,", "SECOND,\n\tCIV_HAND_FIRST,")
+        self.assertNotEqual(swapped, API_HEADER)
+        self.SAVED = dict(self.SAVED, **{"CivPluginApi.h": API_HEADER})
+        with tempfile.TemporaryDirectory() as folder:
+            header = os.path.join(folder, "CivPluginApi.h")
+            with open(header, "w") as f:
+                f.write(swapped)
+            with mock.patch.object(release.layouts, "API_HEADER", header):
+                _, _, diffs = self.choose("v0.3.0", (["0\tCvCity_init"], ["DllGetGameContext"]))
         (api,) = [d for d in diffs if d.what.endswith("CivPluginApi.h")]
         self.assertTrue(api.removed)
 
 
 class PublishTest(unittest.TestCase):
     HEAD = "abc123"
+    CURRENT = version.Version("0.4.0", 2)
 
-    def publish(self, built_from=HEAD, files=None, notes="Notes.", gh="gh", tagged=None, gh_exit_codes=(0, 0)):
-        """What publish stops with, or None, and the git commands it ran, with HEAD at self.HEAD. gh_exit_codes are what
-        gh auth status and gh release create return; self.gh_commands holds the gh commands it ran."""
-        names = release.release_files(version.read().release) if files is None else files
+    def publish(
+        self, built_from=HEAD, files=None, notes="Notes.", gh="gh", tagged=None, gh_exit_codes=(0, 0), current=CURRENT
+    ):
+        """What publish stops with, or None, and the git commands it ran, with HEAD at self.HEAD and VERSION at current.
+        gh_exit_codes are what gh auth status and gh release create return; self.gh_commands holds the gh commands it
+        ran."""
+        names = release.release_files(current.release) if files is None else files
         calls = []
         self.gh_commands = []
 
@@ -322,7 +343,7 @@ class PublishTest(unittest.TestCase):
             return types.SimpleNamespace(returncode=code, stdout="https://github.com/releases/1", stderr="gh: refused")
 
         with tempfile.TemporaryDirectory() as folder:
-            out = os.path.join(folder, release.tag_of(version.read().release))
+            out = os.path.join(folder, release.tag_of(current.release))
             os.makedirs(out)
             if built_from:
                 with open(os.path.join(out, release.BUILT_FROM), "w") as f:
@@ -335,6 +356,7 @@ class PublishTest(unittest.TestCase):
                 f.write(notes)
             with (
                 mock.patch.object(release, "DIST", folder),
+                mock.patch.object(release.version, "read", return_value=current),
                 mock.patch.object(release, "require_main"),
                 mock.patch.object(release, "git", git),
                 mock.patch.object(release, "tagged_commit", return_value=tagged),
@@ -355,7 +377,7 @@ class PublishTest(unittest.TestCase):
         self.assertIn("not built from main as it is now", self.publish(built_from="def456")[0])
 
     def test_a_missing_release_file_stops(self):
-        names = release.release_files(version.read().release)
+        names = release.release_files(self.CURRENT.release)
         message, calls = self.publish(files=names[:3])
         self.assertIn("missing: ", message)
         self.assertIn(names.docs, message)
@@ -379,9 +401,14 @@ class PublishTest(unittest.TestCase):
         self.assertIsNone(message)
         self.assertLess(calls.index("tag"), calls.index("push"))
         create = self.gh_commands[-1]
-        self.assertEqual(create[1:4], ["release", "create", release.tag_of(version.read().release)])
+        self.assertEqual(create[1:4], ["release", "create", "v0.4.0"])
         self.assertIn("--draft", create)
-        self.assertEqual("--prerelease" in create, version.numbers(version.read().release)[0] == 0)
+        self.assertIn("--prerelease", create)
+
+    def test_a_draft_from_1_0_on_is_not_a_pre_release(self):
+        message, _ = self.publish(current=version.Version("1.0.0", 5))
+        self.assertIsNone(message)
+        self.assertNotIn("--prerelease", self.gh_commands[-1])
 
     def test_a_failed_draft_says_to_delete_one_already_there(self):
         message, calls = self.publish(gh_exit_codes=(0, 1))
@@ -422,58 +449,222 @@ class HistoryTest(unittest.TestCase):
             release.restore_history(None, path)
 
 
-class PrepareTest(unittest.TestCase):
-    def prepare(self, failing=None):
-        """The steps prepare took, in order, and what it stopped with, or None; the step named failing stops."""
-        steps = []
+class StepRecorder:
+    """Stands in for the steps of a command: records each call's name and arguments, in order, and raises SystemExit
+    from the step named failing."""
 
-        def step(name, result=None):
-            def record(*args, **kwargs):
-                steps.append(name)
-                if name == failing:
-                    raise SystemExit("docs: broken")
-                return result
+    def __init__(self, failing=None):
+        self.calls = []
+        self.failing = failing
 
-            return record
+    def step(self, name, result=None):
+        def record(*args, **kwargs):
+            self.calls.append((name, args, kwargs))
+            if name == self.failing:
+                raise SystemExit("docs: broken")
+            return result
 
-        replaced = [
-            (release, "require_main", step("require_main")),
-            (release, "require_no_release_branch", step("branch check")),
-            (release, "last_release", step("last_release", "v0.3.0")),
-            (release, "run", step("run")),
-            (release, "current_lists", step("lists", ([], []))),
-            (release, "plan", step("plan", version.Version("0.4.0", 2))),
-            (release.version, "write", step("VERSION")),
-            (release.version, "set_api_version", step("API version")),
-            (release.version, "set_plugin_version", step("plugin version")),
-            (release, "require_numbers_agree", step("numbers agree")),
-            (release, "restore_history", step("restore history")),
-            (release.build_docs, "build", step("docs")),
-            (release, "write_list", step("write list")),
-            (release, "git", step("git")),
-        ]
+        return record
+
+    def names(self):
+        return [name for name, _, _ in self.calls]
+
+    def arguments(self, name):
+        return [(args, kwargs) for called, args, kwargs in self.calls if called == name]
+
+    def run(self, command, replaced):
         with contextlib.ExitStack() as stack:
             for owner, name, replacement in replaced:
                 stack.enter_context(mock.patch.object(owner, name, replacement))
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             try:
-                release.prepare(False)
-                return steps, None
+                command()
+                return None
             except SystemExit as stop:
-                return steps, str(stop)
+                return str(stop)
 
-    def test_the_history_is_put_back_before_the_docs_mark_the_release_and_the_branch_comes_last(self):
+
+class PrepareTest(unittest.TestCase):
+    LISTS = (["0\tCvCity_init"], ["DllGetGameContext"])
+
+    def prepare(self, failing=None):
+        steps = StepRecorder(failing)
+        replaced = [
+            (release, "require_main", steps.step("require_main")),
+            (release, "require_no_release_branch", steps.step("branch check")),
+            (release, "last_release", steps.step("last_release", "v0.3.0")),
+            (release, "run", steps.step("run")),
+            (release, "current_lists", steps.step("lists", self.LISTS)),
+            (release, "plan", steps.step("plan", version.Version("0.4.0", 2))),
+            (release.version, "write", steps.step("VERSION")),
+            (release.layouts, "set_api_version", steps.step("API version")),
+            (release.version, "set_plugin_version", steps.step("plugin version")),
+            (release, "require_numbers_agree", steps.step("numbers agree")),
+            (release, "restore_history", steps.step("restore history")),
+            (release.build_docs, "build", steps.step("docs")),
+            (release, "write_list", steps.step("write list")),
+            (release, "git", steps.step("git")),
+        ]
+        return steps, steps.run(lambda: release.prepare(False), replaced)
+
+    def test_the_checks_come_first_the_history_before_the_docs_and_the_branch_last(self):
         steps, message = self.prepare()
         self.assertIsNone(message)
-        self.assertLess(steps.index("run"), steps.index("VERSION"))
-        self.assertLess(steps.index("restore history"), steps.index("docs"))
-        self.assertEqual(steps[-1], "git")
+        names = steps.names()
+        self.assertEqual(names[: names.index("VERSION")].count("run"), 5)
+        self.assertLess(names.index("plugin version"), names.index("numbers agree"))
+        self.assertLess(names.index("restore history"), names.index("docs"))
+        self.assertEqual(steps.arguments("git"), [(("switch", "-c", "release-0.4.0"), {})])
+        self.assertEqual(names[-1], "git")
+
+    def test_each_step_gets_the_new_release(self):
+        steps, _ = self.prepare()
+        self.assertEqual(steps.arguments("VERSION"), [((version.Version("0.4.0", 2),), {})])
+        self.assertEqual(steps.arguments("API version"), [((0, 4), {})])
+        self.assertEqual(steps.arguments("plugin version"), [(("0.4.0",), {})])
+        self.assertEqual(steps.arguments("restore history"), [(("v0.3.0",), {})])
+        ((_, docs),) = steps.arguments("docs")
+        self.assertEqual(docs, {"release": "0.4.0"})
+        written = [args for args, _ in steps.arguments("write list")]
+        expected = [(release.HOOKS_LIST, "0.4.0", self.LISTS[0]), (release.EXPORTS_LIST, "0.4.0", self.LISTS[1])]
+        self.assertEqual(written, expected)
 
     def test_a_stop_part_way_says_how_to_start_again(self):
         steps, message = self.prepare(failing="docs")
         self.assertIn("docs: broken", message)
         self.assertIn("git restore :/", message)
-        self.assertNotIn("git", steps)
+        self.assertNotIn("git", steps.names())
+
+
+class BuildTest(unittest.TestCase):
+    CURRENT = version.Version("0.4.0", 2)
+    HEAD = "abc123"
+
+    def build(self, trial):
+        """The steps build took, the release_marks it wrote the files with, and the commit built-from.txt names."""
+        steps = StepRecorder()
+        names = release.release_files(self.CURRENT.release)
+
+        def write_files(current, out, release_marks):
+            steps.calls.append(("files", (current, out), {"release_marks": release_marks}))
+            os.makedirs(out)
+            return names
+
+        with tempfile.TemporaryDirectory() as folder:
+            out = os.path.join(folder, "out")
+            replaced = [
+                (release.version, "read", lambda: self.CURRENT),
+                (release, "require_releasable", steps.step("releasable")),
+                (release, "require_numbers_agree", steps.step("numbers agree")),
+                (release, "run", steps.step("run")),
+                (release, "require_build_as_prepared", steps.step("as prepared")),
+                (release.build_sdk, "main", steps.step("SDK", 0)),
+                (release, "write_release_files", write_files),
+                (release, "require_unchanged_by_build", steps.step("unchanged")),
+                (release, "git", steps.step("git", self.HEAD)),
+                (release, "release_folder", lambda r: out),
+                (release, "TRIAL_FOLDER", out),
+            ]
+            message = steps.run(lambda: release.build(trial), replaced)
+            built_from = os.path.join(out, release.BUILT_FROM)
+            head = release.read_text(built_from).strip() if os.path.exists(built_from) else None
+        self.assertIsNone(message)
+        ((_, marks),) = steps.arguments("files")
+        return steps.names(), marks["release_marks"], head
+
+    def test_a_release_build_checks_before_and_after_and_records_its_commit(self):
+        names, marks, head = self.build(trial=False)
+        expected = ["releasable", "numbers agree", "run", "as prepared", "SDK", "files", "unchanged", "git"]
+        self.assertEqual(names, expected)
+        self.assertTrue(marks)
+        self.assertEqual(head, self.HEAD)
+
+    def test_a_trial_build_skips_the_release_checks_and_records_no_commit(self):
+        names, marks, head = self.build(trial=True)
+        self.assertEqual(names, ["numbers agree", "run", "SDK", "files"])
+        self.assertFalse(marks)
+        self.assertIsNone(head)
+
+    def test_a_release_not_prepared_or_already_out_stops(self):
+        for saved, tagged, expected in (
+            ("0.3.0", False, "were not saved at 0.4.0"),
+            ("0.4.0", True, "already tagged"),
+            ("0.4.0", False, None),
+        ):
+            with (
+                self.subTest(saved=saved, tagged=tagged),
+                mock.patch.object(release, "require_main"),
+                mock.patch.object(release, "saved_release", return_value=saved),
+                mock.patch.object(release, "on_github", return_value=tagged),
+            ):
+                if expected is None:
+                    release.require_releasable(self.CURRENT)
+                    continue
+                with self.assertRaises(SystemExit) as stop:
+                    release.require_releasable(self.CURRENT)
+                self.assertIn(expected, str(stop.exception))
+
+
+class WriteFilesTest(unittest.TestCase):
+    def write(self, release_marks):
+        """The four files written for 0.4.0, with the docs, SDK and mods made small; returns what they hold and what the
+        docs build and the mods were given."""
+        given = {}
+
+        def docs_build(project, out, release=None):
+            given["release"] = release
+            os.makedirs(out)
+            for name in ("index.html", "LICENSE.txt", "NOTICE.txt"):
+                with open(os.path.join(out, name), "w") as f:
+                    f.write("x")
+
+        def write_dll_mod(mods_folder, name, mod_id, teaser, dll, plugins_screen=False, version=1):
+            given["mod"] = (name, mod_id, teaser, dll, plugins_screen, version)
+            folders = os.path.join(mods_folder, "host"), os.path.join(mods_folder, "bootstrap")
+            for path in folders:
+                os.makedirs(path)
+            return folders
+
+        def pack(folder, package):
+            with open(package, "w") as f:
+                f.write(os.path.basename(folder))
+
+        with tempfile.TemporaryDirectory() as folder:
+            sdk = os.path.join(folder, "Bazaar SDK")
+            os.makedirs(sdk)
+            for name in ("LICENSE", "NOTICE", "README.md"):
+                with open(os.path.join(sdk, name), "w") as f:
+                    f.write("x")
+            out = os.path.join(folder, "out")
+            with (
+                mock.patch.object(release, "STAGE", os.path.join(folder, "stage")),
+                mock.patch.object(release.build_docs, "build", docs_build),
+                mock.patch.object(release.mods, "write_dll_mod", write_dll_mod),
+                mock.patch.object(release.mods, "pack", pack),
+                mock.patch.object(release.build_sdk, "SDK", sdk),
+            ):
+                names = release.write_release_files(version.Version("0.4.0", 2), out, release_marks)
+            held = {"files": sorted(os.listdir(out))}
+            for kind in ("host", "bootstrap"):
+                held[kind] = release.read_text(os.path.join(out, getattr(names, kind)))
+            for kind in ("sdk", "docs"):
+                with zipfile.ZipFile(os.path.join(out, getattr(names, kind))) as z:
+                    held[kind] = sorted(z.namelist())
+        return names, held, given
+
+    def test_the_four_files_hold_what_a_release_ships(self):
+        names, held, given = self.write(release_marks=True)
+        self.assertEqual(held["files"], sorted(names))
+        self.assertEqual((held["host"], held["bootstrap"]), ("host", "bootstrap"))
+        self.assertEqual(held["docs"], ["LICENSE.txt", "NOTICE.txt", "index.html"])
+        self.assertEqual(held["sdk"], ["Bazaar SDK/LICENSE", "Bazaar SDK/NOTICE", "Bazaar SDK/README.md"])
+        self.assertEqual(given["release"], "0.4.0")
+        expected_mod = (release.mods.HOST_NAME, release.mods.HOST_ID, release.mods.HOST_TEASER, release.common.HOST_DLL)
+        self.assertEqual(given["mod"], expected_mod + (True, 2))
+
+    def test_a_trial_leaves_the_release_marks_out_of_the_docs(self):
+        _, _, given = self.write(release_marks=False)
+        self.assertIsNone(given["release"])
 
 
 class FileTest(unittest.TestCase):
@@ -483,27 +674,26 @@ class FileTest(unittest.TestCase):
         self.assertRegex(names.bootstrap, r"^Bazaar-VMC-Bootstrap-\d+\.civ5mod$")
         self.assertEqual((names.sdk, names.docs), ("Bazaar-SDK-0.4.0.zip", "Bazaar-docs-0.4.0.zip"))
 
-    def test_a_zip_holds_the_folder_under_its_top_and_the_extra_files_beside_it(self):
+    def test_the_docs_action_downloads_the_docs_zip_this_script_writes(self):
+        workflow = release.read_text(os.path.join(release.common.REPO, ".github", "workflows", "docs.yml"))
+        (pattern,) = re.findall(r'--pattern "([^"]+)"', workflow)
+        tag = release.tag_of("0.4.0")
+        self.assertTrue(tag.startswith("v"))
+        self.assertEqual(pattern.replace("${TAG#v}", tag[1:]), release.release_files("0.4.0").docs)
+
+    def test_a_zip_holds_the_folder_under_its_top(self):
         with tempfile.TemporaryDirectory() as folder:
             source = os.path.join(folder, "Bazaar SDK")
             os.makedirs(os.path.join(source, "include"))
             for rel in ("README.md", "LICENSE", os.path.join("include", "CivPluginApi.h")):
                 with open(os.path.join(source, rel), "w") as f:
                     f.write("x")
-            extra = os.path.join(folder, "NOTICE")
-            with open(extra, "w") as f:
-                f.write("x")
             path = os.path.join(folder, "sdk.zip")
-            release.write_zip(path, source, top="Bazaar SDK", extra=[("NOTICE.txt", extra)])
+            release.write_zip(path, source, top="Bazaar SDK")
             with zipfile.ZipFile(path) as z:
                 self.assertEqual(
                     z.namelist(),
-                    [
-                        "Bazaar SDK/LICENSE",
-                        "Bazaar SDK/README.md",
-                        "Bazaar SDK/include/CivPluginApi.h",
-                        "Bazaar SDK/NOTICE.txt",
-                    ],
+                    ["Bazaar SDK/LICENSE", "Bazaar SDK/README.md", "Bazaar SDK/include/CivPluginApi.h"],
                 )
 
 

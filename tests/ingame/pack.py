@@ -1,4 +1,5 @@
-"""Pack a mod folder laid out by package.py into a .civ5mod package for uploading to the Steam Workshop.
+"""Pack a mod folder laid out by package.py into a .civ5mod package, for a test upload to the Steam Workshop; a
+release's packages come from tools/release.py.
 
 usage: pack.py "<mod folder name in tests/ingame/out/MODS>"
 """

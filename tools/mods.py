@@ -22,8 +22,8 @@ import common  # noqa: E402
 
 VMC_DIR = os.path.join(common.REPO, "mod", "vmc")
 FRONTEND_DIR = os.path.join(common.REPO, "frontend")
-LICENSE_FILE = ("LICENSE.txt", os.path.join(common.REPO, "LICENSE"))
-NOTICE_FILE = ("NOTICE.txt", os.path.join(common.REPO, "NOTICE"))
+LICENSE_FILE = ("LICENSE.txt", common.LICENSE)
+NOTICE_FILE = ("NOTICE.txt", common.NOTICE)
 
 HOST_ID = common.HOST_MOD_ID
 HOST_NAME = common.HOST_MOD_NAME

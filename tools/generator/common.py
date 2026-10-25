@@ -13,6 +13,8 @@ BUILD_DIR = os.path.join(SOURCE_ROOT, "BuildTemp", "civgen")
 HOST_DIR = os.path.join(REPO, "host")
 HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
 HOST_DLL = os.path.join(HOST_OUTPUT, "CvGameCore_Expansion2.dll")
+LICENSE = os.path.join(REPO, "LICENSE")
+NOTICE = os.path.join(REPO, "NOTICE")
 
 VS2008_INCLUDE = [
     r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\INCLUDE",
@@ -100,6 +102,13 @@ class Project:
             args += ["-isystem", inc]
         args += ["-I" + inc for inc in self.include_dirs]
         return args
+
+
+def shown(path):
+    try:
+        return os.path.relpath(path, REPO)
+    except ValueError:
+        return path
 
 
 def vs_env():

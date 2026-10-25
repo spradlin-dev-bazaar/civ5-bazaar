@@ -181,6 +181,26 @@ class ApiVersionTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.version_of("#define CIV_HOST_API_MAJOR (1)\n")
 
+    def test_the_version_is_set_and_nothing_else_changes(self):
+        text = "#pragma once\r\n#define CIV_HOST_API_MAJOR 0\r\n#define CIV_HOST_API_MINOR 3\r\nstruct CivHostInfo;\r\n"
+        path = os.path.join(temp_folder(self), "CivPluginApi.h")
+        with open(path, "w", newline="") as f:
+            f.write(text)
+        layouts.set_api_version(1, 0, path)
+        with open(path, newline="") as f:
+            self.assertEqual(f.read(), text.replace("MAJOR 0", "MAJOR 1").replace("MINOR 3", "MINOR 0"))
+
+    def test_setting_a_header_without_one_of_the_numbers_stops(self):
+        for name in ("MAJOR", "MINOR"):
+            with self.subTest(name=name):
+                path = os.path.join(temp_folder(self), "CivPluginApi.h")
+                with open(path, "w") as f:
+                    header = "#define CIV_HOST_API_MAJOR 0\n#define CIV_HOST_API_MINOR 3\n"
+                    f.write(header.replace("API_" + name, "API_" + name + "_NUMBER"))
+                with self.assertRaises(SystemExit) as stop:
+                    layouts.set_api_version(1, 0, path)
+                self.assertIn("CIV_HOST_API_" + name, str(stop.exception))
+
 
 class HostDefinesTest(unittest.TestCase):
     PROJECT = (

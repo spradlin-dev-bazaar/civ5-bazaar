@@ -6,6 +6,7 @@ import posixpath
 HOME_PAGE = "index.html"
 HOOKS_PAGE = "hooks/index.html"
 NOTICE_FILE = "NOTICE.txt"
+LICENSE_FILE = "LICENSE.txt"
 
 
 def posix(rel):

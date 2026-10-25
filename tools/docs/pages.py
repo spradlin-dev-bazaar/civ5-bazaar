@@ -56,7 +56,7 @@ class Site:
         self.folder_pages()
         self.hook_pages(*handwritten.hook_descriptions(inputs.hand_hooks, engine.hand_sites))
         self.home_page(handwritten.task_guide(inputs.task_guide, self.targets))
-        self.pages = {o.path: render.page(o) for o in self.outlines}
+        self.html = {o.path: render.page(o) for o in self.outlines}
         self.markdown = {markdown_page(o.path): render_md.page(o) for o in self.outlines}
 
     def class_dir(self, owner):

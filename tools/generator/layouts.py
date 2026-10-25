@@ -26,28 +26,34 @@ NOT_COMPILED = {"cvdllfastarifacebase.h", os.path.join("lua", "cvluascopedindire
 CLASS_HEADER = re.compile(r"^class (.+)\tsize\(\d+\):$")
 TABLE_HEADER = re.compile(r"^(\S.*::\$v[fb]table@.*):$")
 API_LINE = re.compile(r"^api (\d+)\.(\d+)$")
+RELEASE_TAGS = "v[0-9]*"
+API_NUMBER = r"^(#define CIV_HOST_API_%s )(\d+)(?=\r?$)"
 MAX_CLASSES_SHOWN = 15
 MAX_DIFF_LINES = 12
-
-
-def shown(path):
-    try:
-        return os.path.relpath(path, common.REPO)
-    except ValueError:
-        return path
 
 
 def api_version():
     with open(API_HEADER, encoding="cp1252") as f:
         text = f.read()
-    major = re.search(r"^#define CIV_HOST_API_MAJOR (\d+)$", text, re.M)
-    minor = re.search(r"^#define CIV_HOST_API_MINOR (\d+)$", text, re.M)
+    major = re.search(API_NUMBER % "MAJOR", text, re.M)
+    minor = re.search(API_NUMBER % "MINOR", text, re.M)
     if not major or not minor:
         raise RuntimeError(
             "%s has no '#define CIV_HOST_API_MAJOR <number>' and '#define CIV_HOST_API_MINOR <number>'"
-            % shown(API_HEADER)
+            % common.shown(API_HEADER)
         )
-    return int(major.group(1)), int(minor.group(1))
+    return int(major.group(2)), int(minor.group(2))
+
+
+def set_api_version(major, minor, path=API_HEADER):
+    with open(path, encoding="cp1252", newline="") as f:
+        text = f.read()
+    for name, value in (("MAJOR", major), ("MINOR", minor)):
+        text, count = re.subn(API_NUMBER % name, r"\g<1>%d" % value, text, flags=re.M)
+        if count != 1:
+            raise SystemExit("version: %s does not define CIV_HOST_API_%s exactly once" % (common.shown(path), name))
+    with open(path, "w", encoding="cp1252", newline="") as f:
+        f.write(text)
 
 
 def shipped_headers(project):
@@ -76,14 +82,16 @@ def include_dirs(project):
 def host_defines(project):
     path = os.path.join(project.mirror_dir, os.path.basename(project.vcproj))
     if not os.path.exists(path):
-        raise RuntimeError("%s does not exist; build-hooked.cmd generates it before the layout check." % shown(path))
+        raise RuntimeError(
+            "%s does not exist; build-hooked.cmd generates it before the layout check." % common.shown(path)
+        )
     with open(path, encoding="cp1252") as f:
         text = f.read()
     config = re.search(r'<Configuration\s+Name="Mod\|Win32".*?</Configuration>', text, re.S)
     compiler = config and re.search(r'<Tool\s+Name="VCCLCompilerTool"(.*?)/>', config.group(0), re.S)
     defines = compiler and re.search(r'PreprocessorDefinitions="([^"]*)"', compiler.group(1))
     if not defines:
-        raise RuntimeError("%s has no Mod|Win32 compiler settings with preprocessor definitions." % shown(path))
+        raise RuntimeError("%s has no Mod|Win32 compiler settings with preprocessor definitions." % common.shown(path))
     return defines.group(1).split(";")
 
 
@@ -133,7 +141,7 @@ def parse_record(text):
     head, _, body = text.partition("\n\n")
     m = API_LINE.match(head)
     if not m:
-        raise RuntimeError("%s does not start with 'api <major>.<minor>'" % shown(RECORD))
+        raise RuntimeError("%s does not start with 'api <major>.<minor>'" % common.shown(RECORD))
     return (int(m.group(1)), int(m.group(2))), parse_report(body)
 
 
@@ -191,14 +199,14 @@ def describe(lost, shared):
 
 
 def print_lost(lost, recorded, current):
-    print("These classes differ from the record in %s, which every plugin was built against:" % shown(RECORD))
+    print("These classes differ from the record in %s, which every plugin was built against:" % common.shown(RECORD))
     print("\n".join(describe(lost, shared_names(recorded, current))))
 
 
 def last_release_tag():
     try:
         done = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+            ["git", "describe", "--tags", "--abbrev=0", "--match", RELEASE_TAGS],
             capture_output=True,
             text=True,
             cwd=common.REPO,
@@ -223,7 +231,8 @@ def frozen_advice(recorded_version, tag):
         "- raise CIV_HOST_API_MAJOR in host\\CivPluginApi.h, then run build-hooked.cmd accept-layouts and rebuild every"
         " plugin; or",
         "- if you already raised it and accepted another change for that version, and it is not released yet, put back",
-        "  the record of the last release with: git checkout %s -- %s" % (tag or "<last release tag>", shown(RECORD)),
+        "  the record of the last release with: git checkout %s -- %s"
+        % (tag or "<last release tag>", common.shown(RECORD)),
         "  then run build-hooked.cmd accept-layouts, which accepts all of the new version's changes together.",
     ]
 
@@ -233,7 +242,9 @@ def read_record(version):
         with open(RECORD, encoding="cp1252") as f:
             return parse_record(f.read())
     if version[0] >= 1:
-        raise RuntimeError("%s is missing. From 1.0 on it cannot be made again: restore it from git." % shown(RECORD))
+        raise RuntimeError(
+            "%s is missing. From 1.0 on it cannot be made again: restore it from git." % common.shown(RECORD)
+        )
     return None, []
 
 
@@ -289,7 +300,7 @@ def check(project):
         return 1
     if new or not recorded_version:
         write_record(recorded_version or version, recorded + new)
-    print("class layouts: %d match %s, %d new added to it" % (len(recorded), shown(RECORD), len(new)))
+    print("class layouts: %d match %s, %d new added to it" % (len(recorded), common.shown(RECORD), len(new)))
     return 0
 
 

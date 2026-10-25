@@ -145,7 +145,7 @@ def page_problems(site, title, texts, wanted):
     fn = by_title(site, title)
     if fn is None:
         return ["no function %s" % title]
-    page = site.pages[fn["page"]]
+    page = site.html[fn["page"]]
     verb = "does not contain" if wanted else "contains"
     return ["the page of %s %s %r" % (title, verb, t) for t in texts if (t in page) != wanted]
 
@@ -166,19 +166,19 @@ def section_of(page, heading):
 def naming_problems(site):
     problems = []
     for path in ["Get.html", "Score-bool-const.html", "Score-int_int.html", "operator_eq.html", "Inline.html"]:
-        if THING + path not in site.pages:
+        if THING + path not in site.html:
             problems.append("no page %s" % (THING + path))
-    totals = [p for p in site.pages if p.startswith((THING + "Total-", THING + "total-"))]
+    totals = [p for p in site.html if p.startswith((THING + "Total-", THING + "total-"))]
     if len(totals) != 2 or len({p.lower() for p in totals}) != 2:
         problems.append("Total and total do not get pages whose names differ in more than case: %s" % totals)
-    if THING + "index.html" not in site.pages or not [p for p in site.pages if p.startswith(THING + "index-")]:
+    if THING + "index.html" not in site.html or not [p for p in site.html if p.startswith(THING + "index-")]:
         problems.append("the function named index took the class page's name")
-    inline = [p for p in site.pages if "Inline" in p]
+    inline = [p for p in site.html if "Inline" in p]
     if inline != [THING + "Inline.html"]:
         problems.append("Thing::Inline, written in a header two source files include, has the pages %s" % inline)
-    if [p for p in site.pages if "DOCS_ENGINE" in p]:
+    if [p for p in site.html if "DOCS_ENGINE" in p]:
         problems.append("a page takes its name from an #include spelled in another case")
-    for path in site.pages:
+    for path in site.html:
         if not os.path.isfile(os.path.join(SITE, *path.split("/"))):
             problems.append("%s was not written" % path)
     for name in render.SUPPORT_FILES:
@@ -186,7 +186,7 @@ def naming_problems(site):
             problems.append("%s was not written" % name)
     if not read(os.path.join(SITE, render.INDEX_FILE)).startswith("window.BAZAAR_INDEX = [["):
         problems.append("the search index does not start with window.BAZAAR_INDEX = [[")
-    if 'data-index="search-index.js"' not in site.pages["index.html"]:
+    if 'data-index="search-index.js"' not in site.html["index.html"]:
         problems.append("the pages do not tell search.js where the search index is")
     return problems
 
@@ -259,15 +259,15 @@ def fact_problems(site):
         fn = by_title(site, title) or {}
         if fn.get("declarations") != block:
             problems.append("the hooks of %s read %r" % (title, fn.get("declarations")))
-    square = site.pages["reference/docs_engine.cpp/Square/index.html"]
-    shape = site.pages["reference/docs_shapes.h/Shape/index.html"]
+    square = site.html["reference/docs_engine.cpp/Square/index.html"]
+    shape = site.html["reference/docs_shapes.h/Shape/index.html"]
     wanted = [
         (square, "<dt>Declared in</dt><dd>docs_shapes.h, line 9</dd>"),
         (square, '<dt>Based on</dt><dd><a href="../../docs_shapes.h/Shape/index.html">Shape</a></dd>'),
         (shape, '<dt>Classes based on it</dt><dd><a href="../../docs_engine.cpp/Square/index.html">Square</a></dd>'),
     ]
     problems += ["a class page does not contain %r" % text for page, text in wanted if text not in page]
-    if "reference/index.html" not in site.pages["index.html"]:
+    if "reference/index.html" not in site.html["index.html"]:
         problems.append("the home page does not link to the game's code")
     return problems
 
@@ -281,11 +281,11 @@ def caller_problems(site):
     }
     for title, callers in wanted.items():
         fn = by_title(site, title)
-        called_by = section_of(site.pages[fn["page"]], "Called by") if fn else ""
+        called_by = section_of(site.html[fn["page"]], "Called by") if fn else ""
         for caller in callers:
             if called_by.count(caller) != 1:
                 problems.append("%s is not listed once among the callers of %s" % (caller, title))
-    hook = section_of(site.pages["hooks/PopupRaised.html"], "Where it fires")
+    hook = section_of(site.html["hooks/PopupRaised.html"], "Where it fires")
     for text in ["Score-int_int.html#L%d" % fixture_line("CivHandPopupRaised(iBase)"), "Counter.html#L"]:
         if text not in hook:
             problems.append("hooks/PopupRaised.html does not list %r where it fires" % text)
@@ -296,7 +296,7 @@ def caller_problems(site):
 
 def search_problems(site):
     rows = site.search_rows()
-    problems = ["the search index leads to %s, which has no page" % t for _, t in rows if t not in site.pages]
+    problems = ["the search index leads to %s, which has no page" % t for _, t in rows if t not in site.html]
     labels = {label for label, _ in rows}
     for label in ["Thing::Get(int)", "Setup::Option (class)", "docs_shapes.h (file)", "PopupRaised (hand-placed hook)"]:
         if label not in labels:
@@ -329,7 +329,7 @@ def stop_problems():
         problems.append("a build stopped by a broken link wrote its site")
     bom_hooks = write_input("bom-hooks.md", text, encoding="utf-8-sig")
     site = fixture_build("bom", hand_hooks=bom_hooks)
-    if site.pages["hooks/index.html"].count("<h1>") != 1:
+    if site.html["hooks/index.html"].count("<h1>") != 1:
         problems.append("a hand-placed hooks file saved with a byte order mark shows its title twice")
     return problems
 
@@ -491,7 +491,7 @@ def history_problems():
 
 
 def guide_problems(site):
-    home = site.pages["index.html"]
+    home = site.html["index.html"]
     wanted = [
         '<a href="reference/docs_engine.cpp/Thing/Score-bool-const.html"><code>Thing::Score(bool)</code></a>',
         '<a href="reference/docs_engine.cpp/Thing/Get.html"><code>Thing::Get</code></a>',
@@ -546,7 +546,7 @@ def summary_problems(site):
     }
     problems = []
     for path, texts in wanted.items():
-        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.pages[path]]
+        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.html[path]]
     for name, text, reason in (
         ("Nobody", "## Nobody\n\nNo such class.\n", "classes summarized in %s that have no page: Nobody"),
         ("Nothing", "## Thing\n\n[[Nothing]]\n", "%s names Nothing,"),
@@ -666,13 +666,13 @@ def html_problems(site):
     }
     problems = []
     for path, texts in wanted.items():
-        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.pages[path]]
+        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.html[path]]
     return problems
 
 
 class FakeSite:
-    def __init__(self, pages):
-        self.pages = pages
+    def __init__(self, html):
+        self.html = html
         self.markdown = {}
 
     def search_index(self):
@@ -709,6 +709,9 @@ def write_problems():
         build_docs.write(FakeSite({"index.html": "x"}), stopped_folder)
     except SystemExit:
         problems.append("a write stopped part way blocked the next one")
+    for name in ("LICENSE.txt", "NOTICE.txt"):
+        if not os.path.isfile(os.path.join(stopped_folder, name)):
+            problems.append("the site has no %s" % name)
     return problems
 
 
