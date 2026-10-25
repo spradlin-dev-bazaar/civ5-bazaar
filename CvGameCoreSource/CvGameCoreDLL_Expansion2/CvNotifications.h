@@ -57,6 +57,10 @@ public:
 	int GetNotificationID(int iZeroBasedIndex);	        // ignores begin/end values
 	int GetNotificationTurn(int iZeroBasedIndex);	        // ignores begin/end values
 	bool IsNotificationDismissed(int iZeroBasedIndex);     // ignores begin/end values
+	int GetNotificationX(int iZeroBasedIndex);           // ignores begin/end values
+	int GetNotificationY(int iZeroBasedIndex);           // ignores begin/end values
+	NotificationTypes GetNotificationType(int iZeroBasedIndex);  // ignores begin/end values
+	int GetNotificationExtraGameData(int iZeroBasedIndex); // ignores begin/end values
 
 	struct Notification
 	{

@@ -41,7 +41,7 @@ An announcement: a proposed deal was accepted or turned down. The values are the
 
 ## UnitOrdersCancelled
 
-An announcement: the game cancelled a unit's orders. The values are the unit and one of these reasons. It can run before the game has finished cancelling, so give the unit new orders later rather than from inside it.
+An announcement: the game cancelled a unit's orders. The values are the unit and one of these reasons. It runs before the game clears the unit's orders, so you can still read them inside it; give the unit new orders later rather than from inside it.
 
 | Reason | Why |
 |---|---|

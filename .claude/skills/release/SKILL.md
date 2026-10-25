@@ -14,7 +14,7 @@ Ask the developer before each step that publishes something or changes git: comm
 1. On main, up to date with GitHub and with nothing uncommitted, run `.\build-hooked.cmd`, then `.venv\Scripts\python.exe tools\release.py number`.
 2. Tell the developer the number it gives and why, in a few plain sentences: what was added, removed or changed since the last release. If it says every plugin must be rebuilt, say so. The first release has nothing to compare with and keeps the numbers in `VERSION`.
 3. Ask whether that is the release they want. From 1.0 on, removing or changing anything plugins use needs a new major version; if the developer wants one, add `--major` in the next step.
-4. Before the first release, check with the developer that the save check at the end of the plan's "Making a release" has been done: whether a save made with one release still loads after the player updates to the next. If it has not, stop here.
+4. Before the second release, when Bazaar's mod version first goes up, check with the developer that the save check at the end of the plan's "Making a release" has been done: a save made with the first release must still load after the player updates to the second. If it has not, do it as part of this release's in-game check, before publishing.
 
 ## 2. Prepare
 
