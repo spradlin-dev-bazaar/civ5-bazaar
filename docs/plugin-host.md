@@ -9,7 +9,7 @@ The game loads exactly one rules DLL. Today that DLL is the Local MCP Server mod
 The goal is one **host DLL** that loads any number of **plugin DLLs**, each its own Workshop mod with its own intent:
 
 - the MCP server is a plugin, not part of the host;
-- rules changes and bug fixes are their own plugins (or plain Lua mods on the host's hooks); the host adds none of its own beyond what VMC already carries;
+- rules changes and bug fixes are their own plugins (or plain Lua mods on the host's hooks); the host adds none of its own beyond what VMC already carries, and adds to the engine only hand-placed hooks and read-only accessors for state a plugin cannot otherwise reach;
 - other developers can write plugins against a documented SDK;
 - an existing DLL mod can become a plugin: each engine function it edited becomes a replacement registered by the plugin, with no change to the host;
 - a plugin built for an older host keeps running on a newer one.
@@ -239,7 +239,7 @@ A release is made on the developer's machine, because the host, the SDK and the 
 6. **Docs site.** A GitHub Action runs when a release is published, pre-releases included. Once per repository, Pages must deploy from GitHub Actions, and the github-pages environment must let tags matching `v*` deploy. It takes the site out of that release's docs zip and publishes it on GitHub Pages, so the site always shows the newest release. The repository stays private until the first Steam Workshop release, which makes it public. Until then the project's GitHub Team plan publishes Pages from the private repository, and the site itself is public. The Action can also be run by hand on any release to publish its site again.
 7. **Workshop.** From 1.0 on, uploading the two packages to the Steam Workshop is a manual step in ModBuddy; pre-releases are not uploaded. The Workshop page points to the GitHub release for the SDK and docs.
 
-One check before the first release: whether a save made with one release still loads after the player updates to the next, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
+One check before the second release, when Bazaar's mod version first goes up: whether a save made with the first release still loads after the player updates to the second, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
 
 ## Phases
 

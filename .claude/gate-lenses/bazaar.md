@@ -31,7 +31,7 @@ Every call from Bazaar into a plugin goes through `GuardedCall` in `host/CivHost
 
 ## Engine source
 
-`CvGameCoreSource/` is Firaxis's code with VMC's changes, and Bazaar adds no fixes to it: an edit there is a hand-placed hook or nothing. Flag any other edit (a fix, a clean-up, a reformat): it changes the game for every mod and marks the function as changed in the developer docs.
+`CvGameCoreSource/` is Firaxis's code with VMC's changes, and Bazaar adds no fixes to it: an edit there is a hand-placed hook, a read-only accessor for state a plugin cannot otherwise reach, or nothing. Flag any other edit (a fix, a clean-up, a reformat): it changes the game for every mod and marks the function as changed in the developer docs.
 - A new hand-placed hook needs its declaration in `host/CivPluginApi.h`, its section in `sdk/hand-placed-hooks.md` and a test in `tests/runtime/test_hand_hooks.cpp`.
 - Hook wrappers are generated: change `tools/generator/`, never the generated copy.
 - `CvGameCoreSource/`, `mod/vmc/` and `frontend/` keep Windows line endings. A diff that rewrites every line of a file means its line endings changed.
