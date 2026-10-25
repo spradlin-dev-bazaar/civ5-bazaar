@@ -194,13 +194,14 @@ Each hand-placed hook gets a page too: its section of sdk/hand-placed-hooks.md, 
 
 - a description of each hand-placed hook in sdk/hand-placed-hooks.md, written when the hook is added;
 - a task-based guide as the front page: common goals ("change combat odds", "react to a city being captured"), each pointing to the hooks that serve it; it starts with the common needs and grows over time;
-- a short summary of each main class (player, city, unit, plot, deals, diplomacy): what it owns and where to look.
+- a short summary of each main class (player, city, unit, plot, deals, diplomacy): what it owns and where to look;
+- notes on single functions in docs/function-notes.md, shown on the function's page, where a developer needs something its generated facts do not say.
 
 Functions are not described in bulk; a function with no hand-written description shows only its generated facts. Because function meanings are frozen, hand-written descriptions never go out of date.
 
 **Where it is built and published.** The generator needs Visual C++ 2008's header files to read the engine, and GitHub's build machines do not have them. So the docs are built on the developer's machine when making a release, and attached to the GitHub release as a zip of their own, so a Lua modder can get them without the SDK. A GitHub Action then takes the site out of that zip and publishes it on the project's GitHub Pages site; no generated page is committed to the repository. The site shows the latest release, and each docs zip holds the docs for its own release. Because host builds only add, the latest docs also hold for plugins built against older releases. Every page shows Firaxis's copyright line and links to NOTICE, since it shows their code. The GitHub wiki is not used: it takes only Markdown, cannot run the site's own styles or search, and has no build step.
 
-**A copy for coding models.** The docs step also writes every page as Markdown, in the same tree, and the docs zip holds both. The HTML pages wrap the code in markup for its colours and links, which a model has to read past; the Markdown is nearly all content. The whole reference is far too big for a model to read at once, so the copy is meant as a folder a coding agent searches: the engine's code with the callers, hooks and history already worked out.
+**A copy for coding models.** The docs step also writes every page as Markdown, in the same tree, and the docs zip holds both. The HTML pages wrap the code in markup for its colours and links, which a model has to read past; the Markdown is nearly all content. The whole reference is far too big for a model to read at once, so the copy is meant as a folder a coding agent searches: the engine's code with the callers, hooks and history already worked out. The pages are built straight as HTML today, so before P1.6 writes this copy it decides how both copies get the same content: from one outline of each page written out twice, or by turning each finished HTML page into Markdown.
 
 ## The MCP plugin
 
@@ -232,7 +233,7 @@ A release is made on the developer's machine, because the host, the SDK and the 
    - the SDK zip;
    - the docs zip, with the site and its Markdown copy.
 
-   Building the docs again for a release whose history is already saved gives the same pages, so this build marks the same changes as the preparation did.
+   Building the docs again for a release whose history is already saved gives the same pages, so this build marks the same changes as the preparation did. If a function moved within its file after the preparation, its code unchanged, this build moves its marks to the new lines and so changes the history file; the script then stops, and the moved lines reach main through another pull request before the release is tagged.
 4. **Check in the game.** The packages are installed from the release's files, not the build folders, and a game is loaded with the template plugin built from the SDK zip. The log has to show the plugin's hooks running.
 5. **Publish.** The script tags main, such as `v0.4.0`, and creates the GitHub release as a draft, with the files attached and release notes the skill drafts: what changed for players, and what was added for plugin authors. The developer publishes it from the draft. Releases before 1.0 are marked as pre-releases.
 6. **Docs site.** A GitHub Action runs when a release is published. It skips pre-releases, so the site starts with 1.0; for any other release it takes the site out of the docs zip and publishes it on GitHub Pages. GitHub's free plan publishes Pages only from a public repository, and this one is private today, so it has to be made public before 1.0. The Action can also be run by hand on any release to build the site without publishing it, which is how P1.6 checks it.

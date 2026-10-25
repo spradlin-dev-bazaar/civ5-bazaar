@@ -6,6 +6,8 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import CppLexer
 from pygments.token import STANDARD_TYPES
 
+from paths import HOME_PAGE
+
 LEXER = CppLexer()
 LIGHT_STYLE = "vs"
 DARK_STYLE = "github-dark"
@@ -13,6 +15,7 @@ SITE_NAME = "Bazaar developer reference"
 STYLE_FILE = "style.css"
 SCRIPT_FILE = "search.js"
 INDEX_FILE = "search-index.js"
+INDEX_START = "window.BAZAAR_INDEX = "
 NOTICE_FILE = "NOTICE.txt"
 SUPPORT_FILES = (STYLE_FILE, SCRIPT_FILE, INDEX_FILE, NOTICE_FILE)
 FOOTER = (
@@ -121,9 +124,9 @@ def page(title, root, trail, body):
         "<title>%(title)s - %(site)s</title>"
         '<link rel="stylesheet" href="%(root)s%(style)s">'
         '<script defer src="%(root)s%(script)s"></script>'
-        '</head><body data-root="%(root)s">'
-        '<header class="top"><a class="site" href="%(root)sindex.html">%(site)s</a>'
-        '<div class="search"><input type="search" placeholder="Search functions, classes and files" '
+        '</head><body data-root="%(root)s" data-index="%(index)s">'
+        '<header class="top"><a class="site" href="%(root)s%(home)s">%(site)s</a>'
+        '<div class="search"><input type="search" placeholder="Search functions, classes, hooks and files" '
         'aria-label="Search" autocomplete="off"><ol class="results"></ol></div></header>'
         "%(trail)s<main>%(body)s</main>"
         "<footer>%(footer)s</footer>"
@@ -134,6 +137,8 @@ def page(title, root, trail, body):
         "root": esc(root),
         "style": STYLE_FILE,
         "script": SCRIPT_FILE,
+        "index": INDEX_FILE,
+        "home": HOME_PAGE,
         "trail": crumbs(trail) if trail else "",
         "body": body,
         "footer": FOOTER.format(notice=esc(root + NOTICE_FILE)),

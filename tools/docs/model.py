@@ -12,6 +12,7 @@ import collect
 import common
 import generate
 import history
+from paths import posix
 
 HEADER_REASON = "written in a header"
 PURE_REASON = "it has no code of its own: it is pure virtual, so the classes that override it have the code"
@@ -31,35 +32,37 @@ class Engine:
             for path, line, message in sorted(errors)[:20]:
                 print("  %s:%d %s" % (os.path.basename(path), line, message))
             raise SystemExit("docs: %d new parse errors outside function bodies, nothing written" % len(errors))
+        self.body_errors = sum(1 for r in results for e in r["errors"] if e[3])
         self.functions, self.classes = merge(results, project)
-        self.added, self.missing = self.plan_hooks()
+        self.plan_hooks()
         self.by_usr = {}
         for fn in self.functions:
             self.by_usr.setdefault(fn["usr"], fn)
         self.callers, self.overridden_by = self.cross_references()
         self.hand_sites = self.scan_bodies()
-        self.history_facts()
+        self.prepare_history()
 
     def text(self, rel):
         if rel not in self.texts:
             with open(os.path.join(self.project.root, rel), "rb") as f:
                 self.texts[rel] = f.read()
-            self.line_starts[rel] = [0] + [m.end() for m in re.finditer(b"\n", self.texts[rel])]
         return self.texts[rel]
 
     def line_of(self, rel, offset):
-        self.text(rel)
+        if rel not in self.line_starts:
+            self.line_starts[rel] = [0] + [m.end() for m in re.finditer(b"\n", self.text(rel))]
         return bisect.bisect_right(self.line_starts[rel], offset)
 
     def plan_hooks(self):
         """The generator's own planning, so pages match the build's hooks; the hook list is never saved from here."""
         files, edits = generate.PathDict(), generate.PathDict()
-        registry = generate.Registry(self.project.registry)
+        self.registry = generate.Registry(self.project.registry)
         cpp = [fn for fn in self.functions if fn["compiled"]]
-        hooks, _, _ = generate.plan_hooks(cpp, self.project, files, edits, registry)
+        hooks, _, _ = generate.plan_hooks(cpp, self.project, files, edits, self.registry)
         for fn in hooks:
             fn["declarations"] = hook_declarations(fn, self.text(fn["file"]))
-        return registry.added, len(registry.entries) - len(hooks)
+        self.unregistered_hooks = self.registry.added
+        self.stale_registry_entries = len(self.registry.entries) - len(hooks)
 
     def cross_references(self):
         callers = collections.defaultdict(dict)
@@ -74,26 +77,25 @@ class Engine:
                     overridden_by[id(self.by_usr[usr])].append(fn)
         return callers, overridden_by
 
-    def history_facts(self):
+    def prepare_history(self):
         """A function outside any class always carries its file, so its name never depends on whether another file
         holds a twin."""
         seen = set()
         for fn in self.functions:
             fn["history_key"] = generate.hook_key(fn)
             if not fn["owner"]:
-                fn["history_key"] += " @" + fn["file"].replace(os.sep, "/")
+                fn["history_key"] += " @" + posix(fn["file"])
             if fn["history_key"] in seen:
                 raise SystemExit("docs: two functions share the history name %s" % fn["history_key"])
             seen.add(fn["history_key"])
-            path = os.path.relpath(os.path.join(self.project.root, fn["file"]), common.REPO)
-            fn["source"] = path.replace(os.sep, "/")
+            fn["source"] = posix(os.path.relpath(os.path.join(self.project.root, fn["file"]), common.REPO))
             fn["lines"] = (self.line_of(fn["file"], fn["def_start"]), self.line_of(fn["file"], fn["def_end"]))
             fn["added_in"], fn["changed_in"] = "", []
 
     def history_now(self):
         return {
             fn["history_key"]: history.Current(
-                fn["fingerprint"], tuple(sorted({h for h, _ in fn["hand_hooks"]})), fn["source"], *fn["lines"]
+                fn["fingerprint"], tuple(sorted({hook for hook, _ in fn["hand_hooks"]})), fn["source"], *fn["lines"]
             )
             for fn in self.functions
         }
@@ -120,23 +122,18 @@ class Engine:
             data = self.text(fn["file"])
             body = data[fn["body_start"] : fn["def_end"]].decode("cp1252", "replace")
             code = vmc.code_only(body)
-
-            def live(at):
-                return code[at] != " " and not in_ranges(fn["body_start"] + at, fn["excluded"])
-
-            for m in generate.HAND_HOOK_CALL.finditer(data, fn["body_start"], fn["def_end"]):
-                if live(m.start() - fn["body_start"]):
-                    site = (m.group(1).decode("ascii"), self.line_of(fn["file"], m.start()))
-                    fn["hand_hooks"].append(site)
-                    hand_sites[site[0]].append((fn, site[1]))
-            for call, vmc_call in ((vmc.VMC_CALL, True), (vmc.BASE_CALL, False)):
-                for m in call.finditer(body):
-                    if not live(m.start()):
-                        continue
-                    name = macros.get(m.group(2), m.group(2)) if vmc_call else m.group(2)
-                    if name not in fn["events"]:
-                        fn["events"].append(name)
+            fn["hand_hooks"] = self.hand_hooks_in(fn, data, code)
+            fn["events"] = events_in(fn, body, code, macros)
+            for hook, line in fn["hand_hooks"]:
+                hand_sites[hook].append((fn, line))
         return hand_sites
+
+    def hand_hooks_in(self, fn, data, code):
+        found = []
+        for m in generate.HAND_HOOK_CALL.finditer(data, fn["body_start"], fn["def_end"]):
+            if live(fn, code, m.start() - fn["body_start"]):
+                found.append((m.group(1).decode("ascii"), self.line_of(fn["file"], m.start())))
+        return found
 
 
 def read_all(project):
@@ -180,6 +177,17 @@ def event_macros(root):
                     for macro, lua_name, _ in vmc.DEFINE.findall(f.read()):
                         macros[macro] = lua_name
     return macros
+
+
+def events_in(fn, body, code, macros):
+    names = [macros.get(m.group(2), m.group(2)) for m in vmc.VMC_CALL.finditer(body) if live(fn, code, m.start())]
+    names += [m.group(2) for m in vmc.BASE_CALL.finditer(body) if live(fn, code, m.start())]
+    return list(dict.fromkeys(names))
+
+
+def live(fn, code, at):
+    """at is an offset into the body, and code is the body with its comments and strings blanked out."""
+    return code[at] != " " and not in_ranges(fn["body_start"] + at, fn["excluded"])
 
 
 def in_ranges(offset, ranges):

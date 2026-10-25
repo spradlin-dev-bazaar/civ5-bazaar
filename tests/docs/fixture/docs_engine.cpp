@@ -14,6 +14,9 @@ int Thing::Score(bool bFinal) const
 {
 #if defined(DOCS_NEVER)
 #define DOCS_UNUSED 1
+#ifdef DOCS_INNER
+	CivHandPopupRaised(0);
+#endif // DOCS_INNER
 	return 0;
 #else
 	return Inline() + (bFinal ? 1 : 0);
@@ -64,6 +67,8 @@ const Thing& Thing::Self() const
 	return *this;
 }
 
+// - - - - - - - - - - - - - - - -
+// Resets.
 void Thing::Reset()
 {
 	m_i = 0;
@@ -71,7 +76,14 @@ void Thing::Reset()
 
 int Thing::Weight(int) const
 {
-	return 2;
+#if defined(CIV_HOST_API)
+	return 20;
+#else // not CIV_HOST_API
+#ifdef DOCS_OTHER
+	return 30;
+#endif // DOCS_OTHER
+	return 40;
+#endif // CIV_HOST_API
 }
 
 int BetterThing::Score(bool bFinal) const
@@ -96,12 +108,19 @@ Counter::Counter(int n) : m_n(n)
 #endif
 }
 
+//	------------------------------------------------------------------
+//
+// Counts.
+//
 int Count()
 {
 	Counter counter(3);
 	return counter.m_n;
 }
 
+////////////////////////////////////////
+// Setup
+////////////////////////////////////////
 int Setup::Option::GetValue() const
 {
 	return 1;

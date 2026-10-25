@@ -9,11 +9,11 @@ import hashlib
 import os
 import re
 
-VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
-Entry = collections.namedtuple("Entry", "fingerprint hooks added changes")
+Entry = collections.namedtuple("Entry", "fingerprint hand_hooks added changes")
 Change = collections.namedtuple("Change", "release source first last added_hooks")
-Current = collections.namedtuple("Current", "fingerprint hooks source first last")
+Current = collections.namedtuple("Current", "fingerprint hand_hooks source first last")
 
 
 def fingerprint(tokens):
@@ -21,7 +21,7 @@ def fingerprint(tokens):
 
 
 def version(text):
-    if not VERSION.match(text or ""):
+    if not VERSION.fullmatch(text or ""):
         raise SystemExit("docs: a release is three numbers, such as 0.4.0, not %r" % text)
     return tuple(int(n) for n in text.split("."))
 
@@ -39,7 +39,7 @@ def load(path):
         lines = f.read().splitlines()
     try:
         name, release = (lines[0] if lines else "").split("\t")
-        if name != "release":
+        if name != "release" or not VERSION.fullmatch(release):
             raise ValueError
     except ValueError:
         raise SystemExit("docs: line 1 of %s is not a function history line" % path)
@@ -58,7 +58,7 @@ def save(path, release, entries):
     for key in sorted(entries):
         e = entries[key]
         changes = ";".join(write_change(c) for c in e.changes)
-        lines.append("\t".join([key, e.fingerprint, ",".join(e.hooks), e.added, changes]))
+        lines.append("\t".join([key, e.fingerprint, ",".join(e.hand_hooks), e.added, changes]))
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -85,11 +85,11 @@ def update(saved_release, saved, current, release):
     for key, now in current.items():
         old = saved.get(key)
         if old is None:
-            entries[key] = Entry(now.fingerprint, now.hooks, release if saved_release is not None else "", [])
+            entries[key] = Entry(now.fingerprint, now.hand_hooks, release if saved_release is not None else "", [])
         elif old.fingerprint != now.fingerprint:
-            added_hooks = tuple(h for h in now.hooks if h not in old.hooks)
+            added_hooks = tuple(h for h in now.hand_hooks if h not in old.hand_hooks)
             change = Change(release, now.source, now.first, now.last, added_hooks)
-            entries[key] = Entry(now.fingerprint, now.hooks, old.added, old.changes + [change])
+            entries[key] = Entry(now.fingerprint, now.hand_hooks, old.added, old.changes + [change])
     return entries
 
 

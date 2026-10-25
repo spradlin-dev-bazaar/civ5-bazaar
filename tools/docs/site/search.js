@@ -1,5 +1,6 @@
 (function () {
 	var root = document.body.getAttribute("data-root") || "";
+	var index = document.body.getAttribute("data-index");
 	var input = document.querySelector(".search input");
 	var list = document.querySelector(".search .results");
 	var loading = false;
@@ -11,7 +12,7 @@
 		if (loading) return;
 		loading = true;
 		var script = document.createElement("script");
-		script.src = root + "search-index.js";
+		script.src = root + index;
 		script.onload = then;
 		script.onerror = function () {
 			list.innerHTML = "";
