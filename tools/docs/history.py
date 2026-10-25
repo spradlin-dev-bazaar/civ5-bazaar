@@ -97,7 +97,8 @@ def again(saved, current, release):
     """Building a saved release again changes no mark; only where its changes now sit in the files."""
     if any(key not in saved or saved[key].fingerprint != now.fingerprint for key, now in current.items()):
         raise SystemExit(
-            "docs: the function history was already saved at release %s, and the code has changed since" % release
+            "docs: the function history was already saved at release %s, and the code has changed since: prepare the"
+            " release again" % release
         )
     entries = dict(saved)
     for key, now in current.items():

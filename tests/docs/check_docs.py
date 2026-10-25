@@ -16,6 +16,8 @@ import history  # noqa: E402
 import model  # noqa: E402
 import pages  # noqa: E402
 import render  # noqa: E402
+import render_md  # noqa: E402
+from outline import Entries  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
 SITE = os.path.join(OUT, "site")
@@ -128,6 +130,13 @@ def fixture_line(text):
         return next(i for i, line in enumerate(f, 1) if text in line)
 
 
+def closing_line(text):
+    with open(os.path.join(HERE, "fixture", "docs_engine.cpp"), encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    start = fixture_line(text)
+    return next(i for i, line in enumerate(lines[start - 1 :], start) if line == "}")
+
+
 def by_title(site, title):
     return next((fn for fn in site.engine.functions if fn["title"] == title), None)
 
@@ -136,7 +145,7 @@ def page_problems(site, title, texts, wanted):
     fn = by_title(site, title)
     if fn is None:
         return ["no function %s" % title]
-    page = site.pages[fn["page"]]
+    page = site.html[fn["page"]]
     verb = "does not contain" if wanted else "contains"
     return ["the page of %s %s %r" % (title, verb, t) for t in texts if (t in page) != wanted]
 
@@ -157,19 +166,19 @@ def section_of(page, heading):
 def naming_problems(site):
     problems = []
     for path in ["Get.html", "Score-bool-const.html", "Score-int_int.html", "operator_eq.html", "Inline.html"]:
-        if THING + path not in site.pages:
+        if THING + path not in site.html:
             problems.append("no page %s" % (THING + path))
-    totals = [p for p in site.pages if p.startswith((THING + "Total-", THING + "total-"))]
+    totals = [p for p in site.html if p.startswith((THING + "Total-", THING + "total-"))]
     if len(totals) != 2 or len({p.lower() for p in totals}) != 2:
         problems.append("Total and total do not get pages whose names differ in more than case: %s" % totals)
-    if THING + "index.html" not in site.pages or not [p for p in site.pages if p.startswith(THING + "index-")]:
+    if THING + "index.html" not in site.html or not [p for p in site.html if p.startswith(THING + "index-")]:
         problems.append("the function named index took the class page's name")
-    inline = [p for p in site.pages if "Inline" in p]
+    inline = [p for p in site.html if "Inline" in p]
     if inline != [THING + "Inline.html"]:
         problems.append("Thing::Inline, written in a header two source files include, has the pages %s" % inline)
-    if [p for p in site.pages if "DOCS_ENGINE" in p]:
+    if [p for p in site.html if "DOCS_ENGINE" in p]:
         problems.append("a page takes its name from an #include spelled in another case")
-    for path in site.pages:
+    for path in site.html:
         if not os.path.isfile(os.path.join(SITE, *path.split("/"))):
             problems.append("%s was not written" % path)
     for name in render.SUPPORT_FILES:
@@ -177,7 +186,7 @@ def naming_problems(site):
             problems.append("%s was not written" % name)
     if not read(os.path.join(SITE, render.INDEX_FILE)).startswith("window.BAZAAR_INDEX = [["):
         problems.append("the search index does not start with window.BAZAAR_INDEX = [[")
-    if 'data-index="search-index.js"' not in site.pages["index.html"]:
+    if 'data-index="search-index.js"' not in site.html["index.html"]:
         problems.append("the pages do not tell search.js where the search index is")
     return problems
 
@@ -250,15 +259,15 @@ def fact_problems(site):
         fn = by_title(site, title) or {}
         if fn.get("declarations") != block:
             problems.append("the hooks of %s read %r" % (title, fn.get("declarations")))
-    square = site.pages["reference/docs_engine.cpp/Square/index.html"]
-    shape = site.pages["reference/docs_shapes.h/Shape/index.html"]
+    square = site.html["reference/docs_engine.cpp/Square/index.html"]
+    shape = site.html["reference/docs_shapes.h/Shape/index.html"]
     wanted = [
         (square, "<dt>Declared in</dt><dd>docs_shapes.h, line 9</dd>"),
         (square, '<dt>Based on</dt><dd><a href="../../docs_shapes.h/Shape/index.html">Shape</a></dd>'),
         (shape, '<dt>Classes based on it</dt><dd><a href="../../docs_engine.cpp/Square/index.html">Square</a></dd>'),
     ]
     problems += ["a class page does not contain %r" % text for page, text in wanted if text not in page]
-    if "reference/index.html" not in site.pages["index.html"]:
+    if "reference/index.html" not in site.html["index.html"]:
         problems.append("the home page does not link to the game's code")
     return problems
 
@@ -272,11 +281,11 @@ def caller_problems(site):
     }
     for title, callers in wanted.items():
         fn = by_title(site, title)
-        called_by = section_of(site.pages[fn["page"]], "Called by") if fn else ""
+        called_by = section_of(site.html[fn["page"]], "Called by") if fn else ""
         for caller in callers:
             if called_by.count(caller) != 1:
                 problems.append("%s is not listed once among the callers of %s" % (caller, title))
-    hook = section_of(site.pages["hooks/PopupRaised.html"], "Where it fires")
+    hook = section_of(site.html["hooks/PopupRaised.html"], "Where it fires")
     for text in ["Score-int_int.html#L%d" % fixture_line("CivHandPopupRaised(iBase)"), "Counter.html#L"]:
         if text not in hook:
             problems.append("hooks/PopupRaised.html does not list %r where it fires" % text)
@@ -287,7 +296,7 @@ def caller_problems(site):
 
 def search_problems(site):
     rows = site.search_rows()
-    problems = ["the search index leads to %s, which has no page" % t for _, t in rows if t not in site.pages]
+    problems = ["the search index leads to %s, which has no page" % t for _, t in rows if t not in site.html]
     labels = {label for label, _ in rows}
     for label in ["Thing::Get(int)", "Setup::Option (class)", "docs_shapes.h (file)", "PopupRaised (hand-placed hook)"]:
         if label not in labels:
@@ -320,7 +329,7 @@ def stop_problems():
         problems.append("a build stopped by a broken link wrote its site")
     bom_hooks = write_input("bom-hooks.md", text, encoding="utf-8-sig")
     site = fixture_build("bom", hand_hooks=bom_hooks)
-    if site.pages["hooks/index.html"].count("<h1>") != 1:
+    if site.html["hooks/index.html"].count("<h1>") != 1:
         problems.append("a hand-placed hooks file saved with a byte order mark shows its title twice")
     return problems
 
@@ -442,7 +451,7 @@ def later_releases(releases):
 def history_file_problems():
     problems = []
     change = history.Change("0.4.0", "x.cpp", 1, 2, ("PopupRaised", "DealResolved"))
-    plural = pages.change_mark(change, THING + "Total.html", {"PopupRaised": []})
+    plural = render.inline(pages.change_mark(change, {"PopupRaised": []}), THING + "Total.html")
     if (
         '(added hand-placed hooks <a href="../../../hooks/PopupRaised.html">PopupRaised</a>, DealResolved)'
         not in plural
@@ -482,7 +491,7 @@ def history_problems():
 
 
 def guide_problems(site):
-    home = site.pages["index.html"]
+    home = site.html["index.html"]
     wanted = [
         '<a href="reference/docs_engine.cpp/Thing/Score-bool-const.html"><code>Thing::Score(bool)</code></a>',
         '<a href="reference/docs_engine.cpp/Thing/Get.html"><code>Thing::Get</code></a>',
@@ -537,7 +546,7 @@ def summary_problems(site):
     }
     problems = []
     for path, texts in wanted.items():
-        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.pages[path]]
+        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.html[path]]
     for name, text, reason in (
         ("Nobody", "## Nobody\n\nNo such class.\n", "classes summarized in %s that have no page: Nobody"),
         ("Nothing", "## Thing\n\n[[Nothing]]\n", "%s names Nothing,"),
@@ -552,12 +561,125 @@ def summary_problems(site):
     return problems
 
 
+FOOTER_START = "© 1991-2012 Take-Two Interactive Software and its subsidiaries"
+
+
+def markdown_problems(site):
+    score = (fixture_line("/// The thing's score."), closing_line("int Thing::Score(bool bFinal) const"))
+    left_out = (fixture_line("#define DOCS_UNUSED"), fixture_line("return 0;"))
+    hand_hook = fixture_line("CivHandPopupRaised(iBase)")
+    wanted = {
+        THING + "Score-bool-const.md": [
+            "# Thing::Score(bool) const\n\n"
+            "[Game code](../../index.md) / [docs_engine.cpp](../index.md) / [Thing](index.md) / Score\n",
+            "- **Hook name:** `CivHooks::Thing_Score`\n",
+            "## Hooks\n\n```cpp\nstatic bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);\n",
+            "Lines %d to %d of `docs_engine.cpp`, numbered." % score,
+            "Left out of this build by an `#if`: lines %d to %d." % left_out,
+            "\n%d  int Thing::Score(bool bFinal) const\n" % fixture_line("int Thing::Score(bool bFinal) const"),
+            "- [Thing::Inline() const](Inline.md)\n",
+            FOOTER_START,
+        ],
+        THING + "Score-int_int.md": [
+            "**Warning:** A replacement for this function that does not call `original` stops these hooks",
+            "The hand-placed hook PopupRaised fires on line %d." % hand_hook,
+            "- [PopupRaised](../../../hooks/PopupRaised.md), line %d\n" % hand_hook,
+        ],
+        THING + "index.md": [
+            "[`Thing::Score`](Score-bool-const.md) scores it",
+            "- [Inline() const](Inline.md) (not a hook point)\n",
+            "- [operator\\[\\](int) const](operator_index.md)\n",
+        ],
+        THING + "operator_index.md": ["# Thing::operator[](int) const\n"],
+        "hooks/index.md": ["# Hand-placed hooks\n\nThe test engine's one hand-placed hook."],
+        "hooks/PopupRaised.md": [
+            "## Where it fires\n",
+            "](../reference/docs_engine.cpp/Thing/Score-int_int.md), line ",
+        ],
+        "index.md": [
+            "\n## Things to do\n",
+            "[`Thing::Get`](reference/docs_engine.cpp/Thing/Get.md)",
+            '\n#include "CivPluginApi.h"\n',
+        ],
+    }
+    problems = []
+    for path, texts in wanted.items():
+        page = site.markdown.get(path, "")
+        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in page]
+    if not site.markdown.get(THING + "Score-bool-const.md", "").endswith("See [NOTICE](../../../NOTICE.txt).\n"):
+        problems.append("the Markdown footer does not end with a link to NOTICE")
+    missing = [p for p in site.markdown if not os.path.isfile(os.path.join(SITE, *p.split("/")))]
+    problems += ["%s was not written" % p for p in missing[:5]]
+    fake = FakeSite({})
+    fake.markdown = {
+        "a/b.md": "# X::operator[](int)\n\nSee `a[1](b)`, [gone](../nope.md) and [op\\[\\] x](b.md).\n\n"
+        "```cpp\nb[1](2);\n```\n\n~~~\n[tilde](fenced.md)\n~~~\n"
+    }
+    if build_docs.broken_links(fake) != [("a/b.md", "../nope.md")]:
+        problems.append("the Markdown link check reads %r" % build_docs.broken_links(fake))
+    return problems + markdown_writer_problems()
+
+
+def markdown_writer_problems():
+    folded = Entries([["a"], ["b"], ["c"]], 2, "3 functions in 1 file")
+    cases = [
+        ("a folded list", render_md.block(folded, "x.html"), "3 functions in 1 file:\n\n- a\n- b\n- c"),
+        (
+            "left-out lines",
+            render_md.left_out_note(10, {0, 1, 2, 5, 9}),
+            "Left out of this build by an `#if`: lines 10 to 12, line 15 and line 19.",
+        ),
+        ("a code span holding a backtick", render_md.code_span("a`b"), "`` a`b ``"),
+        (
+            "hand-written Markdown",
+            render_md.prose("#include x\n  ```\n# indented\n  ```\n~~~\n# fenced\n[a](x.html)\n~~~\n[a](x.html)", 2),
+            "##include x\n  ```\n## indented\n  ```\n~~~\n# fenced\n[a](x.html)\n~~~\n[a](x.md)",
+        ),
+        ("an unclosed fence", render_md.prose("```\n# out\n[a](x.html)", 2), "```\n## out\n[a](x.md)"),
+        (
+            "a fence closed only by its own fence",
+            render_md.prose("```\n# in\n````\n# still in\n``` x\n# still in\n```\n# out", 2),
+            "```\n# in\n````\n# still in\n``` x\n# still in\n```\n## out",
+        ),
+        ("a link in a code span", render_md.prose("`[a](x.html)` and [b](y.html)", 1), "`[a](x.html)` and [b](y.md)"),
+    ]
+    problems = ["the Markdown of %s reads %r" % (what, got) for what, got, want in cases if got != want]
+    if not render.block(folded, "x.html").startswith("<details><summary>3 functions in 1 file</summary>"):
+        problems.append("the HTML of a folded list does not fold")
+    return problems
+
+
+def html_problems(site):
+    wanted = {
+        THING + "Score-bool-const.html": [
+            "<title>Thing::Score(bool) const - Bazaar developer reference</title>",
+            '<span aria-current="page">Score</span>',
+            '<section id="hooks"><h2>Hooks</h2>',
+            '<section id="code"><h2>Code</h2>',
+            "<footer>The game&#x27;s code on these pages is " + FOOTER_START,
+            'See <a href="../../../NOTICE.txt">NOTICE</a>.</footer>',
+        ],
+        THING + "Score-int_int.html": ['<p class="warn">A replacement for this function that does not call'],
+        THING + "index.html": [
+            '<a href="Inline.html" title="Thing::Inline() const">Inline() const</a> <span class="badge">'
+        ],
+    }
+    problems = []
+    for path, texts in wanted.items():
+        problems += ["%s does not contain %r" % (path, text) for text in texts if text not in site.html[path]]
+    return problems
+
+
 class FakeSite:
-    def __init__(self, pages):
-        self.pages = pages
+    def __init__(self, html):
+        self.html = html
+        self.markdown = {}
 
     def search_index(self):
         return "window.BAZAAR_INDEX = [];\n"
+
+    def search_rows(self):
+        return []
 
 
 def write_problems():
@@ -587,6 +709,9 @@ def write_problems():
         build_docs.write(FakeSite({"index.html": "x"}), stopped_folder)
     except SystemExit:
         problems.append("a write stopped part way blocked the next one")
+    for name in ("LICENSE.txt", "NOTICE.txt"):
+        if not os.path.isfile(os.path.join(stopped_folder, name)):
+            problems.append("the site has no %s" % name)
     return problems
 
 
@@ -594,6 +719,7 @@ if __name__ == "__main__":
     site = build_fixture(fixture_project("fixture"), SITE)
     problems = naming_problems(site) + code_problems(site) + fact_problems(site) + caller_problems(site)
     problems += search_problems(site) + guide_problems(site) + summary_problems(site) + note_problems(site)
+    problems += markdown_problems(site) + html_problems(site)
     problems += stop_problems() + write_problems() + history_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))

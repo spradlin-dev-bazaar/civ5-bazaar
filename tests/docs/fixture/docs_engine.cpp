@@ -48,6 +48,11 @@ bool Thing::operator==(const Thing& other) const
 	return m_i == other.m_i;
 }
 
+int Thing::operator[](int i) const
+{
+	return m_i + i;
+}
+
 void Thing::index()
 {
 }

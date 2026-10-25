@@ -77,13 +77,15 @@ __pycache__/
 tests/ingame/out/
 tests/docs/out/
 sdk/out/
+/dist/
 
 # Visual Studio 2008 per-user files
 *.suo
 *.ncb
 *.user
 
-# A global gitignore may skip .claude/; the review lenses here are shared.
+# A global gitignore may skip .claude/; the review lenses and the release skill here are shared.
 !/.claude/
 /.claude/*
 !/.claude/gate-lenses/
+!/.claude/skills/

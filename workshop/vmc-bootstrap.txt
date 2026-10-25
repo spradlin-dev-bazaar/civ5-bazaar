@@ -1,0 +1,9 @@
+[h1]Bazaar - VMC Bootstrap (required)[/h1]
+This mod is part of the [b]Bazaar Multi-DLL Mod Loader[/b] and does nothing on its own. Subscribe to both.
+
+It holds the database files of whoward69's Various Mod Components (VMC, version 97): the tables, options and fixes that Bazaar's copy of VMC reads. It carries VMC's own mod id, so mods made for VMC load after it, just as they would with VMC itself.
+
+Don't use it together with whoward69's own VMC mod.
+
+[h2]Credits[/h2]
+Everything in this mod is whoward69's work, from VMC version 97, with the credits to his translators that VMC carries.

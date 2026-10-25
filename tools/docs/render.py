@@ -1,12 +1,14 @@
-"""The HTML pieces of the docs site."""
+"""The HTML of the docs site, written from each page's outline."""
 
 import html
 
+import markdown
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import CppLexer
 from pygments.token import STANDARD_TYPES
 
-from paths import HOME_PAGE
+from outline import FOOTER, Badge, Code, Entries, Facts, Link, Mono, Paragraph, Prose, Section
+from paths import HOME_PAGE, NOTICE_FILE, rel_link
 
 LEXER = CppLexer()
 LIGHT_STYLE = "vs"
@@ -16,13 +18,7 @@ STYLE_FILE = "style.css"
 SCRIPT_FILE = "search.js"
 INDEX_FILE = "search-index.js"
 INDEX_START = "window.BAZAAR_INDEX = "
-NOTICE_FILE = "NOTICE.txt"
 SUPPORT_FILES = (STYLE_FILE, SCRIPT_FILE, INDEX_FILE, NOTICE_FILE)
-FOOTER = (
-    "The game's code on these pages is &copy; 1991-2012 Take-Two Interactive Software and its subsidiaries, "
-    "developed by Firaxis Games, with changes by whoward69's Various Mod Components. All rights reserved. "
-    'See <a href="{notice}">NOTICE</a>.'
-)
 
 
 def esc(text):
@@ -76,7 +72,7 @@ def code_block(text, first_line, links=None, greyed=(), marks=None):
     out = []
     for i, body in enumerate(lines):
         classes = "line" + (" greyed" if i in greyed else "") + (" marked" if i in marks else "")
-        note = '<span class="note">%s</span>' % esc(marks[i]) if i in marks else ""
+        note = '<span class="note">hand-placed hook: %s</span>' % esc(marks[i]) if i in marks else ""
         if first_line is None:
             out.append('<span class="%s">%s%s</span>' % (classes, body, note))
             continue
@@ -87,12 +83,14 @@ def code_block(text, first_line, links=None, greyed=(), marks=None):
     return '<pre class="code%s">%s</pre>' % (" plain" if first_line is None else "", "".join(out))
 
 
-def link(href, label, title=None):
+def anchor(href, label, title=None):
     return '<a href="%s"%s>%s</a>' % (esc(href), ' title="%s"' % esc(title) if title else "", esc(label))
 
 
 def crumbs(items):
-    parts = [link(href, label) if href else '<span aria-current="page">%s</span>' % esc(label) for label, href in items]
+    parts = [
+        anchor(href, label) if href else '<span aria-current="page">%s</span>' % esc(label) for label, href in items
+    ]
     return '<nav class="crumbs">%s</nav>' % ' <span class="sep">/</span> '.join(parts)
 
 
@@ -116,7 +114,56 @@ def section(heading, body, anchor=None):
     return "<section%s><h2>%s</h2>%s</section>" % (' id="%s"' % anchor if anchor else "", esc(heading), body)
 
 
-def page(title, root, trail, body):
+def to_html(md, first_heading=1):
+    toc = {"baselevel": first_heading}
+    return markdown.markdown(md, extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": toc})
+
+
+def href(path, link):
+    if "://" in link.target:
+        return link.target
+    if link.line is not None and link.target == path:
+        return "#L%d" % link.line
+    return rel_link(path, link.target) + ("#L%d" % link.line if link.line is not None else "")
+
+
+def inline(parts, path):
+    out = []
+    for part in parts:
+        if isinstance(part, Link):
+            out.append(anchor(href(path, part), part.label, part.title))
+        elif isinstance(part, Mono):
+            out.append("<code>%s</code>" % esc(part.text))
+        elif isinstance(part, Badge):
+            out.append('<span class="badge">%s</span>' % esc(part.text))
+        else:
+            out.append(esc(part))
+    return "".join(out)
+
+
+def block(b, path):
+    if isinstance(b, Facts):
+        return facts([(term, inline(parts, path)) for term, parts in b.rows])
+    if isinstance(b, Section):
+        return section(b.heading, "".join(block(inner, path) for inner in b.blocks), b.anchor)
+    if isinstance(b, Entries):
+        return entry_list([inline(item, path) for item in b.items], b.fold_after, b.summary)
+    if isinstance(b, Code):
+        links = {at: (rel_link(path, target), title) for at, (target, title) in (b.links or {}).items()}
+        return code_block(b.text, b.first_line, links, b.greyed, b.marks)
+    if isinstance(b, Prose):
+        return to_html(b.markdown, b.first_heading)
+    if isinstance(b, Paragraph):
+        return "<p%s>%s</p>" % (' class="warn"' if b.warning else "", inline(b.parts, path))
+    raise TypeError("no HTML for %r" % (b,))
+
+
+def page(outline):
+    root = "../" * outline.path.count("/")
+    trail = [
+        (label, None if target == outline.path else rel_link(outline.path, target)) for label, target in outline.trail
+    ]
+    body = "<h1>%s</h1>" % esc(outline.heading) + "".join(block(b, outline.path) for b in outline.blocks)
     return (
         "<!doctype html>\n"
         '<html lang="en"><head><meta charset="utf-8">'
@@ -132,7 +179,7 @@ def page(title, root, trail, body):
         "<footer>%(footer)s</footer>"
         "</body></html>\n"
     ) % {
-        "title": esc(title),
+        "title": esc(outline.title),
         "site": esc(SITE_NAME),
         "root": esc(root),
         "style": STYLE_FILE,
@@ -141,5 +188,5 @@ def page(title, root, trail, body):
         "home": HOME_PAGE,
         "trail": crumbs(trail) if trail else "",
         "body": body,
-        "footer": FOOTER.format(notice=esc(root + NOTICE_FILE)),
+        "footer": esc(FOOTER).format(notice=anchor(root + NOTICE_FILE, "NOTICE")),
     }

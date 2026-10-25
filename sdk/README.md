@@ -350,7 +350,7 @@ Bazaar's crash protection covers your hooks, not your Lua functions. A crash in 
 
 ## Using VMC's events and options
 
-Bazaar is built on whoward69's Various Mod Components (VMC), another mod that brings its own version of the game's code. The game can use only one such version, so VMC could not be on alongside Bazaar. Built in, its extra Lua events, Lua functions and options keep working, and so do mods made for VMC. It also means that a change that only needs one of VMC's events can be a plain Lua mod, with no plugin at all.
+Bazaar includes whoward69's Various Mod Components (VMC), another mod that brings its own version of the game's code. The game can use only one such version, so VMC could not be on alongside Bazaar. Built in, its extra Lua events, Lua functions and options keep working, and so do mods made for VMC. It also means that a change that only needs one of VMC's events can be a plain Lua mod, with no plugin at all.
 
 The code is inside Bazaar's DLL, so it is there whenever Bazaar is on. VMC's database files, which hold the options, are a separate mod, "Bazaar - VMC Bootstrap (required)", which the game turns on before Bazaar. It is separate, and uses VMC's own mod ID, so that mods made for VMC load after it, as they would with VMC itself.
 
@@ -469,7 +469,7 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 - **`result`**: a reference to the game's function's return value, passed last to before-hooks and after-hooks.
 - **`self`**: the object a method was called on (C++'s `this`), passed first to a hook, or after `original` in a replacement.
 - **Veto**: what a before-hook does by returning `true`: the game's function does not run.
-- **VMC**: whoward69's Various Mod Components, which Bazaar is built on: extra Lua events, Lua functions and options.
+- **VMC**: whoward69's Various Mod Components, which Bazaar includes: extra Lua events, Lua functions and options.
 
 ## C++ notation used in this guide
 

@@ -109,8 +109,8 @@ def lay_out():
     shutil.copytree(os.path.join(HERE, "plugin-template"), os.path.join(SDK, "plugin-template"))
     for name in ("README.md", "hand-placed-hooks.md"):
         shutil.copy(os.path.join(HERE, name), SDK)
-    for name in ("LICENSE", "NOTICE"):
-        shutil.copy(os.path.join(common.REPO, name), SDK)
+    for path in (common.LICENSE, common.NOTICE):
+        shutil.copy(path, SDK)
 
 
 def files_naming_this_machine(folder):

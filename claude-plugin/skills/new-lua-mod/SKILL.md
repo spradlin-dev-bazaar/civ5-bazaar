@@ -6,7 +6,7 @@ argument-hint: "<Display Name>" [what it should do]
 
 # New Bazaar Lua mod
 
-Bazaar is built on whoward69's Various Mod Components (VMC), so a Lua mod under Bazaar gets VMC's extra events as well as the base game's. Every VMC event starts switched off: a mod switches it on in its SQL, through VMC's `CustomModOptions` table, or the event never fires. This skill makes the mod from a template, so that the project file, the dependency on Bazaar and the build script come out right, then writes the Lua.
+Bazaar includes whoward69's Various Mod Components (VMC), so a Lua mod under Bazaar gets VMC's extra events as well as the base game's. Every VMC event starts switched off: a mod switches it on in its SQL, through VMC's `CustomModOptions` table, or the event never fires. This skill makes the mod from a template, so that the project file, the dependency on Bazaar and the build script come out right, then writes the Lua.
 
 ## 1. Find the event
 

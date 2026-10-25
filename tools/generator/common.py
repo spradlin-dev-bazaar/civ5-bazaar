@@ -2,6 +2,7 @@
 
 import os
 import re
+import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -11,11 +12,15 @@ VCPROJ = os.path.join(ENGINE_DIR, "CvGameCoreDLL_Expansion2.vcproj")
 BUILD_DIR = os.path.join(SOURCE_ROOT, "BuildTemp", "civgen")
 HOST_DIR = os.path.join(REPO, "host")
 HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
+HOST_DLL = os.path.join(HOST_OUTPUT, "CvGameCore_Expansion2.dll")
+LICENSE = os.path.join(REPO, "LICENSE")
+NOTICE = os.path.join(REPO, "NOTICE")
 
 VS2008_INCLUDE = [
     r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\INCLUDE",
     r"C:\Program Files\Microsoft SDKs\Windows\v6.0A\include",
 ]
+VSVARS = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsvars32.bat"
 
 SUPPORT_INCLUDE = [
     r"CvWorldBuilderMap\include",
@@ -97,6 +102,25 @@ class Project:
             args += ["-isystem", inc]
         args += ["-I" + inc for inc in self.include_dirs]
         return args
+
+
+def shown(path):
+    try:
+        return os.path.relpath(path, REPO)
+    except ValueError:
+        return path
+
+
+def vs_env():
+    out = subprocess.run('"%s" >nul && set' % VSVARS, shell=True, capture_output=True, text=True).stdout
+    env = dict(os.environ)
+    for line in out.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            # os.environ's keys are upper case, while cmd started from PowerShell prints "Path=": two keys would keep
+            # the PATH without Visual C++.
+            env[k.upper()] = v
+    return env
 
 
 def engine_sources():
