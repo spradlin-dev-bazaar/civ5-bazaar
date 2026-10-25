@@ -241,6 +241,19 @@ A release is made on the developer's machine, because the host, the SDK and the 
 
 One check before the second release, when Bazaar's mod version first goes up: whether a save made with the first release still loads after the player updates to the second, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
 
+### Releasing a plugin or Lua mod
+
+Plugin and Lua mod authors get a release script of their own, `release.ps1`, in the plugin template in the SDK and in the Lua mod template in the Claude Code plugin; the two copies are the same file, and a check in this repository keeps them so. A `release.cmd` beside it starts it, since Windows does not run PowerShell scripts by default. It assumes no git, GitHub or other hosting, and leaves the Workshop upload to the author, in ModBuddy.
+
+- `VERSION` holds the release number in the author's own scheme: either a whole number, which is also the mod's version, or semantic versioning, with a second line for the mod's version, which the script raises by one each release because the game takes only a whole number. Another line names the oldest Bazaar release the mod needs.
+- Before building, the script checks that the version is the same in `VERSION`, the `.civ5proj` and, for a plugin, the DLL; that the mod's version is higher than every released one; that nothing of the template is left, such as its mod ID or its name; and, for a plugin, that the SDK is not newer than the Bazaar release `VERSION` names.
+- It builds with the template's `build.cmd`, then checks a plugin's package: the DLL declares the API version it was built for, the mod affects saved games, and it adds its `DllPlugins` row.
+- It keeps each release's package in `Releases\<version>\` and never overwrites one.
+- `CHANGES.txt` holds the change notes in BBCode, newest first, to paste into the Workshop update; the script warns when the new version has no section.
+- Each template also has a Workshop description in BBCode, `workshop-description.txt`, to paste into ModBuddy. It says "Requires Bazaar X or newer.", and the script stops when that differs from the Bazaar release `VERSION` names.
+
+The SDK guide's Publishing section and the two Claude Code skills say how to use it.
+
 ## Phases
 
 **P0 — proof of concept (days to two weeks).** In this repository, against the plain Firaxis source, before touching VMC. The first step imports the SDK source unchanged and adds a build script. P0's edits to engine files stay on a separate branch, so the main branch holds the Firaxis source unchanged until VMC is copied over it in P1; anything worth keeping, such as the generator and the build script, moves to the main branch. The rest:
@@ -263,6 +276,8 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 **P1.6 — releases.** After P1.5 merges: the Markdown copy of the docs, the release script, the skill and the Action that publishes the docs, as described under Making a release. Exit: the release script, the skill and the docs Action on main, and a trial build that makes all four files. The first pre-release, made from main with each file installed or opened from the release and checked, and its docs site published by the Action and opened there, follows once main holds the plugin API the game is played with.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
+
+**P2.5 — releases for plugin and Lua mod authors.** A release script for the plugin template and the Lua mod template, as described under Releasing a plugin or Lua mod. Exit: a plugin and a Lua mod each released twice with the script; the second release of each loads in the game in place of the first, and a save made with the first still loads.
 
 **P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The first public release, 1.0, of the host and SDK from this repository, the MCP plugin's first release from its own, and the Workshop pages. The layouts and the hook numbers freeze at that release.
 
