@@ -6,7 +6,7 @@ Civ5 loads only one game DLL, so normally you can use only one DLL mod at once. 
 
 ## Status
 
-The host includes VMC v97 and loads plugin DLLs. They can hook almost any engine function, or one of a few spots placed by hand inside engine functions, and the host survives a plugin that crashes. A Plugins screen orders and skips them. It has been tested in the game with small test plugins. The plugin SDK and its guide exist; the first real plugin, the MCP server, is next. Nothing is released yet. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
+The host includes VMC v97 and loads plugin DLLs. They can hook almost any engine function, or one of a few spots placed by hand inside engine functions, and the host survives a plugin that crashes. A Plugins screen orders and skips them. It has been tested in the game with small test plugins. The plugin SDK and its guide exist; the first real plugin, the MCP server, is next. Pre-releases are on the repository's Releases page, and the developer docs of the newest one are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
 
 ## How it will work
 
