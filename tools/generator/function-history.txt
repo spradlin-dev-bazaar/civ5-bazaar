@@ -1,4 +1,4 @@
-release	0.3.0
+release	0.4.0
 AppendToLog(CvString &, CvString &, CvString, CvString) @CvEconomicAI.cpp	ec95342116785ed6			
 AppendToLog(CvString &, CvString &, CvString, float) @CvEconomicAI.cpp	9ecda06675a848e4			
 AppendToLog(CvString &, CvString &, CvString, int) @CvEconomicAI.cpp	adb2228a01664de0			
@@ -12134,10 +12134,14 @@ CvNotifications::CvNotifications()	0563456076a0f8e6
 CvNotifications::Dismiss(int, bool)	3e839c71c45507bf			
 CvNotifications::EndOfTurnCleanup()	6a2778755fd33c2f			
 CvNotifications::GetEndTurnBlockedType(EndTurnBlockingTypes &, int &)	129676f666e6c076			
+CvNotifications::GetNotificationExtraGameData(int)	0897bb257d498c2f		0.4.0	
 CvNotifications::GetNotificationID(int)	faba6aed3cc80810			
 CvNotifications::GetNotificationStr(int)	077aaa081ca13ec3			
 CvNotifications::GetNotificationSummary(int)	25ea8dbd73cc4b08			
 CvNotifications::GetNotificationTurn(int)	be302c03486c22a6			
+CvNotifications::GetNotificationType(int)	cc899c275d9e7cbc		0.4.0	
+CvNotifications::GetNotificationX(int)	63c39d37b8faed72		0.4.0	
+CvNotifications::GetNotificationY(int)	74115423086098e1		0.4.0	
 CvNotifications::GetNumNotifications()	78da7417e78c6830			
 CvNotifications::IncrementBeginIndex()	2451eb6696a870b0			
 CvNotifications::IncrementEndIndex()	b7afac70328a419f			
@@ -17692,7 +17696,7 @@ CvUnit::setMaxHitPointsBase(int)	76f81ceedbfbea02
 CvUnit::setMoves(int)	ad4c719c5d676d9b			
 CvUnit::setName(CvString)	7b07a0e67b6d67da			
 CvUnit::setNumExoticGoods(int)	fad57b5e3468b8a4			
-CvUnit::setPromotionReady(bool)	ced0dbc2fb42cf75	UnitOrdersCancelled		
+CvUnit::setPromotionReady(bool)	f2687e9996feae5d	UnitOrdersCancelled		0.4.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvUnit.cpp|19480|19519|
 CvUnit::setReconPlot(CvPlot *)	e1d474d2b79ba90b			
 CvUnit::setScenarioData(int)	d793f7dce25bad81			
 CvUnit::setScriptData(std::string)	dea49d2762df5c84			

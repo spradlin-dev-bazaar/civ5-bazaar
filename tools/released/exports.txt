@@ -1,4 +1,4 @@
-release 0.3.0
+release 0.4.0
 ??0CustomMods@@QAE@XZ
 ??0CustomOption@CvPreGame@@QAE@ABV01@@Z
 ??0CustomOption@CvPreGame@@QAE@PBDH@Z
@@ -4438,12 +4438,16 @@ release 0.3.0
 ?GetNotUnitAIType@CvUnitEntry@@QBE_NH@Z
 ?GetNotificationEntries@CvGlobals@@QAEPAVCvNotificationXMLEntries@@XZ
 ?GetNotificationEntries@CvNotificationXMLEntries@@QAEAAV?$vector@PAVCvNotificationEntry@@V?$allocator@PAVCvNotificationEntry@@@std@@@std@@XZ
+?GetNotificationExtraGameData@CvNotifications@@QAEHH@Z
 ?GetNotificationID@CvNotifications@@QAEHH@Z
 ?GetNotificationStr@CvNotifications@@QAE?AVCvString@@H@Z
 ?GetNotificationString@CvSmallAwardInfo@@QBE?AVCvString@@XZ
 ?GetNotificationSummary@CvNotifications@@QAE?AVCvString@@H@Z
 ?GetNotificationTurn@CvNotifications@@QAEHH@Z
 ?GetNotificationType@CvDllGameContext@@UBGPBDH@Z
+?GetNotificationType@CvNotifications@@QAE?AW4NotificationTypes@@H@Z
+?GetNotificationX@CvNotifications@@QAEHH@Z
+?GetNotificationY@CvNotifications@@QAEHH@Z
 ?GetNotifications@CvPlayer@@QBEPAVCvNotifications@@XZ
 ?GetNuclearDamageLevel@CvDllCombatInfo@@UBGHXZ
 ?GetNukeDamageLevel@CvUnit@@QBEHXZ
