@@ -18,7 +18,7 @@ SEPARATOR = re.compile(r"^\s*([/*=-]\s*){4,}$")
 IF_LINE = re.compile(r"^#\s*if")
 BRANCH_LINE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b")
 FOLD_AFTER = 30
-GITHUB = "https://github.com/spradlin-dev/civ5-bazaar"
+GITHUB = "https://github.com/spradlin-dev-bazaar/civ5-bazaar"
 REPLACEMENT_WARNING = (
     '<p class="warn">A replacement for this function that does not call <code>original</code> stops these hooks from '
     "running.</p>"
