@@ -1,4 +1,4 @@
-release 0.3.0
+release 0.4.0
 0	CustomMods_eventHook
 1	CustomMods_eventTestAll
 2	CustomMods_eventTestAny
@@ -14547,3 +14547,7 @@ release 0.3.0
 14548	cvStopWatch_EndPerfTest
 14549	cvStopWatch_GetDeltaInSeconds
 14550	cvStopWatch_PerfLog
+14551	CvNotifications_GetNotificationType
+14552	CvNotifications_GetNotificationExtraGameData
+14553	CvNotifications_GetNotificationX
+14554	CvNotifications_GetNotificationY
