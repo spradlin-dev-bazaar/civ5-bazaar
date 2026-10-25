@@ -1,0 +1,31 @@
+[b]0.4.0[/b]
+For players: nothing changes in the game itself, and games saved with Bazaar 0.3.0 still load after you update.
+
+For plugin authors:
+[list]
+[*]Plugins can now read a notification's type, its map position and its extra game data, through 4 new functions on a player's notifications. Each is also a new hook point.
+[*]The hand-placed hook for a unit's cancelled orders now runs before the orders are cleared when the unit earns a promotion, as it already did for every other reason, so a plugin can still read where the unit was going.
+[*]Nothing plugins use was removed, so plugins built for 0.3.0 still load without a rebuild.
+[*]The SDK and the developer docs are updated, on the release's GitHub page; the docs mark what was added or changed in 0.4.0.
+[/list]
+This is plugin API version 0.4.
+
+[b]0.3.0[/b]
+The first release.
+
+For players:
+[list]
+[*]Run more than one DLL plugin for Bazaar at a time. Each plugin is an ordinary mod with a DLL inside. Turn on the ones you want in the Mods menu.
+[*]A Plugins screen, in place of Advanced Setup, shows which plugins loaded and which were refused and why, and lets you change their load order or skip one.
+[*]If a plugin crashes, Bazaar turns it off until you return to the main menu and tells you; the game keeps running.
+[*]whoward69's Various Mod Components (VMC, version 97) are included, so mods that need VMC work.
+[/list]
+For plugin authors:
+[list]
+[*]Hook points: run your code before or after almost any engine function, or replace it.
+[*]6 hand-placed hooks inside engine functions, for moments a function boundary doesn't catch, such as a notification being added or a unit's orders being cancelled.
+[*]The engine's functions and shared variables are exported, so a plugin can read and change players, cities, units and plots directly.
+[*]The SDK: the engine's headers, the import library, the compiler settings Bazaar is built with, and a template plugin to start from, with a guide. It's on the release's GitHub page.
+[*]The developer docs: a page for every engine function, class and file, with a Markdown copy of each page.
+[/list]
+This is plugin API version 0.3.
