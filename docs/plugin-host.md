@@ -188,17 +188,20 @@ The pages form one tree: folder, file, class, function. Every class sits in one 
 
 Each hand-placed hook gets a page too: its section of sdk/hand-placed-hooks.md, plus every place in the engine that calls it. One page lists them all.
 
-**Versions.** At each release, the docs step takes a fingerprint of every function's code, ignoring spaces and comments, and compares it with the list saved at the previous release in `tools/generator/function-history.txt`. The list also records which hand-placed hooks each function contains. A function not on the list is marked as added in this release. A function whose fingerprint changed is marked as changed in it; the mark names any hand-placed hook that was added and links to GitHub's line-by-line history of the function at that release. Then the step saves the new list. Only a release updates the list, so unreleased work is never marked; the first release is the starting point and marks nothing. Bazaar adds no fixes, so an engine function rarely changes, and usually only because a hand-placed hook went into it. That is the change a developer most needs to see, because a replacement copied from an older release would stop the new hook.
+**Versions.** At each release, the docs step takes a fingerprint of every function's code, ignoring spaces and comments, and compares it with the list saved at the previous release in `tools/generator/function-history.txt`. The list also records which hand-placed hooks each function contains. A function not on the list is marked as added in this release. A function whose fingerprint changed is marked as changed in it; the mark names any hand-placed hook that was added and links to GitHub's line-by-line history of the function at that release. Then the step saves the new list, which keeps, for each function, the release it was added in and every release its code changed in. So a page keeps the marks of earlier releases, and building the same release again gives the same marks. Only a release updates the list, so unreleased work is never marked; the first release is the starting point and marks nothing. Bazaar adds no fixes, so an engine function rarely changes, and usually only because a hand-placed hook went into it. That is the change a developer most needs to see, because a replacement copied from an older release would stop the new hook.
 
 **Written by hand.**
 
 - a description of each hand-placed hook in sdk/hand-placed-hooks.md, written when the hook is added;
 - a task-based guide as the front page: common goals ("change combat odds", "react to a city being captured"), each pointing to the hooks that serve it; it starts with the common needs and grows over time;
-- a short summary of each main class (player, city, unit, plot, deals, diplomacy): what it owns and where to look.
+- a short summary of each main class (player, city, unit, plot, deals, diplomacy): what it owns and where to look;
+- notes on single functions in docs/function-notes.md, shown on the function's page, where a developer needs something its generated facts do not say.
 
 Functions are not described in bulk; a function with no hand-written description shows only its generated facts. Because function meanings are frozen, hand-written descriptions never go out of date.
 
-**Where it is built and published.** The generator needs Visual C++ 2008's header files to read the engine, and GitHub's build machines do not have them. So the docs are built on the developer's machine when making a release, and go into the SDK zip attached to the GitHub release. A GitHub Action then takes the docs out of that zip and publishes them on the project's GitHub Pages site; no generated page is committed to the repository. The site shows the latest release, and each SDK zip carries the docs for its own release. Because host builds only add, the latest docs also hold for plugins built against older releases. Every page shows Firaxis's copyright line and links to NOTICE, since it shows their code. The GitHub wiki is not used: it takes only Markdown, cannot run the site's own styles or search, and has no build step.
+**Where it is built and published.** The generator needs Visual C++ 2008's header files to read the engine, and GitHub's build machines do not have them. So the docs are built on the developer's machine when making a release, and attached to the GitHub release as a zip of their own, so a Lua modder can get them without the SDK. A GitHub Action then takes the site out of that zip and publishes it on the project's GitHub Pages site; no generated page is committed to the repository. The site shows the latest release, and each docs zip holds the docs for its own release. Because host builds only add, the latest docs also hold for plugins built against older releases. Every page shows Firaxis's copyright line and links to NOTICE, since it shows their code. The GitHub wiki is not used: it takes only Markdown, cannot run the site's own styles or search, and has no build step.
+
+**A copy for coding models.** The docs step also writes every page as Markdown, in the same tree, and the docs zip holds both. The HTML pages wrap the code in markup for its colours and links, which a model has to read past; the Markdown is nearly all content. The whole reference is far too big for a model to read at once, so the copy is meant as a folder a coding agent searches: the engine's code with the callers, hooks and history already worked out. The pages are built straight as HTML today, so before P1.6 writes this copy it decides how both copies get the same content: from one outline of each page written out twice, or by turning each finished HTML page into Markdown.
 
 ## The MCP plugin
 
@@ -214,10 +217,29 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 
 ## Versioning and releases
 
-- Releases use semantic versioning: three numbers, major.minor.patch, such as 1.2.0. The first two are the API version. The minor number goes up when a release adds to the API, the patch number when a release only fixes things, and the major number only for a break. Each release is tagged with its version, such as `v1.2.0`, and published on GitHub with its SDK zip. A Workshop host is fine, because an updated host keeps loading older plugins; the Workshop page points to GitHub for the SDK.
+- Releases use semantic versioning: three numbers, major.minor.patch, such as 1.2.0. The first two are the API version. The minor number goes up when a release adds to the API, the patch number when a release only fixes things, and the major number only for a break. Each release is tagged with its version, such as `v1.2.0`, and published on GitHub with its packages, SDK and docs, as described under Making a release. A Workshop host is fine, because an updated host keeps loading older plugins; the Workshop page points to GitHub for the SDK.
 - 1.0 is the first public release. Builds before it are numbered 0.x and may break plugins if they must. We avoid that, and when it happens, every plugin we have is rebuilt against the new build.
 - A plugin release names the API version it was built against. The handshake catches mismatches.
 - From 1.0 on, host builds only add. Layouts, vtables, hook numbers and signatures, and function meanings are frozen; a major version change is the one exception and refuses older plugins.
+
+### Making a release
+
+A release is made on the developer's machine, because the host, the SDK and the docs all need Visual C++ 2008. A script, `tools/release.py`, does the repeatable work, so anyone can run it. A Claude Code skill in this repository, `.claude/skills/release`, walks through the steps around it that need judgment. The repository's .gitignore lets .claude/skills/ through, since .claude folders are often ignored.
+
+1. **Choose the number.** The script compares the current build with the lists saved at the previous release: the hook list, the host's exported names and `CivPluginApi.h`. If anything was added, the middle number goes up; otherwise the last one does. Anything removed or changed is reported: before 1.0 that is allowed, and from 1.0 on it means a new major version.
+2. **Prepare.** On a branch of its own, the release raises the version in `VERSION` at the top of the repository, which holds the release version and the version of Bazaar's mod, a whole number that goes up by one each release. The VMC Bootstrap keeps VMC's own version, 97, because Bazaar depends on exactly that version; so does VMC's save-format number in CustomMods.h, which only a VMC update changes. The API version in `CivPluginApi.h` and the Claude plugin's version in `plugin.json` follow it, and the script refuses to build when they disagree. The docs step saves the new function history, and the script saves the new lists. The tests and the lint run, and the branch goes to main through a pull request.
+3. **Build.** From main, with nothing uncommitted, the script builds the host, lays out and checks the SDK, builds the docs, and writes the release's files, each carrying LICENSE and NOTICE:
+   - Bazaar's two mods as `.civ5mod` packages, Bazaar itself and its VMC Bootstrap;
+   - the SDK zip;
+   - the docs zip, with the site and its Markdown copy.
+
+   Building the docs again for a release whose history is already saved gives the same pages, so this build marks the same changes as the preparation did. If a function moved within its file after the preparation, its code unchanged, this build moves its marks to the new lines and so changes the history file; the script then stops, and the moved lines reach main through another pull request before the release is tagged.
+4. **Check in the game.** The packages are installed from the release's files, not the build folders, and a game is loaded with the template plugin built from the SDK zip. The log has to show the plugin's hooks running.
+5. **Publish.** The script tags main, such as `v0.4.0`, and creates the GitHub release as a draft, with the files attached and release notes the skill drafts: what changed for players, and what was added for plugin authors. The developer publishes it from the draft. Releases before 1.0 are marked as pre-releases.
+6. **Docs site.** A GitHub Action runs when a release is published. It skips pre-releases, so the site starts with 1.0; for any other release it takes the site out of the docs zip and publishes it on GitHub Pages. GitHub's free plan publishes Pages only from a public repository, and this one is private today, so it has to be made public before 1.0. The Action can also be run by hand on any release to build the site without publishing it, which is how P1.6 checks it.
+7. **Workshop.** Uploading the two packages to the Steam Workshop stays a manual step in ModBuddy. The Workshop page points to the GitHub release for the SDK and docs.
+
+One check before the first release: whether a save made with one release still loads after the player updates to the next, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
 
 ## Phases
 
@@ -236,7 +258,9 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 
 **P1 — the host.** Copy VMC v97 over the Firaxis source in its own commit (own GUID, credits), add the loader, the generator to the build (writing the hook wrappers), the exports, the hand-placed hook set above, failure containment, the Plugins screen, the version check before any plugin code runs, and a build check that fails when a class layout changes. Exit: the host builds, loads a game, VMC's events fire, the Plugins screen orders two toy plugins, no MCP code inside.
 
-**P1.5 — developer documentation.** After P1 merges: the docs step that writes the generated reference, the task-based guide, the class summaries and the documentation site, as described under Developer documentation. Exit: the docs step builds the whole site on this machine, and the GitHub Action that publishes it is ready for the first release.
+**P1.5 — developer documentation.** On its own branch, started from P1 while P1 finishes, and merged after P1: the docs step that writes the generated reference, the task-based guide, the class summaries and the documentation site, as described under Developer documentation. Exit: the docs step builds the whole site on this machine.
+
+**P1.6 — releases.** After P1.5 merges: the Markdown copy of the docs, the release script, the skill and the Action that publishes the docs, as described under Making a release. Exit: a 0.x pre-release made from main with all four files, each installed or opened from the release and checked, and the Action run by hand on it, building the site without publishing it.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 

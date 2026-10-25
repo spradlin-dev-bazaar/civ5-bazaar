@@ -530,6 +530,7 @@ def plan_hooks(functions, project, files, edits, registry):
             code, fn_edits = prepare_hook(fn, project, files)
         except Skip as e:
             skipped[str(e)] = skipped.get(str(e), 0) + 1
+            fn["skip"] = [str(e)]
             continue
         fn["hook_key"], fn["hook_id"], fn["hook_name"] = registry.claim(fn)
         for path, start, end, insert in fn_edits:

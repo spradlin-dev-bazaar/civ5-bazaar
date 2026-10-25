@@ -423,6 +423,8 @@ class SkipTest(unittest.TestCase):
             hooks, skipped, wrappers = generate.plan_hooks(functions, project, generate.PathDict(), edits, registry)
             self.assertEqual(hooks, [])
             self.assertEqual(skipped, {"friend function": 2, "operator without a hook name": 1})
+            reasons = [["friend function"], ["friend function"], ["operator without a hook name"], ["template"]]
+            self.assertEqual([fn["skip"] for fn in functions], reasons)
             self.assertEqual((dict(edits), dict(wrappers), registry.added), ({}, {}, 0))
 
 
