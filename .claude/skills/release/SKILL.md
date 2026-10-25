@@ -56,4 +56,4 @@ Work from what `number` listed, `git log v<last release>..HEAD`, and the pull re
 
 ## 7. Steam Workshop
 
-From 1.0 on, the developer uploads the two packages with ModBuddy, by hand, pasting the descriptions from `workshop\bazaar.txt` and `workshop\vmc-bootstrap.txt`. The first Workshop release is also when the repository on GitHub becomes public: remind the developer. Pre-releases end at step 6.
+The developer uploads every release, pre-releases included, with ModBuddy, by hand: Bazaar's package each time, pasting the description from `workshop\bazaar.txt`, and the VMC Bootstrap, with `workshop\vmc-bootstrap.txt`, only when it has changed. Before the upload, add the release's notes to the top of `workshop\changes.txt` in BBCode, without the install paragraph or the file names, and get them approved; the developer pastes that section as the update's change note, and it goes to main through a small pull request. Before 1.0 the Workshop items stay private. Making them public is the first public release, 1.0, and the repository on GitHub goes public with it: remind the developer.
