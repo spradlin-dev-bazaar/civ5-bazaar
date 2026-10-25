@@ -15,6 +15,7 @@ public:
 	int Total();
 	int total();
 	bool operator==(const Thing& other) const;
+	int operator[](int i) const;
 	int Inline() const { return m_i + 1; }
 	void index();
 	const int Level() const;

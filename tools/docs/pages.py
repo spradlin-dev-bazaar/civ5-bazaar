@@ -1,4 +1,4 @@
-"""The HTML of every docs page and of the search index."""
+"""What every docs page says, written out as HTML and as Markdown, and the search index."""
 
 import bisect
 import collections
@@ -11,17 +11,24 @@ import re
 import generate
 import handwritten
 import render
+import render_md
 from model import is_hook
-from paths import HOME_PAGE, HOOKS_PAGE, file_dir, file_page, folder_page, hook_page, posix, rel_link
+from outline import Badge, Code, Entries, Facts, Link, Mono, Page, Paragraph, Prose, Section, joined
+from paths import HOME_PAGE, HOOKS_PAGE, file_dir, file_page, folder_page, hook_page, markdown_page, posix
 
 SEPARATOR = re.compile(r"^\s*([/*=-]\s*){4,}$")
 IF_LINE = re.compile(r"^#\s*if")
 BRANCH_LINE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b")
 FOLD_AFTER = 30
 GITHUB = "https://github.com/spradlin-dev-bazaar/civ5-bazaar"
-REPLACEMENT_WARNING = (
-    '<p class="warn">A replacement for this function that does not call <code>original</code> stops these hooks from '
-    "running.</p>"
+REPLACEMENT_WARNING = [
+    "A replacement for this function that does not call ",
+    Mono("original"),
+    " stops these hooks from running.",
+]
+INTRO = (
+    "Every function in the game's code, with its code, the functions it calls and the functions that call it, and how "
+    "to hook it from a plugin."
 )
 
 
@@ -41,7 +48,7 @@ class Site:
         page_of_class = {owner: self.class_page(owner) for owner in self.homes}
         self.summaries = handwritten.class_summaries(inputs.class_summaries, self.targets, page_of_class)
         self.notes = handwritten.function_notes(inputs.function_notes, self.targets, self.function_names())
-        self.pages = {}
+        self.outlines = []
         for fn in engine.functions:
             self.function_page(fn)
         self.class_pages()
@@ -49,6 +56,8 @@ class Site:
         self.folder_pages()
         self.hook_pages(*handwritten.hook_descriptions(inputs.hand_hooks, engine.hand_sites))
         self.home_page(handwritten.task_guide(inputs.task_guide, self.targets))
+        self.pages = {o.path: render.page(o) for o in self.outlines}
+        self.markdown = {markdown_page(o.path): render_md.page(o) for o in self.outlines}
 
     def class_dir(self, owner):
         return "%s/%s" % (file_dir(self.homes[owner]), owner.replace("::", "."))
@@ -56,9 +65,8 @@ class Site:
     def class_page(self, owner):
         return self.class_dir(owner) + "/index.html"
 
-    def add(self, path, title, trail, body):
-        trail = [(label, None if href == path else rel_link(path, href)) for label, href in trail]
-        self.pages[path] = render.page(title, "../" * path.count("/"), trail, body)
+    def add(self, path, title, trail, blocks, heading=None):
+        self.outlines.append(Page(path, title, heading or title, trail, blocks))
 
     def folder_trail(self, folder):
         parts = folder.split("/") if folder else []
@@ -75,12 +83,9 @@ class Site:
             return self.file_trail(self.homes[fn["owner"]]) + [(fn["owner"], self.class_page(fn["owner"]))]
         return self.file_trail(fn["file"])
 
-    def function_link(self, path, fn):
-        return render.link(rel_link(path, fn["page"]), fn["title"])
-
     # Function pages.
 
-    def code_html(self, fn):
+    def code(self, fn):
         data = self.engine.text(fn["file"])
         start = snippet_start(data, fn["def_start"])
         raw = data[start : fn["def_end"]].decode("cp1252", "replace")
@@ -88,8 +93,8 @@ class Site:
         first = self.engine.line_of(fn["file"], start)
         links = self.code_links(fn, start, raw)
         greyed = self.greyed_lines(fn, first, text.split("\n"))
-        marks = {line - first: "hand-placed hook: %s" % hook for hook, line in fn["hand_hooks"]}
-        return render.code_block(text, first, links=links, greyed=greyed, marks=marks)
+        marks = {line - first: hook for hook, line in fn["hand_hooks"]}
+        return Code(text, first, links, greyed, marks, posix(fn["file"]))
 
     def code_links(self, fn, start, raw):
         """A spot that names two functions, as a macro can, gets no link."""
@@ -104,7 +109,7 @@ class Site:
             if len(found) == 1:
                 target = next(iter(found.values()))
                 at = offset - start - bisect.bisect_left(crlf, offset - start)
-                links[at] = (rel_link(fn["page"], target["page"]), target["title"])
+                links[at] = (target["page"], target["title"])
         return links
 
     def greyed_lines(self, fn, first, lines):
@@ -118,38 +123,32 @@ class Site:
         return greyed
 
     def fact_rows(self, fn):
-        path = fn["page"]
-        shown = render.esc(posix(fn["file"]))
-        if fn["file"] in self.listed_files:
-            shown = render.link(rel_link(path, file_page(fn["file"])), posix(fn["file"]))
-        rows = [("Defined in", "%s, line %d" % (shown, fn["line"]))]
+        shown = Link(file_page(fn["file"]), posix(fn["file"])) if fn["file"] in self.listed_files else posix(fn["file"])
+        rows = [("Defined in", [shown, ", line %d" % fn["line"]])]
         if fn["owner"]:
-            rows.append(("Class", render.link(rel_link(path, self.class_page(fn["owner"])), fn["owner"])))
+            rows.append(("Class", [Link(self.class_page(fn["owner"]), fn["owner"])]))
         if is_hook(fn):
-            rows.append(("Hook name", "<code>CivHooks::%s</code>" % render.esc(fn["hook_name"])))
+            rows.append(("Hook name", [Mono("CivHooks::" + fn["hook_name"])]))
         else:
-            rows.append(("Not a hook point", render.esc("; ".join(fn["skip"]))))
-        rows.append(("Added in", render.esc(fn["added_in"])))
-        marks = [change_mark(c, path, self.engine.hand_sites) for c in fn["changed_in"]]
-        rows.append(("Changed in", ", ".join(marks)))
+            rows.append(("Not a hook point", ["; ".join(fn["skip"])]))
+        rows.append(("Added in", [fn["added_in"]]))
+        rows.append(("Changed in", joined(change_mark(c, self.engine.hand_sites) for c in fn["changed_in"])))
         overrides = [self.engine.by_usr[u] for u in fn["overrides"] if u in self.engine.by_usr]
         overriders = sorted(self.engine.overriders_of(fn), key=lambda f: f["title"])
-        rows.append(("Overrides", ", ".join(self.function_link(path, f) for f in overrides)))
-        rows.append(("Overridden by", ", ".join(self.function_link(path, f) for f in overriders)))
-        if fn["events"]:
-            rows.append(("Lua events", ", ".join("<code>GameEvents.%s</code>" % render.esc(e) for e in fn["events"])))
+        rows.append(("Overrides", joined([function_link(f)] for f in overrides)))
+        rows.append(("Overridden by", joined([function_link(f)] for f in overriders)))
+        rows.append(("Lua events", joined([Mono("GameEvents." + e)] for e in fn["events"])))
         return rows
 
     def hand_hook_section(self, fn):
         if not fn["hand_hooks"]:
-            return ""
-        path = fn["page"]
-        items = []
-        for hook, line in fn["hand_hooks"]:
-            hook_link = render.link(rel_link(path, hook_page(hook)), hook)
-            items.append("%s, %s" % (hook_link, render.link("#L%d" % line, "line %d" % line)))
-        warning = REPLACEMENT_WARNING if is_hook(fn) else ""
-        return render.section("Hand-placed hooks inside", warning + render.entry_list(items))
+            return []
+        items = [
+            [Link(hook_page(hook), hook), ", ", Link(fn["page"], "line %d" % line, line=line)]
+            for hook, line in fn["hand_hooks"]
+        ]
+        warning = [Paragraph(REPLACEMENT_WARNING, warning=True)] if is_hook(fn) else []
+        return [Section("Hand-placed hooks inside", warning + [Entries(items)])]
 
     def calls_list(self, fn):
         seen, items = set(), []
@@ -161,39 +160,38 @@ class Site:
             if target is fn:
                 continue
             if target is not None:
-                items.append((target["title"].lower(), self.function_link(fn["page"], target)))
+                items.append(((target["title"].lower(), target["title"]), [function_link(target)]))
             else:
-                items.append((qualified.lower(), "<code>%s</code>" % render.esc(qualified)))
-        return render.entry_list([item for _, item in sorted(items)])
+                items.append(((qualified.lower(), qualified), [Mono(qualified)]))
+        return Entries([parts for _, parts in sorted(items, key=lambda item: item[0])])
 
     def function_page(self, fn):
         path = fn["page"]
-        body = "<h1>%s</h1>" % render.esc(fn["title"]) + render.facts(self.fact_rows(fn)) + self.notes.get(path, "")
-        body += self.hand_hook_section(fn)
+        blocks = [Facts(self.fact_rows(fn))]
+        if path in self.notes:
+            blocks.append(Prose(self.notes[path]))
+        blocks += self.hand_hook_section(fn)
         if is_hook(fn):
-            body += render.section("Hooks", render.code_block(fn["declarations"], None), "hooks")
-        body += render.section("Code", self.code_html(fn), "code")
-        body += render.section("Calls", self.calls_list(fn))
+            blocks.append(Section("Hooks", [Code(fn["declarations"], None)], "hooks"))
+        blocks.append(Section("Code", [self.code(fn)], "code"))
+        blocks.append(Section("Calls", [self.calls_list(fn)]))
         callers = sorted(self.engine.callers_of(fn), key=lambda f: (f["file"].lower(), f["title"]))
         summary = "%d functions in %d files" % (len(callers), len({f["file"] for f in callers}))
-        caller_links = [self.function_link(path, f) for f in callers]
-        body += render.section("Called by", render.entry_list(caller_links, FOLD_AFTER, summary))
-        self.add(path, fn["title"], self.scope_trail(fn) + [(fn["name"], path)], body)
+        blocks.append(Section("Called by", [Entries([[function_link(f)] for f in callers], FOLD_AFTER, summary)]))
+        self.add(path, fn["title"], self.scope_trail(fn) + [(fn["name"], path)], blocks)
 
     # Class, file and folder pages.
 
-    def scope_listing(self, path, fns):
+    def scope_listing(self, fns):
         items = []
         for fn in sorted(fns, key=lambda f: (f["name"].lower(), f["title"])):
-            badge = "" if is_hook(fn) else ' <span class="badge">not a hook point</span>'
             label = fn["displayname"] + (" const" if fn["const"] else "")
-            items.append(render.link(rel_link(path, fn["page"]), label, fn["title"]) + badge)
-        return render.entry_list(items)
+            badge = [] if is_hook(fn) else [" ", Badge("not a hook point")]
+            items.append([Link(fn["page"], label, fn["title"])] + badge)
+        return Entries(items)
 
-    def class_link(self, path, owner):
-        if owner in self.homes:
-            return render.link(rel_link(path, self.class_page(owner)), owner)
-        return "<code>%s</code>" % render.esc(owner)
+    def class_link(self, owner):
+        return Link(self.class_page(owner), owner) if owner in self.homes else Mono(owner)
 
     def class_pages(self):
         by_owner = collections.defaultdict(list)
@@ -209,12 +207,14 @@ class Site:
             info = self.engine.classes.get(owner)
             rows = []
             if info:
-                rows.append(("Declared in", "%s, line %d" % (render.esc(posix(info["file"])), info["line"])))
-                rows.append(("Based on", ", ".join(self.class_link(path, b) for b in info["bases"])))
-            rows.append(("Classes based on it", ", ".join(self.class_link(path, d) for d in sorted(derived[owner]))))
-            body = "<h1>%s</h1>" % render.esc(owner) + render.facts(rows) + self.summaries.get(owner, "")
-            body += render.section("Functions", self.scope_listing(path, fns))
-            self.add(path, owner, self.file_trail(self.homes[owner]) + [(owner, path)], body)
+                rows.append(("Declared in", ["%s, line %d" % (posix(info["file"]), info["line"])]))
+                rows.append(("Based on", joined([self.class_link(b)] for b in info["bases"])))
+            rows.append(("Classes based on it", joined([self.class_link(d)] for d in sorted(derived[owner]))))
+            blocks = [Facts(rows)]
+            if owner in self.summaries:
+                blocks.append(Prose(self.summaries[owner]))
+            blocks.append(Section("Functions", [self.scope_listing(fns)]))
+            self.add(path, owner, self.file_trail(self.homes[owner]) + [(owner, path)], blocks)
 
     def file_pages(self):
         free = collections.defaultdict(list)
@@ -225,12 +225,10 @@ class Site:
         for owner, rel in self.homes.items():
             homed[rel].append(owner)
         for rel in self.listed_files:
-            path = file_page(rel)
-            classes = [render.link(rel_link(path, self.class_page(c)), c) for c in sorted(homed[rel], key=str.lower)]
-            body = "<h1>%s</h1>" % render.esc(os.path.basename(rel))
-            body += render.section("Classes", render.entry_list(classes))
-            body += render.section("Functions", self.scope_listing(path, free[rel]))
-            self.add(path, os.path.basename(rel), self.file_trail(rel), body)
+            classes = Entries([[Link(self.class_page(c), c)] for c in sorted(homed[rel], key=str.lower)])
+            blocks = [Section("Classes", [classes]), Section("Functions", [self.scope_listing(free[rel])])]
+            name = os.path.basename(rel)
+            self.add(file_page(rel), name, self.file_trail(rel), blocks)
 
     def folder_pages(self):
         folders = collections.defaultdict(lambda: (set(), set()))
@@ -240,17 +238,10 @@ class Site:
             for i in range(len(parts) - 1):
                 folders["/".join(parts[:i])][0].add("/".join(parts[: i + 1]))
         for folder, (subfolders, files) in folders.items():
-            path = folder_page(folder)
-            items = [
-                render.link(rel_link(path, folder_page(s)), s.split("/")[-1] + "/")
-                for s in sorted(subfolders, key=str.lower)
-            ]
-            items += [
-                render.link(rel_link(path, file_page(f)), os.path.basename(f)) for f in sorted(files, key=str.lower)
-            ]
+            items = [[Link(folder_page(s), s.split("/")[-1] + "/")] for s in sorted(subfolders, key=str.lower)]
+            items += [[Link(file_page(f), os.path.basename(f))] for f in sorted(files, key=str.lower)]
             name = folder.split("/")[-1] if folder else os.path.basename(self.engine.project.root)
-            body = "<h1>%s</h1>" % render.esc(name) + render.entry_list(items)
-            self.add(path, folder or "Game code", self.folder_trail(folder), body)
+            self.add(folder_page(folder), folder or "Game code", self.folder_trail(folder), [Entries(items)], name)
 
     # Hand-placed hook pages and the home page.
 
@@ -260,30 +251,21 @@ class Site:
             path = hook_page(hook)
             fires = []
             for fn, line in sorted(self.engine.hand_sites[hook], key=lambda s: (s[0]["file"].lower(), s[1])):
-                line_link = render.link(rel_link(path, fn["page"]) + "#L%d" % line, "line %d" % line)
-                fires.append("%s, %s" % (self.function_link(path, fn), line_link))
-            body = "<h1>%s</h1>" % render.esc(hook) + descriptions[hook]
-            body += render.section("Where it fires", render.entry_list(fires))
-            self.add(path, hook, [("Hand-placed hooks", HOOKS_PAGE), (hook, path)], body)
-            items.append(render.link(rel_link(HOOKS_PAGE, path), hook))
-        body = "<h1>Hand-placed hooks</h1>" + intro + render.entry_list(items)
-        self.add(HOOKS_PAGE, "Hand-placed hooks", [("Hand-placed hooks", HOOKS_PAGE)], body)
+                fires.append([function_link(fn), ", ", Link(fn["page"], "line %d" % line, line=line)])
+            blocks = [Prose(descriptions[hook]), Section("Where it fires", [Entries(fires)])]
+            self.add(path, hook, [("Hand-placed hooks", HOOKS_PAGE), (hook, path)], blocks)
+            items.append([Link(path, hook)])
+        trail = [("Hand-placed hooks", HOOKS_PAGE)]
+        self.add(HOOKS_PAGE, "Hand-placed hooks", trail, [Prose(intro), Entries(items)])
 
     def home_page(self, guide):
         functions = self.engine.functions
         counts = " (%d functions, %d of them hook points)" % (len(functions), sum(1 for fn in functions if is_hook(fn)))
-        links = [
-            render.link(folder_page(""), "The game's code") + counts,
-            render.link(HOOKS_PAGE, "Hand-placed hooks"),
-        ]
+        links = [[Link(folder_page(""), "The game's code"), counts], [Link(HOOKS_PAGE, "Hand-placed hooks")]]
         if self.summaries:
-            links.append("Main classes: " + ", ".join(render.link(self.class_page(c), c) for c in self.summaries))
-        intro = (
-            "<p>Every function in the game's code, with its code, the functions it calls and the functions that call "
-            "it, and how to hook it from a plugin.</p>"
-        )
-        body = "<h1>%s</h1>%s%s" % (render.esc(render.SITE_NAME), intro, render.entry_list(links)) + guide
-        self.add(HOME_PAGE, render.SITE_NAME, [], body)
+            links.append(["Main classes: "] + joined([Link(self.class_page(c), c)] for c in self.summaries))
+        blocks = [Paragraph([INTRO]), Entries(links), Prose(guide, first_heading=2)]
+        self.add(HOME_PAGE, render.SITE_NAME, [], blocks)
 
     def function_names(self):
         names = collections.defaultdict(list)
@@ -313,16 +295,18 @@ class Site:
         return "%s%s;\n" % (render.INDEX_START, json.dumps(self.search_rows(), separators=(",", ":")))
 
 
-def change_mark(change, page, hooks):
+def function_link(fn):
+    return Link(fn["page"], fn["title"])
+
+
+def change_mark(change, hooks):
     """hooks: the hand-placed hooks the engine calls today, the ones that still have a page to link to."""
     blame = "%s/blame/v%s/%s#L%d-L%d" % (GITHUB, change.release, change.source, change.first, change.last)
-    mark = render.link(blame, change.release)
+    mark = [Link(blame, change.release)]
     if change.added_hooks:
         plural = "s" if len(change.added_hooks) > 1 else ""
-        names = [
-            render.link(rel_link(page, hook_page(h)), h) if h in hooks else render.esc(h) for h in change.added_hooks
-        ]
-        mark += " (added hand-placed hook%s %s)" % (plural, ", ".join(names))
+        names = joined([Link(hook_page(h), h)] if h in hooks else [h] for h in change.added_hooks)
+        mark += [" (added hand-placed hook%s " % plural] + names + [")"]
     return mark
 
 

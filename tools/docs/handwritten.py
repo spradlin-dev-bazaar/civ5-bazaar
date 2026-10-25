@@ -4,8 +4,6 @@ hand-placed hooks."""
 import collections
 import re
 
-import markdown
-
 from paths import HOME_PAGE, rel_link
 
 Inputs = collections.namedtuple("Inputs", "hand_hooks task_guide class_summaries function_notes")
@@ -26,11 +24,6 @@ def read_sections(path):
     return re.sub(r"\A\s*# .*\n", "", parts[0]), dict(zip(names, parts[2::2]))
 
 
-def to_html(md, first_heading=1):
-    toc = {"baselevel": first_heading}
-    return markdown.markdown(md, extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": toc})
-
-
 def named_links(text, source, page, targets):
     def link(m):
         name, _, label = m.group(1).partition("|")
@@ -47,7 +40,7 @@ def named_links(text, source, page, targets):
 
 
 def task_guide(path, targets):
-    return to_html(named_links(read(path), path, HOME_PAGE, targets), first_heading=2)
+    return named_links(read(path), path, HOME_PAGE, targets)
 
 
 def class_summaries(path, targets, class_pages):
@@ -55,7 +48,7 @@ def class_summaries(path, targets, class_pages):
     unknown = [owner for owner in summaries if owner not in class_pages]
     if unknown:
         raise SystemExit("docs: classes summarized in %s that have no page: %s" % (path, ", ".join(unknown)))
-    return {owner: to_html(named_links(md, path, class_pages[owner], targets)) for owner, md in summaries.items()}
+    return {owner: named_links(md, path, class_pages[owner], targets) for owner, md in summaries.items()}
 
 
 def function_notes(path, targets, pages_by_name):
@@ -67,7 +60,7 @@ def function_notes(path, targets, pages_by_name):
     twice = [name for name, page in zip(notes, pages) if pages.count(page) > 1]
     if twice:
         raise SystemExit("docs: %s has two notes for one function: %s" % (path, ", ".join(twice)))
-    return {page: to_html(named_links(md, path, page, targets)) for page, md in zip(pages, notes.values())}
+    return {page: named_links(md, path, page, targets) for page, md in zip(pages, notes.values())}
 
 
 def hook_descriptions(path, called):
@@ -80,4 +73,4 @@ def hook_descriptions(path, called):
     unused = sorted(set(sections) - set(called))
     if unused:
         raise SystemExit("docs: hand-placed hooks in %s that no engine function calls: %s" % (path, ", ".join(unused)))
-    return to_html(intro), {hook: to_html(md) for hook, md in sections.items()}
+    return intro, sections

@@ -1,5 +1,6 @@
 """Write the developer documentation site: a page for each function, class, file and folder of the engine and for
-each hand-placed hook, all linked to each other. Every link is checked before anything is written.
+each hand-placed hook, all linked to each other, with a Markdown copy of each page beside it. Every link to a page or
+file is checked before anything is written.
 
     python tools/docs/build_docs.py [--out FOLDER] [--release VERSION]
 """
@@ -22,6 +23,8 @@ import history  # noqa: E402
 import model  # noqa: E402
 import pages  # noqa: E402
 import render  # noqa: E402
+import render_md  # noqa: E402
+from paths import NOTICE_FILE  # noqa: E402
 
 DEFAULT_OUT = os.path.join(common.SOURCE_ROOT, "BuildTemp", "docs")
 INPUTS = handwritten.Inputs(
@@ -35,16 +38,28 @@ NOTICE = os.path.join(common.REPO, "NOTICE")
 HREF = re.compile(r'href="([^"]*)"')
 
 
+def unresolved(path, hrefs, known):
+    found = []
+    for href in hrefs:
+        target = href.split("#", 1)[0]
+        if (
+            target
+            and "://" not in target
+            and posixpath.normpath(posixpath.join(posixpath.dirname(path), target)) not in known
+        ):
+            found.append((path, href))
+    return found
+
+
 def broken_links(site):
     known = set(site.pages) | set(render.SUPPORT_FILES)
     broken = []
     for path, page in site.pages.items():
-        for href in HREF.findall(page):
-            target = href.split("#", 1)[0]
-            if target and "://" not in target:
-                if posixpath.normpath(posixpath.join(posixpath.dirname(path), target)) not in known:
-                    broken.append((path, href))
+        broken += unresolved(path, HREF.findall(page), known)
     broken += [(render.INDEX_FILE, target) for _, target in site.search_rows() if target not in known]
+    known_markdown = set(site.markdown) | {NOTICE_FILE}
+    for path, text in site.markdown.items():
+        broken += unresolved(path, render_md.links(text), known_markdown)
     return broken
 
 
@@ -69,12 +84,12 @@ def write(site, out):
         shutil.rmtree(out)
     # First, so that a run stopped part way still leaves the file that lets the next run empty the folder.
     write_text(os.path.join(out, render.INDEX_FILE), site.search_index())
-    for path, page in site.pages.items():
-        write_text(os.path.join(out, *path.split("/")), page)
+    for path, text in list(site.pages.items()) + list(site.markdown.items()):
+        write_text(os.path.join(out, *path.split("/")), text)
     with open(os.path.join(HERE, "site", "style.css"), encoding="utf-8") as f:
         write_text(os.path.join(out, render.STYLE_FILE), f.read() + "\n" + render.code_css())
     shutil.copyfile(os.path.join(HERE, "site", "search.js"), os.path.join(out, render.SCRIPT_FILE))
-    shutil.copyfile(NOTICE, os.path.join(out, render.NOTICE_FILE))
+    shutil.copyfile(NOTICE, os.path.join(out, NOTICE_FILE))
 
 
 def build(project, out, inputs=INPUTS, history_path=HISTORY, release=None):

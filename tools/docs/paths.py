@@ -5,6 +5,7 @@ import posixpath
 
 HOME_PAGE = "index.html"
 HOOKS_PAGE = "hooks/index.html"
+NOTICE_FILE = "NOTICE.txt"
 
 
 def posix(rel):
@@ -29,3 +30,9 @@ def hook_page(hook):
 
 def rel_link(page, target):
     return posixpath.relpath(target, posixpath.dirname(page) or ".")
+
+
+def markdown_page(page):
+    if not page.endswith(".html"):
+        raise ValueError("%s is not a page" % page)
+    return page[: -len(".html")] + ".md"
