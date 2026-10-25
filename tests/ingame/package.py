@@ -19,8 +19,10 @@ from xml.sax.saxutils import escape, quoteattr
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "generator"))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
 
 import common  # noqa: E402
+import version as bazaar_version  # noqa: E402
 
 PROJECT = common.engine_project()
 HOST_OUT = common.HOST_OUTPUT
@@ -263,10 +265,10 @@ def write_vmc_data_mod():
     return vmc.version
 
 
-def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
+def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False, version=1):
     """A build of the game core, with VMC's data mod beside it. The DLL reads tables and columns VMC's files add, so it
     depends on that mod, which makes the game switch it on first."""
-    folder = new_mod_folder(name)
+    folder = new_mod_folder(name, version)
     shutil.copyfile(dll, os.path.join(folder, "CvGameCore_Expansion2.dll"))
     with open(os.path.join(folder, "DllPlugins.sql"), "w") as f:
         f.write(DLL_PLUGINS_TABLE)
@@ -286,6 +288,7 @@ def write_dll_mod(name, mod_id, teaser, dll, plugins_screen=False):
         dll="CvGameCore_Expansion2.dll",
         references=references,
         dependencies=[(VMC_MOD_ID, VMC_DATA_NAME, vmc_version)],
+        version=version,
     )
 
 
@@ -338,6 +341,7 @@ def main(args):
     if problem:
         print(problem)
         return 1
+    host_version = bazaar_version.read().mod
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     if bench:
@@ -386,6 +390,7 @@ def main(args):
         "Test build of the %s." % HOST_NAME,
         os.path.join(HOST_OUT, "CvGameCore_Expansion2.dll"),
         plugins_screen=True,
+        version=host_version,
     )
     for _, dll_name, mod_name, mod_id in TOYS:
         write_toy_mod(dll_name, mod_name, mod_id)
