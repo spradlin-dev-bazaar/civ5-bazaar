@@ -77,6 +77,7 @@ __pycache__/
 tests/ingame/out/
 tests/docs/out/
 sdk/out/
+/dist/
 
 # Visual Studio 2008 per-user files
 *.suo

@@ -82,5 +82,40 @@ class DisagreementTest(unittest.TestCase):
         self.assertEqual(version.check()[1], [], "run python tools/version.py and fix what it names")
 
 
+API_HEADER = "#pragma once\n#define CIV_HOST_API_MAJOR 0\n#define CIV_HOST_API_MINOR 3\nstruct CivHostInfo;\n"
+
+
+class EditTest(unittest.TestCase):
+    def test_written_numbers_read_back(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "VERSION")
+            version.write(version.Version("1.2.3", 4), path)
+            self.assertEqual(version.read(path), ("1.2.3", 4))
+
+    def test_the_api_version_is_set_and_nothing_else_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write(folder, API_HEADER, "\r\n")
+            version.set_api_version(1, 0, path)
+            with open(path, newline="") as f:
+                expected = API_HEADER.replace("MAJOR 0", "MAJOR 1").replace("MINOR 3", "MINOR 0")
+                self.assertEqual(f.read(), expected.replace("\n", "\r\n"))
+
+    def test_a_header_without_one_of_the_api_numbers_stops(self):
+        for name in ("MAJOR", "MINOR"):
+            with tempfile.TemporaryDirectory() as folder, self.subTest(name=name):
+                path = write(folder, API_HEADER.replace("API_" + name, "API_" + name + "_NUMBER"))
+                with self.assertRaises(SystemExit) as stop:
+                    version.set_api_version(1, 0, path)
+                self.assertIn("CIV_HOST_API_" + name, str(stop.exception))
+
+    def test_the_claude_plugin_version_is_set_and_its_line_ends_kept(self):
+        with tempfile.TemporaryDirectory() as folder:
+            text = '{\n  "name": "civ5-bazaar",\n  "version": "0.3.0",\n  "author": { "name": "x" }\n}\n'
+            path = write(folder, text, "\r\n")
+            version.set_plugin_version("0.4.0", path)
+            with open(path, newline="") as f:
+                self.assertEqual(f.read(), text.replace("0.3.0", "0.4.0").replace("\n", "\r\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

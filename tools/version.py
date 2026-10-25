@@ -24,16 +24,28 @@ FORMAT = re.compile(r"release (%s\.%s\.%s)\nmod ([1-9][0-9]*)\n?" % (NUMBER, NUM
 Version = collections.namedtuple("Version", "release mod")
 
 
-def read(path=VERSION_FILE):
-    with open(path, encoding="utf-8-sig") as f:
-        text = f.read()
+def parse(text, name):
     found = FORMAT.fullmatch(text)
     if not found:
         raise SystemExit(
             "version: %s is not 'release <major.minor.patch>' and 'mod <whole number>' on two lines; it reads %r"
-            % (layouts.shown(path), text)
+            % (name, text)
         )
     return Version(found.group(1), int(found.group(2)))
+
+
+def read(path=VERSION_FILE):
+    with open(path, encoding="utf-8-sig") as f:
+        return parse(f.read(), layouts.shown(path))
+
+
+def numbers(release):
+    return tuple(int(n) for n in release.split("."))
+
+
+def write(version, path=VERSION_FILE):
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("release %s\nmod %d\n" % version)
 
 
 def plugin_version(path=PLUGIN_JSON):
@@ -41,9 +53,30 @@ def plugin_version(path=PLUGIN_JSON):
         return json.load(f).get("version", "missing")
 
 
+def set_api_version(major, minor, path=layouts.API_HEADER):
+    with open(path, encoding="cp1252", newline="") as f:
+        text = f.read()
+    for name, value in (("MAJOR", major), ("MINOR", minor)):
+        text, count = re.subn(r"^(#define CIV_HOST_API_%s )\d+" % name, r"\g<1>%d" % value, text, flags=re.M)
+        if count != 1:
+            raise SystemExit("version: %s does not define CIV_HOST_API_%s exactly once" % (layouts.shown(path), name))
+    with open(path, "w", encoding="cp1252", newline="") as f:
+        f.write(text)
+
+
+def set_plugin_version(release, path=PLUGIN_JSON):
+    with open(path, encoding="utf-8", newline="") as f:
+        text = f.read()
+    text, count = re.subn(r'("version"\s*:\s*")[^"]*"', r'\g<1>%s"' % release, text)
+    if count != 1:
+        raise SystemExit('version: %s does not have exactly one "version"' % layouts.shown(path))
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+
+
 def disagreements(version, api, plugin):
     """api is CivPluginApi.h's (major, minor), plugin the Claude plugin's version."""
-    major, minor, _ = (int(n) for n in version.release.split("."))
+    major, minor, _ = numbers(version.release)
     found = []
     if api != (major, minor):
         found.append(

@@ -1,0 +1,30 @@
+[h1]Bazaar Multi-DLL Mod Loader[/h1]
+Civilization V loads only one game DLL, so normally only one DLL mod can run at a time. Bazaar replaces the game DLL with one that loads other DLL mods as plugins, so several can run in the same game.
+
+Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mods that need VMC work with Bazaar too.
+
+[h2]What it does[/h2]
+[list]
+[*][b]More than one DLL mod at a time.[/b] Each plugin is an ordinary mod with a DLL inside, from the Workshop or installed by hand. Turn on the ones you want in the Mods menu, as usual.
+[*][b]A Plugins screen.[/b] It shows which plugins loaded, and any that failed or were refused, and lets you change their order or skip one. It opens in place of Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup). Its Continue button then opens the usual Advanced Setup, or another mod's version of it, such as Really Advanced Setup's.
+[*][b]A crashing plugin doesn't end your game.[/b] Bazaar turns that plugin off until you return to the main menu and tells you. The game keeps running.
+[*][b]VMC included.[/b] VMC's extra Lua events and options are there for the mods that use them. VMC also changes a few of the game's rules, as it does on its own: for example, the AI's anger at warmongering builds up much faster.
+[/list]
+
+[h2]You need[/h2]
+[list]
+[*]Brave New World.
+[*][b]Bazaar - VMC Bootstrap (required)[/b], a separate Workshop item that holds VMC's database files. Subscribe to both.
+[/list]
+Windows only. Single player only.
+
+[h2]It doesn't work with[/h2]
+[list]
+[*]Any other mod that replaces the game DLL, such as the Community Patch or whoward69's own VMC mod. Bazaar already includes VMC, so turn VMC's own mod off.
+[/list]
+
+[h2]For mod makers[/h2]
+Plugins are DLLs written in C++. Each release on GitHub comes with the SDK to build them, with a template plugin and a guide, and with the developer documentation: [url=https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases]Bazaar on GitHub[/url]. Lua mods can use VMC's events just as they would with VMC on its own.
+
+[h2]Credits[/h2]
+Built from Firaxis's Civilization V source code and whoward69's DLL - Various Mod Components, version 97. Many thanks to whoward69 and VMC's translators.
