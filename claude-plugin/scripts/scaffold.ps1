@@ -95,11 +95,12 @@ function Rename-Tokens([string] $text, [hashtable] $names) {
 
 # Copies the template without its build output, putting the new names in place of the template's in every file name
 # and text file. The .civ5proj gets the new mod ID on its one <Guid> line, and each of $projectFields replaces the
-# first element of that name.
+# first element of that name; a new Teaser also replaces the template's in workshop-description.txt.
 function Copy-Template([string] $template, [string] $target, [hashtable] $names, [string] $guid, [hashtable] $projectFields) {
     $root = [IO.Path]::GetFullPath($template).TrimEnd('\') + '\'
     New-Item -ItemType Directory -Path $target | Out-Null
     $script:madeTarget = $target
+    $templateTeaser = $null
     foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File) {
         $relative = $file.FullName.Substring($root.Length)
         if (Test-BuildOutput $relative) { continue }
@@ -118,11 +119,16 @@ function Copy-Template([string] $template, [string] $target, [hashtable] $names,
             if ($guidLines -ne 1) {
                 Fail "Expected one <Guid> line in $relative, found $guidLines."
             }
+            $templateTeaser = [regex]::Match($content, '<Teaser>([^<]*)</Teaser>').Groups[1].Value
             $content = Set-FirstElement $content 'Guid' $guid $relative
             foreach ($element in $projectFields.Keys) {
                 $content = Set-FirstElement $content $element $projectFields[$element] $relative
             }
         }
         Write-RawText $destination $content
+    }
+    $workshop = Join-Path $target 'workshop-description.txt'
+    if ($projectFields.Teaser -and $templateTeaser -and (Test-Path -LiteralPath $workshop)) {
+        Write-RawText $workshop ((Read-RawText $workshop).Replace($templateTeaser, $projectFields.Teaser))
     }
 }
