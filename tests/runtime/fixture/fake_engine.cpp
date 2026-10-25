@@ -1,5 +1,7 @@
 #include "fake_engine.h"
 
+#include "CivHostHand.h"
+
 int FakeUnit::add(int a, int b) const
 {
 	return a + b;
@@ -8,6 +10,16 @@ int FakeUnit::add(int a, int b) const
 int FakeUnit::Subtract(int a, int b) const
 {
 	return a - b;
+}
+
+int FakeUnit::Grow(int x) const
+{
+	return x + 1;
+}
+
+int FakeUnit::Grow(int x, int y) const
+{
+	return x + y;
 }
 
 void FakeUnit::notify(int amount)
@@ -35,6 +47,7 @@ void FakeUnit::Ignore(int)
 }
 
 int g_levelCalls = 0;
+int FakeUnit::s_created = 0;
 
 const int FakeUnit::Level() const
 {
@@ -52,9 +65,50 @@ bool FakeUnit::operator==(const FakeUnit& other) const
 	return m_name == other.m_name;
 }
 
+#if defined(FAKE_MOD_OPTION)
+int FakeUnit::Heal(int amount) const
+#else
+int FakeUnit::Heal(int amount, bool full) const
+#endif
+{
+	return amount;
+}
+
+int FakeUnit::Range() const
+#if defined(FAKE_MOD_OPTION)
+{
+	return Reach() + 1;
+}
+
+int FakeUnit::Reach() const
+#endif
+{
+	return 3;
+}
+
+void FakeUnit::CancelOrders(int reason)
+{
+	CivHandUnitOrdersCancelled(reinterpret_cast<CvUnit*>(this), reason);
+	m_notified = reason;
+}
+
+bool FakeUnit::PlayedByPlugin(int player) const
+{
+	return CivHandIsPluginControlledPlayer(player);
+}
+
 int FakeRules::Bonus(int x)
 {
 	return x + 1;
+}
+
+#if !defined(FAKE_MOD_OPTION)
+int FakeRules::Penalty(int x, int y)
+#else
+int FakeRules::Penalty(int x)
+#endif
+{
+	return x - 1;
 }
 
 __declspec(noinline) int Square(int x)

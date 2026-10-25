@@ -74,6 +74,10 @@ public:
 	CvString GetGreatWorkEraShort(int iIndex) const;
 	PlayerTypes GetGreatWorkCreator (int iIndex) const;
 	PlayerTypes GetGreatWorkController(int iIndex) const;
+#if defined(MOD_API_EXTENSIONS)
+	bool IsGreatWorkCreated(GreatWorkType eType) const;
+	CvCity* GetGreatWorkCity(int iIndex) const;
+#endif
 	int GetGreatWorkCurrentThemingBonus (int iIndex) const;
 
 	bool SwapGreatWorks (PlayerTypes ePlayer1, int iWork1, PlayerTypes ePlayer2, int iWork2);
@@ -152,6 +156,10 @@ public:
 	BuildingTypes m_eBuilding;
 	bool m_bThemed;
 	bool m_bEndangered;
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES) || defined(MOD_API_UNIFIED_YIELDS)
+	bool m_bPuppet;
+	YieldTypes m_eYieldType;
+#endif
 };
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -181,10 +189,18 @@ public:
 	bool ControlsGreatWork (int iIndex);
 	bool GetGreatWorkLocation(int iGreatWorkIndex, int &iCityID, BuildingTypes &eBuilding, int &iSlot);
 
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	void DoSwapGreatWorks(YieldTypes eFocusYield);
+	void MoveWorks (GreatWorkSlotType eType, vector<CvGreatWorkBuildingInMyEmpire> &buildings, vector<CvGreatWorkInMyEmpire> &works1, vector<CvGreatWorkInMyEmpire> &works2, YieldTypes eFocusYield);
+#else
 	void DoSwapGreatWorks();
 	void MoveWorks (GreatWorkSlotType eType, vector<CvGreatWorkBuildingInMyEmpire> &buildings, vector<CvGreatWorkInMyEmpire> &works1, vector<CvGreatWorkInMyEmpire> &works2);
+#endif
 	bool ThemeBuilding(vector<CvGreatWorkBuildingInMyEmpire>::const_iterator it, vector<CvGreatWorkInMyEmpire> &works1, vector<CvGreatWorkInMyEmpire> &works2, bool bConsiderOtherPlayers);
 	bool ThemeEqualArtArtifact(CvGreatWorkBuildingInMyEmpire kBldg, int iThemingBonusIndex, int iNumSlots, vector<CvGreatWorkInMyEmpire> &works1, vector<CvGreatWorkInMyEmpire> &works2, bool bConsiderOtherPlayers);
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	void MoveSingleWorks(vector<CvGreatWorkBuildingInMyEmpire> &buildings, vector<CvGreatWorkInMyEmpire> &works1, vector<CvGreatWorkInMyEmpire> &works2, YieldTypes eFocusYield);
+#endif
 	bool FillBuilding(vector<CvGreatWorkBuildingInMyEmpire>::const_iterator it, vector<CvGreatWorkInMyEmpire> &works1, vector<CvGreatWorkInMyEmpire> &works2);
 	void MoveWorkIntoSlot (CvGreatWorkInMyEmpire kWork, int iCityID, BuildingTypes eBuilding, int iSlot);
 	int GetSwappableWritingIndex() const;
@@ -215,6 +231,9 @@ public:
 	void SetLastTurnLifetimeCulture(int iValue);
 	int GetInfluenceOn(PlayerTypes ePlayer) const;
 	void ChangeInfluenceOn(PlayerTypes ePlayer, int iValue);
+#if defined(MOD_API_EXTENSIONS)
+	void ChangeInfluenceOn(PlayerTypes eOtherPlayer, int iBaseInfluence, bool bApplyModifiers, bool bModifyForGameSpeed);
+#endif
 	int GetLastTurnInfluenceOn(PlayerTypes ePlayer) const;
 	int GetInfluencePerTurn(PlayerTypes ePlayer) const;
 	InfluenceLevelTypes GetInfluenceLevel(PlayerTypes ePlayer) const;
@@ -308,7 +327,11 @@ public:
 
 	void Init(CvCity* m_pCity);
 
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	int GetNumGreatWorks(bool bIgnoreYield = true) const;
+#else
 	int GetNumGreatWorks() const;
+#endif
 	int GetNumGreatWorkSlots() const;
 	int GetNumAvailableGreatWorkSlots(GreatWorkSlotType eSlotType) const;
 	void ClearGreatWorks();
@@ -328,7 +351,11 @@ public:
 
 	int GetCultureFromWonders() const;
 	int GetCultureFromNaturalWonders() const;
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldFromImprovements(YieldTypes eYield) const;
+#else
 	int GetCultureFromImprovements() const;
+#endif
 
 	void LogGreatWorks (FILogFile* pLog);
 

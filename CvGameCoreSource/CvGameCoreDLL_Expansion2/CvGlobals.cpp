@@ -43,6 +43,10 @@
 #include "CvDllRandom.h"
 #include "CvDllUnit.h"
 
+#if defined(MOD_DEBUG_MINIDUMP)
+#include <dbghelp.h>
+#endif
+
 // must be included after all other headers
 #include "LintFree.h"
 
@@ -1079,7 +1083,11 @@ CvGlobals::CvGlobals() :
 	m_iWARMONGER_THREAT_MINOR_CONQUERED_WEIGHT(100),
 	m_iWARMONGER_THREAT_MAJOR_ATTACKED_WEIGHT(50),
 	m_iWARMONGER_THREAT_MAJOR_CONQUERED_WEIGHT(100),
+#if defined(MOD_BUGFIX_MINOR)
+	m_iWARMONGER_THREAT_PER_TURN_DECAY(-5),
+#else
 	m_iWARMONGER_THREAT_PER_TURN_DECAY(5),
+#endif
 	m_iWARMONGER_THREAT_PERSONALITY_MOD(10),
 	m_iWARMONGER_THREAT_CRITICAL_PERCENT_THRESHOLD(40),
 	m_iWARMONGER_THREAT_SEVERE_PERCENT_THRESHOLD(25),
@@ -1486,7 +1494,12 @@ CvGlobals::CvGlobals() :
 	m_iPLOT_UNIT_LIMIT(1),
 	m_iZONE_OF_CONTROL_ENABLED(1),
 	m_iFIRE_SUPPORT_DISABLED(1),
+#if defined(MOD_BUGFIX_MINOR)
+	// BNW matey boy!
+	m_iMAX_HIT_POINTS(100),
+#else
 	m_iMAX_HIT_POINTS(10),
+#endif
 	m_iMAX_CITY_HIT_POINTS(200),
 	m_iCITY_HIT_POINTS_HEALED_PER_TURN(1),
 	m_iFLAT_LAND_EXTRA_DEFENSE(-33),
@@ -1560,6 +1573,9 @@ CvGlobals::CvGlobals() :
 	m_iCULTURE_COST_VISIBLE_DIVISOR(5),
 	m_iCULTURE_PLOT_COST_MOD_MINIMUM(-85),
 	m_iMINOR_CIV_PLOT_CULTURE_COST_MULTIPLIER(150),
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	m_iMAXIMUM_WORK_PLOT_DISTANCE(3),
+#endif
 	m_iMAXIMUM_BUY_PLOT_DISTANCE(3),
 	m_iMAXIMUM_ACQUIRE_PLOT_DISTANCE(5),
 	m_iPLOT_INFLUENCE_BASE_MULTIPLIER(100),
@@ -1792,6 +1808,114 @@ CvGlobals::CvGlobals() :
 	m_iESPIONAGE_SURVEILLANCE_SIGHT_RANGE(0),
 	m_iESPIONAGE_COUP_OTHER_PLAYERS_INFLUENCE_DROP(10),
 
+#if defined(MOD_PROMOTIONS_DEEP_WATER_EMBARKATION)
+	GD_INT_INIT(PROMOTION_DEEPWATER_EMBARKATION, -1),
+	GD_INT_INIT(PROMOTION_DEFENSIVE_DEEPWATER_EMBARKATION, -1),
+#endif
+
+#if defined(MOD_PROMOTIONS_FLAGSHIP)
+	GD_INT_INIT(PROMOTION_FLAGSHIP, -1),
+#endif
+
+#if defined(MOD_PROMOTIONS_AURA_CHANGE)
+	GD_INT_INIT(GREAT_GENERAL_MAX_RANGE, 2),
+#endif
+
+#if defined(MOD_CONFIG_AI_IN_XML)
+	GD_INT_INIT(AI_CONFIG_MILITARY_MELEE_PER_AA, 4),
+	GD_INT_INIT(AI_CONFIG_MILITARY_AIRCRAFT_PER_CARRIER_SPACE, 1),
+	GD_INT_INIT(AI_CONFIG_MILITARY_TILES_PER_SHIP, 5),
+	GD_INT_INIT(WARMONGER_THREAT_MAJOR_CITY_WEIGHT, 1000),
+	GD_INT_INIT(WARMONGER_THREAT_MINOR_CITY_WEIGHT, 1000),
+	GD_INT_INIT(WARMONGER_THREAT_CAPITAL_CITY_PERCENT, 100),
+	GD_INT_INIT(WARMONGER_THREAT_KNOWS_ATTACKER_PERCENT, 100),
+	GD_INT_INIT(WARMONGER_THREAT_KNOWS_DEFENDER_PERCENT, 0),
+	GD_INT_INIT(WARMONGER_THREAT_AGGRIEVED_PERCENT, 100),
+	GD_INT_INIT(WARMONGER_THREAT_COOP_WAR_PERCENT, 100),
+	GD_INT_INIT(WARMONGER_THREAT_DEF_PACT_ENABLED, 0),
+	GD_INT_INIT(WARMONGER_THREAT_CITY_SIZE_ENABLED, 0),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_PERCENT_HOSTILE, 0),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_PERCENT_AFRAID, 0),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_PERCENT_GUARDED, 0),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_PERCENT_NEUTRAL, 0),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_PERCENT_FRIENDLY, 0),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_HOSTILE, 100),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_AFRAID, 100),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_GUARDED, 100),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_NEUTRAL, 100),
+	GD_INT_INIT(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_FRIENDLY, 100),
+#endif
+
+#if defined(MOD_CONFIG_GAME_IN_XML)
+	// Don't sweat that these are hard-coded by ID, as they will be over-written by the values as set in the PostDefines table
+	GD_INT_INIT(RELIGION_LAST_FOUND_ERA, 3), // ERA_RENAISSANCE
+	GD_INT_INIT(RELIGION_GP_FAITH_PURCHASE_ERA, 4), // ERA_INDUSTRIAL
+	GD_INT_INIT(IDEOLOGY_START_ERA, 4), // ERA_INDUSTRIAL
+	GD_INT_INIT(WAR_MAJOR_MINIMUM_TURNS, 5),
+	GD_INT_INIT(WAR_MINOR_MINIMUM_TURNS, 0),
+	GD_INT_INIT(CITY_STARTING_RINGS, 1),
+#endif
+
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+	GD_INT_INIT(TOURISM_START_TECH, 0), // TECH_AGRICULTURE
+	GD_INT_INIT(TOURISM_START_ERA, 0), // ERA_ANCIENT
+	GD_INT_INIT(PUPPET_TOURISM_MODIFIER, -25),
+#endif
+
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+	GD_INT_INIT(PUPPET_GOLDEN_AGE_MODIFIER, -50),
+#endif
+
+#if defined(MOD_TRADE_ROUTE_SCALING)
+	GD_INT_INIT(TRADE_ROUTE_BASE_TARGET_TURNS, 30),
+	GD_INT_INIT(TRADE_ROUTE_BASE_LAND_DISTANCE, 20),
+	GD_INT_INIT(TRADE_ROUTE_BASE_LAND_MODIFIER, 0),
+	GD_INT_INIT(TRADE_ROUTE_BASE_SEA_DISTANCE, 20),
+	GD_INT_INIT(TRADE_ROUTE_BASE_SEA_MODIFIER, 100),
+	GD_INT_INIT(TRADE_ROUTE_BASE_FOOD_VALUE, 300),
+	GD_INT_INIT(TRADE_ROUTE_BASE_PRODUCTION_VALUE, 300),
+	GD_INT_INIT(TRADE_ROUTE_SCIENCE_DIVISOR_TIMES100, 200),
+	GD_INT_INIT(TRADE_ROUTE_DIFFERENT_RESOURCE_VALUE, 50),
+	GD_INT_INIT(TRADE_ROUTE_RIVER_CITY_MODIFIER, 25),
+	GD_INT_INIT(TRADE_ROUTE_BASE_PLUNDER_GOLD, 100),
+	GD_INT_INIT(TRADE_ROUTE_PLUNDER_TURNS_COUNTER, 30),
+#endif
+
+#if defined(MOD_GLOBAL_CS_GIFTS)
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_BONUS_FRIENDSHIP, 12),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_BONUS_CULTURE, 8),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_BONUS_FAITH, 8),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_BONUS_GOLD, 30),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_BONUS_FOOD, 8),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_BONUS_UNIT, 30),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_XP_PER_ERA, 5),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_XP_RANDOM, 10),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_PLAYER_MULTIPLIER, 2),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_PLAYER_DIVISOR, 1),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_SUBSEQUENT_TEAM_MULTIPLIER, 1),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_SUBSEQUENT_TEAM_DIVISOR, 2),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_FRIENDLY_BONUS_MULTIPLIER, 3),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_FRIENDLY_BONUS_DIVISOR, 2),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_FRIENDLY_UNIT_MULTIPLIER, 2),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_FRIENDLY_UNIT_DIVISOR, 1),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_HOSTILE_BONUS_MULTIPLIER, 1),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_HOSTILE_BONUS_DIVISOR, 2),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_HOSTILE_UNIT_MULTIPLIER, 0),
+	GD_INT_INIT(MINOR_CIV_FIRST_CONTACT_HOSTILE_UNIT_DIVISOR, 1),
+#endif
+
+#if defined(MOD_GLOBAL_STACKING_RULES)
+	GD_INT_INIT(CITY_UNIT_LIMIT, 1),
+#endif
+
+#if defined(MOD_EVENTS_CITY_BOMBARD)
+	GD_INT_INIT(MAX_CITY_ATTACK_RANGE, 2),
+#endif
+
+#if defined(MOD_UI_CITY_EXPANSION)
+	GD_INT_INIT(PLOT_INFLUENCE_COST_VISIBLE_DIVISOR, 5),
+#endif
+
 	m_pEconomicAIStrategies(NULL),
 	m_pCitySpecializations(NULL),
 	m_pTacticalMoves(NULL),
@@ -1809,6 +1933,9 @@ CvGlobals::CvGlobals() :
 	m_pLeagueProjects(NULL),
 	m_pLeagueProjectRewards(NULL),
 	m_pResolutions(NULL),
+#if defined(MOD_API_ACHIEVEMENTS) || defined(ACHIEVEMENT_HACKS)
+	m_pAchievements(NULL),
+#endif
 	m_pGameDatabase(NULL)
 {
 }
@@ -1817,11 +1944,56 @@ CvGlobals::~CvGlobals()
 {
 }
 
+#if defined(MOD_DEBUG_MINIDUMP)
+/************************************************************************************************/
+/* MINIDUMP_MOD                           04/10/11                                terkhen       */
+/* See http://www.debuginfo.com/articles/effminidumps.html                                      */
+/*                                                                                              */
+/* Originally for Civ 4, ported by ls612 to Civ 5                                               */
+/* See http://forums.civfanatics.com/showthread.php?t=498919                                    */
+/************************************************************************************************/
+
+#pragma comment (lib, "dbghelp.lib")
+void CreateMiniDump(EXCEPTION_POINTERS *pep)
+{
+	/* Open a file to store the minidump. */
+	HANDLE hFile = CreateFile(_T("CvMiniDump.dmp"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
+		_tprintf(_T("CreateFile failed. Error: %u \n"), GetLastError());
+		return;
+	}
+
+	/* Create the minidump. */
+	MINIDUMP_EXCEPTION_INFORMATION mdei;
+	mdei.ThreadId           = GetCurrentThreadId();
+	mdei.ExceptionPointers  = pep;
+	mdei.ClientPointers     = FALSE;
+
+	MINIDUMP_TYPE mdt       = MiniDumpNormal;
+
+	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
+
+	CloseHandle(hFile);
+}
+
+LONG WINAPI CustomFilter(EXCEPTION_POINTERS *ExceptionInfo)
+{
+	CreateMiniDump(ExceptionInfo);
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
 //
 // allocate
 //
 void CvGlobals::init()
 {
+#if defined(MOD_DEBUG_MINIDUMP)
+	/* Enable our custom exception that will write the minidump for us. */
+	SetUnhandledExceptionFilter(CustomFilter);
+	CUSTOMLOG("MiniDump exception handler installed");
+#endif
+
 	//
 	// These vars are used to initialize the globals.
 	//
@@ -1846,7 +2018,11 @@ void CvGlobals::init()
 	};
 
 	// these are now in hex-space coords
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	int aiCityPlotX[MAX_CITY_PLOTS] =
+#else
 	int aiCityPlotX[NUM_CITY_PLOTS] =
+#endif
 	{
 		//	0
 		0,
@@ -1856,11 +2032,23 @@ void CvGlobals::init()
 		0,  1,  2,  2,  2,  1,  0,  -1, -2, -2, -2, -1,
 		//	19	20	21	22	23	24	25	26	27	28	29	30	31	32	33	34	35	36
 		0,  1,  2,  3,  3,  3,  3,  2,  1,  0,  -1, -2, -3, -3, -3, -3, -2, -1,
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		//	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60
+			0,  1,  2,  3,  4,  4,  4,  4,  4,  3,  2,  1,  0,  -1,  -2, -3, -4, -4, -4, -4, -4, -3, -2, -1,
+		//	61	62	63	64	65	66	67	68	69	70	71	72	73	74	75	76	77	78	79	80	81	82	83	84  85  86  87  88  89  90
+			0,  1,  2,  3,  4,  5,  5,  5,  5,  5,  5,  4,  3,  2,  1,  0,  -1, -2, -3, -4, -5, -5, -5, -5, -5, -5, -4, -3, -2, -1,
+		// The pattern for the Nth ring is 0 .. N, (N-1) * N, N .. -N, (N-1) * -N, -N .. -1
+#else
 		//	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60
 		//	0,  1,  2,  3,  4,  4,  4,  4,  4,  3,  2,  1,  0,  -1,  -2, -3, -4, -4, -4, -4, -4, -3, -2, -1,
+#endif
 	};
 
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	int aiCityPlotY[MAX_CITY_PLOTS] =
+#else
 	int aiCityPlotY[NUM_CITY_PLOTS] =
+#endif
 	{
 		//	0
 		0,
@@ -1870,21 +2058,59 @@ void CvGlobals::init()
 		2,  1,  0, -1,	-2, -2, -2, -1,  0,  1,  2,  2,
 		//	19	20	21	22	23	24	25	26	27	28	29	30	31	32	33	34	35	36
 		3,  2,  1,  0,  -1, -2, -3, -3, -3, -3, -2, -1,  0,  1,  2,  3,  3,  3,
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		//	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60
+			4,  3,  2,  1,  0, -1, -2, -3, -4, -4, -4, -4, -4, -3, -2, -1,  0,  1,  2,  3,  4,  4,  4,  4,
+		//	61	62	63	64	65	66	67	68	69	70	71	72	73	74	75	76	77	78	79	80	81	82	83	84  85  86  87  88  89  90
+			5,  4,  3,  2,  1,  0,  -1, -2, -3, -4, -5, -5, -5, -5, -5, -5, -4, -3, -2, -1,  0,  1,  2,  3, 4,  5,  5,  5,  5,  5,
+		// The pattern for the Nth ring is N .. -N, (N-1) * -N, -N .. N, (N-1) * N
+#else
 		//	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60
 		//	4,  3,  2,  1,  0, -1, -2, -3, -4, -4, -4, -4, -4, -3, -2, -1,  0,  1,  2,  3,  4,  4,  4,  4,
+#endif
 	};
 
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	int aiCityPlotPriority[MAX_CITY_PLOTS] =
+#else
 	int aiCityPlotPriority[NUM_CITY_PLOTS] =
+#endif
 	{
 		0,
 		1,  1,  1,  1,  1,  1,
 		2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
 		3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+		5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,
+		// The pattern for the Nth ring is (6*N) N
+#else
 		//4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+#endif
 	};
 
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	int aaiXYCityPlot[2*MAX_CITY_RADIUS+1][2*MAX_CITY_RADIUS+1] =
+#else
 	int aaiXYCityPlot[CITY_PLOTS_DIAMETER][CITY_PLOTS_DIAMETER] =
+#endif
 	{
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		// this is the 5 ring layout
+		//	 -5  -4  -3  -2  -1   0   1   2   3  4  5  -- in the Y direction
+		{-1, -1, -1, -1, -1, 81, 82, 83, 84, 85, 86,}, // -5 hex-space x
+		{-1, -1, -1, -1, 80, 53, 54, 55, 56, 57, 87,}, // -4 hex-space x
+		{-1, -1, -1, 79, 52, 31, 32, 33, 34, 58, 88,}, // -3 hex-space x
+		{-1, -1, 78, 51, 30, 15, 16, 17, 35, 59, 89,}, // -2 hex-space x
+		{-1, 77, 50, 29, 14,  5,  6, 18, 36, 60, 90,}, // -1 hex-space x
+		{76, 49, 28, 13,  4,  0,  1,  7, 19, 37, 61,}, //  0 hex-space x
+		{75, 48, 27, 12,  3,  2,  8, 20, 38, 62, -1,}, //  1 hex-space x
+		{74, 47, 26, 11, 10,  9, 21, 39, 63, -1, -1,}, //  2 hex-space x
+		{73, 46, 25, 24, 23, 22, 40, 64, -1, -1, -1,}, //  3 hex-space x
+		{72, 45, 44, 43, 42, 41, 65, -1, -1, -1, -1,}, //  4 hex-space x
+		{71, 70, 69, 68, 67, 66, -1, -1, -1, -1, -1,}, //  5 hex-space x
+		// There is no pattern to this, adding a ring requires adding a new row at the top and bottom AND a -1 entry at the start and end of each existing row
+#endif
 		// this is the 4 ring layout
 		/*
 		//	 -4  -3  -2  -1   0   1   2   3  4  -- in the Y direction
@@ -1898,6 +2124,7 @@ void CvGlobals::init()
 		{46, 25, 24, 23, 22, 40, -1, -1, -1,}, //  3 hex-space x
 		{45, 44, 43, 42, 41, -1, -1, -1, -1,}, //  4 hex-space x
 		*/
+#if !defined(MOD_GLOBAL_CITY_WORKING)
 		// this is the 3 ring layout
 		//	 -3  -2  -1   0   1   2   3    -- in the Y direction
 		{-1, -1, -1, 31, 32, 33, 34,}, // -3 hex-space x
@@ -1907,6 +2134,7 @@ void CvGlobals::init()
 		{27, 12,  3,  2,  8, 20, -1,}, //  1 hex-space x
 		{26, 11, 10,  9, 21, -1, -1,}, //  2 hex-space x
 		{25, 24, 23, 22, -1, -1, -1,}, //  3 hex-space x
+#endif
 		/*
 		// this is the 2 ring layout
 		//	-2   -1   0   1   2      -- in the Y direction
@@ -1969,6 +2197,9 @@ void CvGlobals::init()
 	m_pLeagueProjectRewards = FNEW(CvLeagueProjectRewardXMLEntries, c_eCiv5GameplayDLL, 0);
 	m_pResolutions = FNEW(CvResolutionXMLEntries, c_eCiv5GameplayDLL, 0);
 	m_pNotifications = FNEW(CvNotificationXMLEntries, c_eCiv5GameplayDLL, 0);
+#if defined(MOD_API_ACHIEVEMENTS) || defined(ACHIEVEMENT_HACKS)
+	m_pAchievements = FNEW(CvAchievementXMLEntries, c_eCiv5GameplayDLL, 0);
+#endif
 
 	auto_ptr<ICvDLLDatabaseUtility1> pkLoader(getDatabaseLoadUtility());
 
@@ -2032,6 +2263,9 @@ void CvGlobals::uninit()
 	SAFE_DELETE(m_pLeagueProjectRewards);
 	SAFE_DELETE(m_pResolutions);
 	SAFE_DELETE(m_pNotifications);
+#if defined(MOD_API_ACHIEVEMENTS) || defined(ACHIEVEMENT_HACKS)
+	SAFE_DELETE(m_pAchievements);
+#endif
 
 	SAFE_DELETE(m_pImprovements); // player uses the improvement count in deallocating.
 	SAFE_DELETE(m_pTechs);        // improvements uses tech to deallocate. arrghh!
@@ -2329,6 +2563,15 @@ int* CvGlobals::getCityPlotPriority()
 
 int CvGlobals::getXYCityPlot(int i, int j)
 {
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	CvAssertMsg(i < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
+	CvAssertMsg(i > -1, "Index out of bounds");
+	if(i < 0 || i >= (2*MAX_CITY_RADIUS+1)) return -1;
+
+	CvAssertMsg(j < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
+	CvAssertMsg(j > -1, "Index out of bounds");
+	if(j < 0 || j >= (2*MAX_CITY_RADIUS+1)) return -1;
+#else
 	CvAssertMsg(i < CITY_PLOTS_DIAMETER, "Index out of bounds");
 	CvAssertMsg(i > -1, "Index out of bounds");
 	if(i < 0 || i >= CITY_PLOTS_DIAMETER) return -1;
@@ -2336,6 +2579,7 @@ int CvGlobals::getXYCityPlot(int i, int j)
 	CvAssertMsg(j < CITY_PLOTS_DIAMETER, "Index out of bounds");
 	CvAssertMsg(j > -1, "Index out of bounds");
 	if(j < 0 || j >= CITY_PLOTS_DIAMETER) return -1;
+#endif
 
 	return m_aaiXYCityPlot[i][j];
 }
@@ -2465,6 +2709,58 @@ CvMultiUnitFormationInfo* CvGlobals::getMultiUnitFormationInfo(int i)
 	else
 		return NULL;
 }
+
+#if defined(MOD_API_PLOT_YIELDS)
+int CvGlobals::getNumPlotInfos()
+{
+	return MOD_API_PLOT_YIELDS ? (int)m_paPlotInfo.size() : 0;
+}
+
+std::vector<CvPlotInfo*>& CvGlobals::getPlotInfo()
+{
+	return m_paPlotInfo;
+}
+
+CvPlotInfo* CvGlobals::getPlotInfo(PlotTypes ePlotNum)
+{
+	if (MOD_API_PLOT_YIELDS) {
+		CvAssert(ePlotNum > -1);
+		CvAssert(ePlotNum < GC.getNumPlotInfos());
+		if(ePlotNum > -1 && ePlotNum < (int)m_paPlotInfo.size())
+			return m_paPlotInfo[ePlotNum];
+		else
+			return NULL;
+	} else {
+		return NULL;
+	}
+}
+#endif
+
+#if defined(MOD_API_UNIFIED_YIELDS)
+int CvGlobals::getNumGreatPersonInfos()
+{
+	return MOD_API_UNIFIED_YIELDS ? (int)m_paGreatPersonInfo.size() : 0;
+}
+
+std::vector<CvGreatPersonInfo*>& CvGlobals::getGreatPersonInfo()
+{
+	return m_paGreatPersonInfo;
+}
+
+CvGreatPersonInfo* CvGlobals::getGreatPersonInfo(GreatPersonTypes eGreatPersonNum)
+{
+	if (MOD_API_UNIFIED_YIELDS) {
+		CvAssert(eGreatPersonNum > -1);
+		CvAssert(eGreatPersonNum < GC.getNumGreatPersonInfos());
+		if(eGreatPersonNum > -1 && eGreatPersonNum < (int)m_paGreatPersonInfo.size())
+			return m_paGreatPersonInfo[eGreatPersonNum];
+		else
+			return NULL;
+	} else {
+		return NULL;
+	}
+}
+#endif
 
 int CvGlobals::getNumTerrainInfos()
 {
@@ -2628,6 +2924,32 @@ CvMinorCivInfo* CvGlobals::getMinorCivInfo(MinorCivTypes eMinorCivNum)
 	else
 		return NULL;
 }
+
+#if defined(MOD_EVENTS_QUESTS)
+int CvGlobals::getNumQuestInfos()
+{
+	return MOD_EVENTS_QUESTS ? m_paQuestInfo.size() : NUM_MINOR_CIV_QUEST_TYPES;
+}
+
+std::vector<CvQuestInfo*>& CvGlobals::getQuestInfo()
+{
+	return m_paQuestInfo;
+}
+
+CvQuestInfo* CvGlobals::getQuestInfo(/*MinorCivQuestTypes*/ int eQuestNum)
+{
+	if (MOD_EVENTS_QUESTS) {
+		CvAssert(eQuestNum > -1);
+		CvAssert(eQuestNum < GC.getNumQuestInfos());
+		if(eQuestNum > -1 && eQuestNum < (int)m_paQuestInfo.size())
+			return m_paQuestInfo[eQuestNum];
+		else
+			return NULL;
+	} else {
+		return NULL;
+	}
+}
+#endif
 
 int CvGlobals::getNumLeaderHeadInfos()
 {
@@ -2922,6 +3244,29 @@ CvGameSpeedInfo* CvGlobals::getGameSpeedInfo(GameSpeedTypes eGameSpeedNum)
 	else
 		return NULL;
 }
+
+#if defined(MOD_EVENTS_DIPLO_MODIFIERS)
+int CvGlobals::getNumDiploModifierInfos()
+{
+	return (int)m_paDiploModifierInfo.size();
+}
+
+std::vector<CvDiploModifierInfo*>& CvGlobals::getDiploModifierInfo()
+{
+	return m_paDiploModifierInfo;
+}
+
+CvDiploModifierInfo* CvGlobals::getDiploModifierInfo(DiploModifierTypes eDiploModifierNum)
+{
+	CvAssert(eDiploModifierNum > -1);
+	CvAssert(eDiploModifierNum < GC.getNumDiploModifierInfos());
+	if(eDiploModifierNum > -1 && eDiploModifierNum < (int)m_paDiploModifierInfo.size())
+		return m_paDiploModifierInfo[eDiploModifierNum];
+	else
+		return NULL;
+}
+
+#endif
 
 int CvGlobals::getNumProcessInfos()
 {
@@ -3683,6 +4028,33 @@ CvNotificationXMLEntries* CvGlobals::GetNotificationEntries()
 {
 	return m_pNotifications;
 }
+
+#if defined(MOD_API_ACHIEVEMENTS) || defined(ACHIEVEMENT_HACKS)
+int CvGlobals::getNumAchievementInfos()
+{
+	return m_pAchievements->GetNumAchievements();
+}
+
+std::vector<CvAchievementInfo*>& CvGlobals::getAchievementInfo()
+{
+	return m_pAchievements->GetAchievementEntries();
+}
+
+CvAchievementInfo* CvGlobals::getAchievementInfo(EAchievement eAchievementNum)
+{
+	CvAssert(eAchievementNum > -1);
+	CvAssert(eAchievementNum < GC.getNumAchievementInfos());
+	if(eAchievementNum > -1 && eAchievementNum < GC.getNumAchievementInfos())
+		return m_pAchievements->GetAchievementEntries()[eAchievementNum];
+	else
+		return NULL;
+}
+
+CvAchievementXMLEntries* CvGlobals::GetGameAchievements() const
+{
+	return m_pAchievements;
+}
+#endif
 
 CvString*& CvGlobals::getFootstepAudioTags()
 {
@@ -5356,7 +5728,12 @@ void CvGlobals::cacheGlobals()
 	m_iCULTURE_COST_VISIBLE_DIVISOR = getDefineINT("CULTURE_COST_VISIBLE_DIVISOR");
 	m_iCULTURE_PLOT_COST_MOD_MINIMUM = getDefineINT("CULTURE_PLOT_COST_MOD_MINIMUM");
 	m_iMINOR_CIV_PLOT_CULTURE_COST_MULTIPLIER = getDefineINT("MINOR_CIV_PLOT_CULTURE_COST_MULTIPLIER");
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	m_iMAXIMUM_WORK_PLOT_DISTANCE = std::min(MAX_CITY_RADIUS, std::max(MIN_CITY_RADIUS, getDefineINT("MAXIMUM_WORK_PLOT_DISTANCE")));
+	m_iMAXIMUM_BUY_PLOT_DISTANCE = std::min(MAX_CITY_RADIUS, std::max(MIN_CITY_RADIUS, getDefineINT("MAXIMUM_BUY_PLOT_DISTANCE")));
+#else
 	m_iMAXIMUM_BUY_PLOT_DISTANCE = getDefineINT("MAXIMUM_BUY_PLOT_DISTANCE");
+#endif
 	m_iMAXIMUM_ACQUIRE_PLOT_DISTANCE = getDefineINT("MAXIMUM_ACQUIRE_PLOT_DISTANCE");
 	m_iPLOT_INFLUENCE_BASE_MULTIPLIER = getDefineINT("PLOT_INFLUENCE_BASE_MULTIPLIER");
 	m_iPLOT_INFLUENCE_DISTANCE_MULTIPLIER = getDefineINT("PLOT_INFLUENCE_DISTANCE_MULTIPLIER");
@@ -5582,6 +5959,7 @@ void CvGlobals::cacheGlobals()
 	m_iIDEOLOGY_SCORE_GUARDED = getDefineINT("IDEOLOGY_SCORE_GUARDED");
 	m_iIDEOLOGY_SCORE_AFRAID = getDefineINT("IDEOLOGY_SCORE_AFRAID");
 	m_iIDEOLOGY_SCORE_FRIENDLY = getDefineINT("IDEOLOGY_SCORE_FRIENDLY");
+
 	m_iPOLICY_BRANCH_FREEDOM = getDefineINT("POLICY_BRANCH_FREEDOM", false);
 	if (m_iPOLICY_BRANCH_FREEDOM == 0)
 	{
@@ -5597,6 +5975,137 @@ void CvGlobals::cacheGlobals()
 	{
 		m_iPOLICY_BRANCH_ORDER = NO_POLICY_BRANCH_TYPE;
 	}	
+
+#if defined(MOD_PROMOTIONS_DEEP_WATER_EMBARKATION)
+	if (MOD_PROMOTIONS_DEEP_WATER_EMBARKATION) {
+		GD_INT_CACHE(PROMOTION_DEEPWATER_EMBARKATION);
+		GD_INT_CACHE(PROMOTION_DEFENSIVE_DEEPWATER_EMBARKATION);
+	}
+#endif
+
+#if defined(MOD_PROMOTIONS_FLAGSHIP)
+	if (MOD_PROMOTIONS_FLAGSHIP) {
+		GD_INT_CACHE(PROMOTION_FLAGSHIP);
+	}
+#endif
+
+#if defined(MOD_PROMOTIONS_AURA_CHANGE)
+	if (MOD_PROMOTIONS_AURA_CHANGE) {
+		GD_INT_CACHE(GREAT_GENERAL_MAX_RANGE);
+	}
+#endif
+
+#if defined(MOD_CONFIG_AI_IN_XML)
+	if (MOD_CONFIG_AI_IN_XML) {
+		GD_INT_CACHE(AI_CONFIG_MILITARY_MELEE_PER_AA);
+		GD_INT_CACHE(AI_CONFIG_MILITARY_AIRCRAFT_PER_CARRIER_SPACE);
+		GD_INT_CACHE(AI_CONFIG_MILITARY_TILES_PER_SHIP);
+		GD_INT_CACHE(WARMONGER_THREAT_MAJOR_CITY_WEIGHT);
+		GD_INT_CACHE(WARMONGER_THREAT_MINOR_CITY_WEIGHT);
+		GD_INT_CACHE(WARMONGER_THREAT_CAPITAL_CITY_PERCENT);
+		GD_INT_CACHE(WARMONGER_THREAT_KNOWS_ATTACKER_PERCENT);
+		GD_INT_CACHE(WARMONGER_THREAT_KNOWS_DEFENDER_PERCENT);
+		GD_INT_CACHE(WARMONGER_THREAT_AGGRIEVED_PERCENT);
+		GD_INT_CACHE(WARMONGER_THREAT_COOP_WAR_PERCENT);
+		GD_INT_CACHE(WARMONGER_THREAT_DEF_PACT_ENABLED);
+		GD_INT_CACHE(WARMONGER_THREAT_CITY_SIZE_ENABLED);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_PERCENT_HOSTILE);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_PERCENT_AFRAID);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_PERCENT_GUARDED);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_PERCENT_NEUTRAL);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_PERCENT_FRIENDLY);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_HOSTILE);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_AFRAID);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_GUARDED);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_NEUTRAL);
+		GD_INT_CACHE(WARMONGER_THREAT_APPROACH_DECAY_PERCENT_FRIENDLY);
+	}
+#endif
+
+#if defined(MOD_CONFIG_GAME_IN_XML)
+	if (MOD_CONFIG_GAME_IN_XML) {
+		GD_INT_CACHE(RELIGION_LAST_FOUND_ERA);
+		GD_INT_CACHE(RELIGION_GP_FAITH_PURCHASE_ERA);
+		GD_INT_CACHE(IDEOLOGY_START_ERA);
+		GD_INT_CACHE(WAR_MAJOR_MINIMUM_TURNS);
+		GD_INT_CACHE(WAR_MINOR_MINIMUM_TURNS);
+		GD_INT_CACHE(CITY_STARTING_RINGS);
+	}
+#endif
+
+#if defined(MOD_API_UNIFIED_YIELDS_TOURISM)
+	if (MOD_API_UNIFIED_YIELDS_TOURISM) {
+		GD_INT_CACHE(TOURISM_START_TECH);
+		GD_INT_CACHE(TOURISM_START_ERA);
+		GD_INT_CACHE(PUPPET_TOURISM_MODIFIER);
+	}
+#endif
+
+#if defined(MOD_API_UNIFIED_YIELDS_GOLDEN_AGE)
+	if (MOD_API_UNIFIED_YIELDS_GOLDEN_AGE) {
+		GD_INT_CACHE(PUPPET_GOLDEN_AGE_MODIFIER);
+	}
+#endif
+
+#if defined(MOD_TRADE_ROUTE_SCALING)
+	if (MOD_TRADE_ROUTE_SCALING) {
+		GD_INT_CACHE(TRADE_ROUTE_BASE_TARGET_TURNS)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_LAND_DISTANCE)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_LAND_MODIFIER)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_SEA_DISTANCE)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_SEA_MODIFIER)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_FOOD_VALUE)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_PRODUCTION_VALUE)
+		GD_INT_CACHE(TRADE_ROUTE_SCIENCE_DIVISOR_TIMES100)
+		GD_INT_CACHE(TRADE_ROUTE_DIFFERENT_RESOURCE_VALUE)
+		GD_INT_CACHE(TRADE_ROUTE_RIVER_CITY_MODIFIER)
+		GD_INT_CACHE(TRADE_ROUTE_BASE_PLUNDER_GOLD)
+		GD_INT_CACHE(TRADE_ROUTE_PLUNDER_TURNS_COUNTER)
+	}
+#endif
+
+#if defined(MOD_GLOBAL_CS_GIFTS)
+	if (MOD_GLOBAL_CS_GIFTS) {
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_BONUS_FRIENDSHIP);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_BONUS_CULTURE);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_BONUS_FAITH);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_BONUS_GOLD);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_BONUS_FOOD);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_BONUS_UNIT);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_XP_PER_ERA);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_XP_RANDOM);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_PLAYER_MULTIPLIER);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_PLAYER_DIVISOR);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_SUBSEQUENT_TEAM_MULTIPLIER);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_SUBSEQUENT_TEAM_DIVISOR);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_FRIENDLY_BONUS_MULTIPLIER);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_FRIENDLY_BONUS_DIVISOR);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_FRIENDLY_UNIT_MULTIPLIER);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_FRIENDLY_UNIT_DIVISOR);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_HOSTILE_BONUS_MULTIPLIER);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_HOSTILE_BONUS_DIVISOR);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_HOSTILE_UNIT_MULTIPLIER);
+		GD_INT_CACHE(MINOR_CIV_FIRST_CONTACT_HOSTILE_UNIT_DIVISOR);
+	}
+#endif
+
+#if defined(MOD_GLOBAL_STACKING_RULES)
+	if (MOD_GLOBAL_STACKING_RULES) {
+		GD_INT_CACHE(CITY_UNIT_LIMIT);
+	}
+#endif
+
+#if defined(MOD_EVENTS_CITY_BOMBARD)
+	if (MOD_EVENTS_CITY_BOMBARD) {
+		GD_INT_CACHE(MAX_CITY_ATTACK_RANGE);
+	}
+#endif
+
+#if defined(MOD_UI_CITY_EXPANSION)
+	if (MOD_UI_CITY_EXPANSION) {
+		GD_INT_CACHE(PLOT_INFLUENCE_COST_VISIBLE_DIVISOR);
+	}
+#endif
 }
 
 
@@ -5704,10 +6213,16 @@ void CvGlobals::deleteInfoArrays()
 	deleteInfoArray(m_paLeaderHeadInfo);
 	deleteInfoArray(m_paCivilizationInfo);
 	deleteInfoArray(m_paMinorCivInfo);
+#if defined(MOD_EVENTS_QUESTS)
+	deleteInfoArray(m_paQuestInfo);
+#endif
 
 	deleteInfoArray(m_paVoteSourceInfo);
 	deleteInfoArray(m_paHandicapInfo);
 	deleteInfoArray(m_paGameSpeedInfo);
+#if defined(MOD_EVENTS_DIPLO_MODIFIERS)
+	deleteInfoArray(m_paDiploModifierInfo);
+#endif
 	deleteInfoArray(m_paTurnTimerInfo);
 	deleteInfoArray(m_paVictoryInfo);
 	deleteInfoArray(m_paSmallAwardInfo);
@@ -5740,6 +6255,9 @@ void CvGlobals::deleteInfoArrays()
 	deleteInfoArray(m_paPlayerOptionInfos);
 
 	deleteInfoArray(m_paYieldInfo);
+#if defined(MOD_API_PLOT_YIELDS)
+	deleteInfoArray(m_paPlotInfo);
+#endif
 	deleteInfoArray(m_paTerrainInfo);
 	deleteInfoArray(m_paFeatureInfo);
 	deleteInfoArray(m_paResourceClassInfo);

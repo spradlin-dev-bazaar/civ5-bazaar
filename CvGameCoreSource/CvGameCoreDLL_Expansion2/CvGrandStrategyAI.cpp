@@ -189,6 +189,7 @@ void CvGrandStrategyAI::Read(FDataStream& kStream)
 	// Version number to maintain backwards compatibility
 	uint uiVersion;
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	kStream >> m_iNumTurnsSinceActiveSet;
 	kStream >> (int&)m_eActiveGrandStrategy;
@@ -222,6 +223,7 @@ void CvGrandStrategyAI::Write(FDataStream& kStream)
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	kStream << m_iNumTurnsSinceActiveSet;
 	kStream << m_eActiveGrandStrategy;
@@ -549,7 +551,12 @@ int CvGrandStrategyAI::GetCulturePriority()
 
 	// Before tourism kicks in, add weight based on flavor
 	int iFlavorCulture =  m_pPlayer->GetFlavorManager()->GetPersonalityIndividualFlavor((FlavorTypes)GC.getInfoTypeForString("FLAVOR_CULTURE"));
-	iPriority += (10 - m_pPlayer->GetCurrentEra()) * iFlavorCulture * 200 / 100;
+#if defined(MOD_AI_SMART_V3)
+	if (MOD_AI_SMART_V3)
+		iPriority += (9 - m_pPlayer->GetCurrentEra()) * iFlavorCulture * 200 / 100;
+	else
+#endif	
+		iPriority += (10 - m_pPlayer->GetCurrentEra()) * iFlavorCulture * 200 / 100;
 
 	// Loop through Players to see how we are doing on Tourism and Culture
 	PlayerTypes eLoopPlayer;
@@ -725,7 +732,12 @@ int CvGrandStrategyAI::GetSpaceshipPriority()
 	int iFlavorScience =  m_pPlayer->GetFlavorManager()->GetPersonalityIndividualFlavor((FlavorTypes)GC.getInfoTypeForString("FLAVOR_SCIENCE"));
 
 	// the later the game the greater the chance
-	iPriority += m_pPlayer->GetCurrentEra() * iFlavorScience * 150 / 100;
+#if defined(MOD_AI_SMART_V3)
+	if (MOD_AI_SMART_V3)
+		iPriority += (4 + m_pPlayer->GetCurrentEra()) * iFlavorScience * 150 / 100;
+	else
+#endif
+		iPriority += m_pPlayer->GetCurrentEra() * iFlavorScience * 150 / 100;
 
 	// if I already built the Apollo Program I am very likely to follow through
 	ProjectTypes eApolloProgram = (ProjectTypes) GC.getInfoTypeForString("PROJECT_APOLLO_PROGRAM", true);
@@ -733,7 +745,12 @@ int CvGrandStrategyAI::GetSpaceshipPriority()
 	{
 		if(GET_TEAM(m_pPlayer->getTeam()).getProjectCount(eApolloProgram) > 0)
 		{
-			iPriority += /*150*/ GC.getAI_GS_SS_HAS_APOLLO_PROGRAM();
+#if defined(MOD_AI_SMART_V3)
+			if (MOD_AI_SMART_V3)
+				iPriority += /*75*/ (GC.getAI_GS_SS_HAS_APOLLO_PROGRAM() / 2);
+			else
+#endif
+				iPriority += /*150*/ GC.getAI_GS_SS_HAS_APOLLO_PROGRAM();
 		}
 	}
 
@@ -760,13 +777,23 @@ int CvGrandStrategyAI::GetBaseGrandStrategyPriority(AIGrandStrategyTypes eGrandS
 }
 
 /// Get the base Priority for a Grand Strategy; these are elements common to ALL Grand Strategies
+#if defined(MOD_AI_SMART_V3)
+int CvGrandStrategyAI::GetPersonalityAndGrandStrategy(FlavorTypes eFlavorType, bool bBoostGSMainFlavor)
+#else
 int CvGrandStrategyAI::GetPersonalityAndGrandStrategy(FlavorTypes eFlavorType)
+#endif
 {
 	if(m_eActiveGrandStrategy != NO_AIGRANDSTRATEGY)
 	{
 		CvAIGrandStrategyXMLEntry* pGrandStrategy = GetAIGrandStrategies()->GetEntry(m_eActiveGrandStrategy);
 		int iModdedFlavor = pGrandStrategy->GetFlavorModValue(eFlavorType) + m_pPlayer->GetFlavorManager()->GetPersonalityIndividualFlavor(eFlavorType);
 		iModdedFlavor = max(0,iModdedFlavor);
+#if defined(MOD_AI_SMART_V3)
+		if(MOD_AI_SMART_V3 && bBoostGSMainFlavor && (pGrandStrategy->GetFlavorValue(eFlavorType) > 0))
+		{
+			iModdedFlavor = min(10, ((pGrandStrategy->GetFlavorValue(eFlavorType) + iModdedFlavor + 1) / 2));
+		}
+#endif
 		return iModdedFlavor;
 	}
 	return m_pPlayer->GetFlavorManager()->GetPersonalityIndividualFlavor(eFlavorType);

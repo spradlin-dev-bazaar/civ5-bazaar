@@ -44,7 +44,11 @@ public:
 	CvCity();
 	virtual ~CvCity();
 
+#if defined(MOD_API_EXTENSIONS)
+	void init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits = true, bool bInitialFounding = true, ReligionTypes eInitialReligion = NO_RELIGION, const char* szName = NULL);
+#else
 	void init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits = true, bool bInitialFounding = true);
+#endif
 	void uninit();
 	void reset(int iID = 0, PlayerTypes eOwner = NO_PLAYER, int iX = 0, int iY = 0, bool bConstructorCall = false);
 	void setupGraphical();
@@ -53,8 +57,13 @@ public:
 	void setupSpaceshipGraphics();
 
 
+#if defined(MOD_GLOBAL_VENICE_KEEPS_RESOURCES) || defined(MOD_GLOBAL_CS_MARRIAGE_KEEPS_RESOURCES)
+	void kill(bool bKeepResources = false);
+	void PreKill(bool bKeepResources = false);
+#else
 	void kill();
 	void PreKill();
+#endif
 	void PostKill(bool bCapital, CvPlot* pPlot, PlayerTypes eOwner);
 
 	CvPlayer* GetPlayer();
@@ -72,14 +81,29 @@ public:
 	void DoUpdateIndustrialRouteToCapital();
 
 	void SetRouteToCapitalConnected(bool bValue);
+#if defined(MOD_API_EXTENSIONS)
+	bool IsRouteToCapitalConnected(void) const;
+#else
 	bool IsRouteToCapitalConnected(void);
+#endif
 
+#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+	void createGreatGeneral(UnitTypes eGreatPersonUnit, bool bIsFree);
+	void createGreatAdmiral(UnitTypes eGreatPersonUnit, bool bIsFree);
+#else
 	void createGreatGeneral(UnitTypes eGreatPersonUnit);
 	void createGreatAdmiral(UnitTypes eGreatPersonUnit);
+#endif
 
 	CityTaskResult doTask(TaskTypes eTask, int iData1 = -1, int iData2 = -1, bool bOption = false, bool bAlt = false, bool bShift = false, bool bCtrl = false);
 
 	void chooseProduction(UnitTypes eTrainUnit = NO_UNIT, BuildingTypes eConstructBuilding = NO_BUILDING, ProjectTypes eCreateProject = NO_PROJECT, bool bFinish = false, bool bFront = false);
+
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	int getBuyPlotDistance() const;
+	int getWorkPlotDistance(int iChange = 0) const;
+	int GetNumWorkablePlots(int iChange = 0) const;
+#endif
 
 	void clearWorkingOverride(int iIndex);
 	int countNumImprovedPlots(ImprovementTypes eImprovement = NO_IMPROVEMENT, bool bPotential = false) const;
@@ -99,7 +123,11 @@ public:
 
 	bool canTrain(UnitTypes eUnit, bool bContinue = false, bool bTestVisible = false, bool bIgnoreCost = false, bool bWillPurchase = false, CvString* toolTipSink = NULL) const;
 	bool canTrain(UnitCombatTypes eUnitCombat) const;
+#if defined(MOD_API_EXTENSIONS)
+	bool canConstruct(BuildingTypes eBuilding, bool bContinue = false, bool bTestVisible = false, bool bIgnoreCost = false, bool bWillPurchase = false, CvString* toolTipSink = NULL) const;
+#else
 	bool canConstruct(BuildingTypes eBuilding, bool bContinue = false, bool bTestVisible = false, bool bIgnoreCost = false, CvString* toolTipSink = NULL) const;
+#endif
 	bool canCreate(ProjectTypes eProject, bool bContinue = false, bool bTestVisible = false) const;
 	bool canPrepare(SpecialistTypes eSpecialist, bool bContinue = false) const;
 	bool canMaintain(ProcessTypes eProcess, bool bContinue = false) const;
@@ -118,7 +146,15 @@ public:
 	int GetTerrainExtraYield(TerrainTypes eTerrain, YieldTypes eYield) const;
 	void ChangeTerrainExtraYield(TerrainTypes eTerrain, YieldTypes eYield, int iChange);
 
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int GetPlotExtraYield(PlotTypes ePlot, YieldTypes eYield) const;
+	void ChangePlotExtraYield(PlotTypes ePlot, YieldTypes eYield, int iChange);
+#endif
+
 	bool IsHasResourceLocal(ResourceTypes eResource, bool bTestVisible) const;
+#if defined(MOD_API_EXTENSIONS) || defined(MOD_TRADE_WONDER_RESOURCE_ROUTES)
+	int GetNumResourceLocal(ResourceTypes eResource, bool bImproved = false);
+#endif
 	void ChangeNumResourceLocal(ResourceTypes eResource, int iChange);
 
 	bool IsBuildingLocalResourceValid(BuildingTypes eBuilding, bool bTestVisible, CvString* toolTipSink = NULL) const;
@@ -180,6 +216,10 @@ public:
 	int getProductionTurnsLeft(BuildingTypes eBuilding, int iNum) const;
 	int getProductionTurnsLeft(ProjectTypes eProject, int iNum) const;
 	int getProductionTurnsLeft(SpecialistTypes eSpecialist, int iNum) const;
+#if defined(MOD_PROCESS_STOCKPILE)
+	int getProductionNeeded(ProcessTypes eProcess) const;
+	int getProductionTurnsLeft(ProcessTypes eProcess, int iNum) const;
+#endif
 	int GetPurchaseCost(UnitTypes eUnit);
 	int GetFaithPurchaseCost(UnitTypes eUnit, bool bIncludeBeliefDiscounts);
 	int GetPurchaseCost(BuildingTypes eBuilding);
@@ -255,6 +295,9 @@ public:
 	void SetEverCapital(bool bValue);
 
 	bool isCoastal(int iMinWaterSize = -1) const;
+#if defined(MOD_API_EXTENSIONS)
+	bool isAddsFreshWater() const;
+#endif
 
 	int foodConsumption(bool bNoAngry = false, int iExtra = 0) const;
 	int foodDifference(bool bBottom = true) const;
@@ -311,9 +354,19 @@ public:
 	int getGameTurnLastExpanded() const;
 	void setGameTurnLastExpanded(int iNewValue);
 
+#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
+	int getPopulation(bool bIncludeAutomatons = false) const;
+#else
 	int getPopulation() const;
+#endif
 	void setPopulation(int iNewValue, bool bReassignPop = true);
 	void changePopulation(int iChange, bool bReassignPop = true);
+	
+#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
+	int getAutomatons() const;
+	void setAutomatons(int iNewValue, bool bReassignPop = true);
+	void changeAutomatons(int iChange, bool bReassignPop = true);
+#endif
 
 	long getRealPopulation() const;
 
@@ -370,6 +423,11 @@ public:
 
 	// END Culture
 
+#if defined(MOD_API_EXTENSIONS)
+	int getTourismRateModifier() const;
+	void changeTourismRateModifier(int iChange);
+#endif
+
 	int GetFaithPerTurn() const;
 	int GetFaithPerTurnFromBuildings() const;
 	void ChangeFaithPerTurnFromBuildings(int iChange);
@@ -377,7 +435,11 @@ public:
 	int GetFaithPerTurnFromPolicies() const;
 	void ChangeFaithPerTurnFromPolicies(int iChange);
 
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldPerTurnFromUnimprovedFeatures(YieldTypes eYield) const;
+#else
 	int GetFaithPerTurnFromTraits() const;
+#endif
 
 	int GetFaithPerTurnFromReligion() const;
 	void ChangeFaithPerTurnFromReligion(int iChange);
@@ -404,12 +466,25 @@ public:
 
 	int getPlotBuyCostModifier() const;
 	void changePlotBuyCostModifier(int iChange);
+#if defined(MOD_BUILDINGS_CITY_WORKING)
+	int GetCityWorkingChange() const;
+	void changeCityWorkingChange(int iChange);
+#endif
+#if defined(MOD_BUILDINGS_CITY_AUTOMATON_WORKERS)
+	int GetCityAutomatonWorkersChange() const;
+	void changeCityAutomatonWorkersChange(int iChange);
+#endif
 
 	int getHealRate() const;
 	void changeHealRate(int iChange);
 
 	int GetEspionageModifier() const;
 	void ChangeEspionageModifier(int iChange);
+
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int GetConversionModifier() const;
+	void ChangeConversionModifier(int iChange);
+#endif
 
 	bool IsNoOccupiedUnhappiness() const;
 	int GetNoOccupiedUnhappinessCount() const;
@@ -508,6 +583,11 @@ public:
 	bool IsOwedCultureBuilding() const;
 	void SetOwedCultureBuilding(bool bNewValue);
 
+#if defined(MOD_BUGFIX_FREE_FOOD_BUILDING)
+	bool IsOwedFoodBuilding() const;
+	void SetOwedFoodBuilding(bool bNewValue);
+#endif
+
 	bool IsBlockaded() const;
 
 	int GetWeLoveTheKingDayCounter() const;
@@ -555,12 +635,23 @@ public:
 	int getSeaResourceYield(YieldTypes eIndex) const;
 	void changeSeaResourceYield(YieldTypes eIndex, int iChange);
 
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldPerTurnFromReligion(ReligionTypes eReligion, YieldTypes eYield) const;
+#endif
+
 	int getBaseYieldRateModifier(YieldTypes eIndex, int iExtra = 0, CvString* toolTipSink = NULL) const;
 	int getYieldRate(YieldTypes eIndex, bool bIgnoreTrade) const;
 	int getYieldRateTimes100(YieldTypes eIndex, bool bIgnoreTrade) const;
+#if defined(MOD_PROCESS_STOCKPILE)
+	int getBasicYieldRateTimes100(YieldTypes eIndex, bool bIgnoreTrade) const;
+#endif
 
 	// Base Yield
 	int getBaseYieldRate(YieldTypes eIndex) const;
+
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES) || defined(MOD_API_UNIFIED_YIELDS)
+	int GetBaseYieldRateFromGreatWorks(YieldTypes eIndex) const;
+#endif
 
 	int GetBaseYieldRateFromTerrain(YieldTypes eIndex) const;
 	void ChangeBaseYieldRateFromTerrain(YieldTypes eIndex, int iChange);
@@ -646,6 +737,11 @@ public:
 	void setSpecialistProductionTimes100(SpecialistTypes eIndex, int iNewValue);
 	void changeSpecialistProductionTimes100(SpecialistTypes eIndex, int iChange);
 
+#if defined(MOD_PROCESS_STOCKPILE)
+	int getProcessProduction(ProcessTypes eIndex) const;
+	int getProcessProductionTimes100(ProcessTypes eIndex) const;
+#endif
+
 	int getUnitProduction(UnitTypes eIndex) const;
 	void setUnitProduction(UnitTypes eIndex, int iNewValue);
 	void changeUnitProduction(UnitTypes eIndex, int iChange);
@@ -680,6 +776,11 @@ public:
 
 	bool isMadeAttack() const;
 	void setMadeAttack(bool bNewValue);
+
+#if defined(MOD_EVENTS_CITY_BOMBARD)
+	int getBombardRange(bool& bIndirectFireAllowed) const;
+	int getBombardRange() const;
+#endif
 
 	bool canRangeStrike() const;
 	bool CanRangeStrikeNow() const;
@@ -745,6 +846,10 @@ public:
 
 	bool CanPlaceUnitHere(UnitTypes eUnitType);
 	bool IsCanPurchase(bool bTestPurchaseCost, bool bTestTrainable, UnitTypes eUnitType, BuildingTypes eBuildingType, ProjectTypes eProjectType, YieldTypes ePurchaseYield);
+#if defined(MOD_AI_SMART_V3)	
+	bool IsCanGoldPurchase(OrderData* pOrder);
+	void PurchaseCurrentOrder();
+#endif	
 	void Purchase(UnitTypes eUnitType, BuildingTypes eBuildingType, ProjectTypes eProjectType, YieldTypes ePurchaseYield);
 
 	PlayerTypes getLiberationPlayer() const;
@@ -800,6 +905,64 @@ public:
 	void			clearCombat();
 	bool			isFighting() const;
 
+#if defined(MOD_API_EXTENSIONS)
+	bool HasBelief(BeliefTypes iBeliefType) const;
+	bool HasBuilding(BuildingTypes iBuildingType) const;
+	bool HasBuildingClass(BuildingClassTypes iBuildingClassType) const;
+	bool HasAnyWonder() const;
+	bool HasWonder(BuildingTypes iBuildingType) const;
+	bool IsCivilization(CivilizationTypes iCivilizationType) const;
+	bool HasFeature(FeatureTypes iFeatureType) const;
+	bool HasWorkedFeature(FeatureTypes iFeatureType) const;
+	bool HasAnyNaturalWonder() const;
+	bool HasNaturalWonder(FeatureTypes iFeatureType) const;
+	bool HasImprovement(ImprovementTypes iImprovementType) const;
+	bool HasWorkedImprovement(ImprovementTypes iImprovementType) const;
+	bool HasPlotType(PlotTypes iPlotType) const;
+	bool HasWorkedPlotType(PlotTypes iPlotType) const;
+	bool HasAnyReligion() const;
+	bool HasReligion(ReligionTypes iReligionType) const;
+	bool HasResource(ResourceTypes iResourceType) const;
+	bool HasWorkedResource(ResourceTypes iResourceType) const;
+	bool IsConnectedToCapital() const;
+	bool IsConnectedTo(CvCity* pCity) const;
+	bool HasSpecialistSlot(SpecialistTypes iSpecialistType) const;
+	bool HasSpecialist(SpecialistTypes iSpecialistType) const;
+	bool HasTerrain(TerrainTypes iTerrainType) const;
+	bool HasWorkedTerrain(TerrainTypes iTerrainType) const;
+	bool HasAnyDomesticTradeRoute() const;
+	bool HasAnyInternationalTradeRoute() const;
+	bool HasTradeRouteToAnyCity() const;
+	bool HasTradeRouteTo(CvCity* pCity) const;
+	bool HasTradeRouteFromAnyCity() const;
+	bool HasTradeRouteFrom(CvCity* pCity) const;
+	bool IsOnFeature(FeatureTypes iFeatureType) const;
+	bool IsAdjacentToFeature(FeatureTypes iFeatureType) const;
+	bool IsWithinDistanceOfFeature(FeatureTypes iFeatureType, int iDistance) const;
+	bool IsOnImprovement(ImprovementTypes iImprovementType) const;
+	bool IsAdjacentToImprovement(ImprovementTypes iImprovementType) const;
+	bool IsWithinDistanceOfImprovement(ImprovementTypes iImprovementType, int iDistance) const;
+	bool IsOnPlotType(PlotTypes iPlotType) const;
+	bool IsAdjacentToPlotType(PlotTypes iPlotType) const;
+	bool IsWithinDistanceOfPlotType(PlotTypes iPlotType, int iDistance) const;
+	bool IsOnResource(ResourceTypes iResourceType) const;
+	bool IsAdjacentToResource(ResourceTypes iResourceType) const;
+	bool IsWithinDistanceOfResource(ResourceTypes iResourceType, int iDistance) const;
+	bool IsOnTerrain(TerrainTypes iTerrainType) const;
+	bool IsAdjacentToTerrain(TerrainTypes iTerrainType) const;
+	bool IsWithinDistanceOfTerrain(TerrainTypes iTerrainType, int iDistance) const;
+	int CountFeature(FeatureTypes iFeatureType) const;
+	int CountWorkedFeature(FeatureTypes iFeatureType) const;
+	int CountImprovement(ImprovementTypes iImprovementType) const;
+	int CountWorkedImprovement(ImprovementTypes iImprovementType) const;
+	int CountPlotType(PlotTypes iPlotType) const;
+	int CountWorkedPlotType(PlotTypes iPlotType) const;
+	int CountResource(ResourceTypes iResourceType) const;
+	int CountWorkedResource(ResourceTypes iResourceType) const;
+	int CountTerrain(TerrainTypes iTerrainType) const;
+	int CountWorkedTerrain(TerrainTypes iTerrainType) const;
+#endif
+
 	int iScratch; // know the scope of your validity
 
 protected:
@@ -817,6 +980,9 @@ protected:
 	FAutoVariable<int, CvCity> m_iGameTurnAcquired;
 	FAutoVariable<int, CvCity> m_iGameTurnLastExpanded;
 	FAutoVariable<int, CvCity> m_iPopulation;
+#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
+	int m_iAutomatons;
+#endif
 	FAutoVariable<int, CvCity> m_iHighestPopulation;
 	int m_iExtraHitPoints;
 
@@ -840,6 +1006,12 @@ protected:
 	FAutoVariable<int, CvCity> m_iCapturePlunderModifier;
 	FAutoVariable<int, CvCity> m_iPlotCultureCostModifier;
 	int m_iPlotBuyCostModifier;
+#if defined(MOD_BUILDINGS_CITY_WORKING)
+	int m_iCityWorkingChange;
+#endif
+#if defined(MOD_BUILDINGS_CITY_AUTOMATON_WORKERS)
+	int m_iCityAutomatonWorkersChange;
+#endif
 	FAutoVariable<int, CvCity> m_iMaintenance;
 	FAutoVariable<int, CvCity> m_iHealRate;
 	FAutoVariable<int, CvCity> m_iNoOccupiedUnhappinessCount;
@@ -874,6 +1046,9 @@ protected:
 	FAutoVariable<int, CvCity> m_iCountExtraLuxuries;
 	FAutoVariable<int, CvCity> m_iCheapestPlotInfluence;
 	int m_iEspionageModifier;
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int m_iConversionModifier;
+#endif
 
 	OperationSlot m_unitBeingBuiltForOperation;
 
@@ -943,12 +1118,19 @@ protected:
 
 	bool m_bOwedCultureBuilding;
 
+#if defined(MOD_BUGFIX_FREE_FOOD_BUILDING)
+	bool m_bOwedFoodBuilding;
+#endif
+
 	mutable FFastSmallFixedList< OrderData, 25, true, c_eCiv5GameplayDLL > m_orderQueue;
 
 	int** m_aaiBuildingSpecialistUpgradeProgresses;
 	int** m_ppaiResourceYieldChange;
 	int** m_ppaiFeatureYieldChange;
 	int** m_ppaiTerrainYieldChange;
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int** m_ppaiPlotYieldChange;
+#endif
 
 	CvCityBuildings* m_pCityBuildings;
 	CvCityStrategyAI* m_pCityStrategyAI;

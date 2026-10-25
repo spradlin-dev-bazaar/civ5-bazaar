@@ -54,6 +54,9 @@ public:
 	int  GetInvisibleType() const;
 	int  GetSeeInvisibleType() const;
 	int  GetVisibilityChange() const;
+#if defined(MOD_PROMOTIONS_VARIABLE_RECON)
+	int  GetReconChange() const;
+#endif
 	int  GetMovesChange() const;
 	int  GetMoveDiscountChange() const;
 	int  GetRangeChange() const;
@@ -94,6 +97,10 @@ public:
 	int  GetExtraAttacks() const;
 	bool IsGreatGeneral() const;
 	bool IsGreatAdmiral() const;
+#if defined(MOD_PROMOTIONS_AURA_CHANGE)
+	int GetAuraRangeChange() const;
+	int GetAuraEffectChange() const;
+#endif
 	int  GetGreatGeneralModifier() const;
 	bool IsGreatGeneralReceivesMovement() const;
 	int  GetGreatGeneralCombatModifier() const;
@@ -102,6 +109,15 @@ public:
 	int  GetOutsideFriendlyLandsModifier() const;
 	int  GetCommandType() const;
 	void SetCommandType(int iNewType);
+
+#if defined(MOD_UNITS_NO_SUPPLY)
+	bool IsNoSupply() const;
+#endif
+
+#if defined(MOD_UNITS_MAX_HP)
+	int  GetMaxHitPointsChange() const;
+	int  GetMaxHitPointsModifier() const;
+#endif
 
 	int GetUpgradeDiscount() const;
 	int GetExperiencePercent() const;
@@ -141,6 +157,29 @@ public:
 	bool IsHillsDoubleMove() const;
 
 	bool IsIgnoreTerrainCost() const;
+#if defined(MOD_API_PLOT_BASED_DAMAGE)
+	bool IsIgnoreTerrainDamage() const;
+	bool IsIgnoreFeatureDamage() const;
+	bool IsExtraTerrainDamage() const;
+	bool IsExtraFeatureDamage() const;
+#endif
+#if defined(MOD_PROMOTIONS_IMPROVEMENT_BONUS)
+	int GetNearbyImprovementCombatBonus() const;
+	int GetNearbyImprovementBonusRange() const;
+	ImprovementTypes GetCombatBonusImprovement() const;
+#endif
+#if defined(MOD_PROMOTIONS_CROSS_MOUNTAINS)
+	bool CanCrossMountains() const;
+#endif
+#if defined(MOD_PROMOTIONS_CROSS_OCEANS)
+	bool CanCrossOceans() const;
+#endif
+#if defined(MOD_PROMOTIONS_CROSS_ICE)
+	bool CanCrossIce() const;
+#endif
+#if defined(MOD_PROMOTIONS_GG_FROM_BARBARIANS)
+	bool IsGGFromBarbarians() const;
+#endif
 	bool IsRoughTerrainEndsTurn() const;
 	bool IsHoveringUnit() const;
 	bool IsFlatMovementCost() const;
@@ -162,6 +201,9 @@ public:
 	bool IsHealOnPillage() const;
 	bool IsHealIfDefeatExcludeBarbarians() const;
 	bool IsEmbarkedAllWater() const;
+#if defined(MOD_PROMOTIONS_DEEP_WATER_EMBARKATION)
+	bool IsEmbarkedDeepWater() const;
+#endif
 	bool IsCityAttackOnly() const;
 	bool IsCaptureDefeatedEnemy() const;
 	bool IsIgnoreGreatGeneralBenefit() const;
@@ -179,6 +221,10 @@ public:
 	int GetTerrainDefensePercent(int i) const;
 	int GetFeatureAttackPercent(int i) const;
 	int GetFeatureDefensePercent(int i) const;
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldFromKills(int i) const;
+	int GetYieldFromBarbarianKills(int i) const;
+#endif
 	int GetUnitCombatModifierPercent(int i) const;
 	int GetUnitClassModifierPercent(int i) const;
 	int GetDomainModifierPercent(int i) const;
@@ -188,11 +234,19 @@ public:
 
 	bool GetTerrainDoubleMove(int i) const;
 	bool GetFeatureDoubleMove(int i) const;
+#if defined(MOD_PROMOTIONS_HALF_MOVE)
+	bool GetTerrainHalfMove(int i) const;
+	bool GetFeatureHalfMove(int i) const;
+#endif
 	bool GetTerrainImpassable(int i) const;
 	int  GetTerrainPassableTech(int i) const;
 	bool GetFeatureImpassable(int i) const;
 	bool GetUnitCombatClass(int i) const;
 	bool GetCivilianUnitType(int i) const;
+#if defined(MOD_PROMOTIONS_UNIT_NAMING)
+	bool IsUnitNaming(int i) const;
+	void GetUnitName(UnitTypes eUnit, CvString& sUnitName) const;
+#endif
 	bool IsPostCombatRandomPromotion(int i) const;
 
 protected:
@@ -212,6 +266,9 @@ protected:
 	int m_iInvisibleType;
 	int m_iSeeInvisibleType;
 	int m_iVisibilityChange;
+#if defined(MOD_PROMOTIONS_VARIABLE_RECON)
+	int m_iReconChange;
+#endif
 	int m_iMovesChange;
 	int m_iMoveDiscountChange;
 	int m_iRangeChange;
@@ -252,6 +309,10 @@ protected:
 	int m_iExtraAttacks;
 	bool m_bGreatGeneral;
 	bool m_bGreatAdmiral;
+#if defined(MOD_PROMOTIONS_AURA_CHANGE)
+	int m_iAuraRangeChange;
+	int m_iAuraEffectChange;
+#endif
 	int m_iGreatGeneralModifier;
 	bool m_bGreatGeneralReceivesMovement;
 	int m_iGreatGeneralCombatModifier;
@@ -259,6 +320,13 @@ protected:
 	int m_iFriendlyLandsAttackModifier;
 	int m_iOutsideFriendlyLandsModifier;
 	int m_iCommandType;
+#if defined(MOD_UNITS_NO_SUPPLY)
+	bool m_bNoSupply;
+#endif
+#if defined(MOD_UNITS_MAX_HP)
+	int m_iMaxHitPointsChange;
+	int m_iMaxHitPointsModifier;
+#endif
 	int m_iUpgradeDiscount;
 	int m_iExperiencePercent;
 	int m_iAdjacentMod;
@@ -294,6 +362,29 @@ protected:
 	bool m_bHealOutsideFriendly;
 	bool m_bHillsDoubleMove;
 	bool m_bIgnoreTerrainCost;
+#if defined(MOD_API_PLOT_BASED_DAMAGE)
+	bool m_bIgnoreTerrainDamage;
+	bool m_bIgnoreFeatureDamage;
+	bool m_bExtraTerrainDamage;
+	bool m_bExtraFeatureDamage;
+#endif
+#if defined(MOD_PROMOTIONS_IMPROVEMENT_BONUS)
+	int m_iNearbyImprovementCombatBonus;
+	int m_iNearbyImprovementBonusRange;
+	ImprovementTypes m_eCombatBonusImprovement;
+#endif
+#if defined(MOD_PROMOTIONS_CROSS_MOUNTAINS)
+	bool m_bCanCrossMountains;
+#endif
+#if defined(MOD_PROMOTIONS_CROSS_OCEANS)
+	bool m_bCanCrossOceans;
+#endif
+#if defined(MOD_PROMOTIONS_CROSS_ICE)
+	bool m_bCanCrossIce;
+#endif
+#if defined(MOD_PROMOTIONS_GG_FROM_BARBARIANS)
+	bool m_bGGFromBarbarians;
+#endif
 	bool m_bRoughTerrainEndsTurn;
 	bool m_bHoveringUnit;
 	bool m_bFlatMovementCost;
@@ -315,6 +406,9 @@ protected:
 	bool m_bHealOnPillage;
 	bool m_bHealIfDefeatExcludesBarbarians;
 	bool m_bEmbarkedAllWater;
+#if defined(MOD_PROMOTIONS_DEEP_WATER_EMBARKATION)
+	bool m_bEmbarkedDeepWater;
+#endif
 	bool m_bCityAttackOnly;
 	bool m_bCaptureDefeatedEnemy;
 	bool m_bIgnoreGreatGeneralBenefit;
@@ -331,6 +425,10 @@ protected:
 	int* m_piTerrainDefensePercent;
 	int* m_piFeatureAttackPercent;
 	int* m_piFeatureDefensePercent;
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int* m_piYieldFromKills;
+	int* m_piYieldFromBarbarianKills;
+#endif
 	int* m_piUnitCombatModifierPercent;
 	int* m_piUnitClassModifierPercent;
 	int* m_piDomainModifierPercent;
@@ -343,10 +441,17 @@ protected:
 
 	bool* m_pbTerrainDoubleMove;
 	bool* m_pbFeatureDoubleMove;
+#if defined(MOD_PROMOTIONS_HALF_MOVE)
+	bool* m_pbTerrainHalfMove;
+	bool* m_pbFeatureHalfMove;
+#endif
 	bool* m_pbTerrainImpassable;
 	bool* m_pbFeatureImpassable;
 	bool* m_pbUnitCombat;
 	bool* m_pbCivilianUnitType;
+#if defined(MOD_PROMOTIONS_UNIT_NAMING)
+	bool* m_pbUnitName;
+#endif
 	bool* m_pbPostCombatRandomPromotion;
 };
 

@@ -43,40 +43,54 @@ def registry_problems(first, second, third):
     return problems
 
 
-def duplicate_problems():
-    path = os.path.join(BUILD, "duplicate-ids.txt")
-    os.makedirs(BUILD, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("0\tA\tfirst()\n0\tB\tsecond()\n")
-    try:
-        generate.Registry(path)
-    except RuntimeError:
-        return []
-    return ["a registry that repeats an id was accepted"]
+def key_format_problems(hooks):
+    """A libclang change to this format would give every function a new hook number."""
+    expected = ["FakeUnit::Grow(int) const", "FakeUnit::Grow(int, int) const"]
+    problems = ["no hook has the key %r" % key for key in expected if key not in hooks]
+    return problems + ["%r says const twice" % key for key in hooks if "const const" in key]
 
 
-def naming_problems():
-    """Names that would not be valid, unreserved C++: a file name with a leading digit, a __ type."""
-    local = {"name": "Helper", "namespaces": [], "class": None, "linkage": "INTERNAL", "file": "2DGrid.cpp"}
-    local.update(params=[], const=False)
-    overload = {"name": "Pack", "namespaces": [], "class": "CvUnit", "linkage": "EXTERNAL", "file": "CvUnit.cpp"}
-    overload.update(params=[{"type": "unsigned __int64"}], const=False)
-    expected = [
-        (generate.hook_name(local, set()), "File_2DGrid_cpp_Helper"),
-        (generate.hook_name(overload, {"CvUnit_Pack"}), "CvUnit_Pack_with_unsigned_int64"),
-    ]
-    return ["%s, expected %s" % pair for pair in expected if pair[0] != pair[1]]
+def shape_format_problems():
+    """A libclang change to how it spells a type would give every function with such a type a new hook number."""
+    shapes = dict(generate.Registry(os.path.join(BUILD, "hook-ids.txt")).entries.keys())
+    expected = {
+        "FakeUnit::name() const": "const std::string &",
+        "FakeUnit::Twice(int)": "static int",
+        "FakeUnit::Level() const": "const int",
+    }
+    return ["%r has the shape %r, not %r" % (k, shapes.get(k), v) for k, v in expected.items() if shapes.get(k) != v]
+
+
+def gone_hook_problems():
+    """The third run leaves Extra gone: CivHooks.h says so instead of naming it, and the toys get its number."""
+    entries = generate.Registry(os.path.join(BUILD, "hook-ids.txt")).entries
+    gone = [hook_id for (key, _), (hook_id, _) in entries.items() if key == "Extra(int)"]
+    with open(os.path.join(BUILD, "sdk", "CivHooks.h")) as f:
+        header = f.read()
+    problems = ["Extra is still a namespace in CivHooks.h"] if "namespace Extra " in header else []
+    problems += [] if "// Extra (id " in header else ["CivHooks.h does not say Extra is gone"]
+    with open(os.path.join(BUILD, "sdk", "ToyGoneHook.h"), "w") as f:
+        f.write("#define TOY_GONE_HOOK_ID %d\n" % (gone[0] if gone else -1))
+    return problems + ([] if len(gone) == 1 else ["Extra has %d rows" % len(gone)])
+
+
+def export_marker_problems():
+    """A global variable and a static member variable are marked for export in the generated header."""
+    with open(os.path.join(BUILD, "src", "fixture", "fake_engine.h")) as f:
+        header = f.read()
+    expected = ["CIV_HOST_API extern int g_levelCalls;", "CIV_HOST_API static int s_created;"]
+    return ["%r is not marked for export" % line for line in expected if line not in header]
 
 
 if __name__ == "__main__":
-    problems = naming_problems() + duplicate_problems()
     registry = os.path.join(BUILD, "hook-ids.txt")
     if os.path.exists(registry):
         os.remove(registry)
     first = generate_hooks(["fake_engine.cpp"])
     second = generate_hooks(["aaa_extra.cpp", "fake_engine.cpp"])
     third = generate_hooks(["fake_engine.cpp"])
-    problems += registry_problems(first, second, third)
+    problems = registry_problems(first, second, third) + key_format_problems(first) + export_marker_problems()
+    problems += shape_format_problems() + gone_hook_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)

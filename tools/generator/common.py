@@ -10,6 +10,7 @@ ENGINE_DIR = os.path.join(SOURCE_ROOT, "CvGameCoreDLL_Expansion2")
 VCPROJ = os.path.join(ENGINE_DIR, "CvGameCoreDLL_Expansion2.vcproj")
 BUILD_DIR = os.path.join(SOURCE_ROOT, "BuildTemp", "civgen")
 HOST_DIR = os.path.join(REPO, "host")
+HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
 
 VS2008_INCLUDE = [
     r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\INCLUDE",
@@ -39,19 +40,17 @@ SUPPORT_LIBS = [
 # The engine's precompiled header sets these; every file and DLL that shares std types with it must match.
 LAYOUT_DEFINES = ["_SECURE_SCL=0", "_HAS_ITERATOR_DEBUGGING=0"]
 
-DEFINES = [
-    "FXS_IS_DLL",
-    "WIN32",
-    "NDEBUG",
-    "_WINDOWS",
-    "_USRDLL",
-    "CVGAMECOREDLL_EXPORTS",
-    "FINAL_RELEASE",
-    "_CRT_SECURE_NO_WARNINGS",
-    "_MT",
-    "_DLL",
-    "_CPPUNWIND",
-]
+ENGINE_DEFINES = ["FXS_IS_DLL", "WIN32", "NDEBUG", "_WINDOWS", "_USRDLL", "FINAL_RELEASE", "_CRT_SECURE_NO_WARNINGS"]
+
+# Clang reads the engine as the host build compiles it: with its export define, and what cl defines by itself for /MD
+# and /EHsc.
+CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS", "_MT", "_DLL", "_CPPUNWIND"]
+
+PLUGIN_DEFINES = ["CIV_HOST_API=__declspec(dllimport)"] + LAYOUT_DEFINES + ENGINE_DEFINES
+
+# The host's mod, which the plugin and Lua mod templates depend on.
+HOST_MOD_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
+HOST_MOD_NAME = "Bazaar Multi-DLL Mod Loader"
 
 
 class Project:
@@ -93,7 +92,7 @@ class Project:
             "-include",
             os.path.join(HERE, "parse-shims", "msvc-leniency.h"),
         ]
-        args += ["-D" + d for d in DEFINES]
+        args += ["-D" + d for d in CLANG_DEFINES]
         for inc in VS2008_INCLUDE:
             args += ["-isystem", inc]
         args += ["-I" + inc for inc in self.include_dirs]

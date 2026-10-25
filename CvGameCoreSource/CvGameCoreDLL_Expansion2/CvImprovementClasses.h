@@ -54,7 +54,15 @@ public:
 
 	int GetGoldMaintenance() const;
 	int GetCultureBombRadius() const;
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldAdjacentSameType(YieldTypes eYield) const;
+#else
 	int GetCultureAdjacentSameType() const;
+#endif
+
+#if defined(MOD_GLOBAL_STACKING_RULES)
+	int GetAdditionalUnits() const;
+#endif
 
 	int GetTilesPerGoody() const;
 	int GetGoodyUniqueRange() const;
@@ -74,11 +82,36 @@ public:
 	int GetImprovementUpgrade() const;
 	void SetImprovementUpgrade(int i);
 	int GetRequiresXAdjacentLand() const;
+#if defined(MOD_API_EXTENSIONS)
+	int GetRequiresXAdjacentWater() const;
+#endif
+
+#if defined(MOD_GLOBAL_RELOCATION)
+	bool IsAllowsRebaseTo() const;
+	bool IsAllowsAirliftFrom() const;
+	bool IsAllowsAirliftTo() const;
+#endif
 
 	bool IsHillsMakesValid() const;
+#if defined(MOD_GLOBAL_ALPINE_PASSES)
+	bool IsMountainsMakesValid() const;
+#endif
+#if defined(MOD_GLOBAL_PASSABLE_FORTS)
+	bool IsMakesPassable() const;
+#endif
+#if defined(MOD_API_PLOT_BASED_DAMAGE)
+	bool IsNegatesTerrainDamage() const;
+	bool IsNegatesFeatureDamage() const;
+#endif
+#if defined(MOD_GLOBAL_NO_FOLLOWUP)
+	bool IsNoFollowup() const;
+#endif
 	bool IsFreshWaterMakesValid() const;
 	bool IsRiverSideMakesValid() const;
 	bool IsNoFreshWater() const;
+#if defined(MOD_API_EXTENSIONS)
+	bool IsAddsFreshWater() const;
+#endif
 	bool IsRequiresFlatlands() const;
 	bool IsRequiresFlatlandsOrFreshWater() const;
 	bool IsRequiresFeature() const;
@@ -141,6 +174,10 @@ public:
 	bool GetFeatureMakesValid(int i) const;
 	bool GetImprovementMakesValid(int i) const;
 
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetAdjacentSameTypeYield(int i) const;
+#endif
+
 	int GetTechYieldChanges(int i, int j) const;
 	int* GetTechYieldChangesArray(int i);
 	int GetTechNoFreshWaterYieldChanges(int i, int j) const;
@@ -165,6 +202,10 @@ protected:
 	int m_iCultureBombRadius;
 	int m_iCultureAdjacentSameType;
 
+#if defined(MOD_GLOBAL_STACKING_RULES)
+	int m_iAdditionalUnits;
+#endif
+
 	int m_iTilesPerGoody;
 	int m_iGoodyUniqueRange;
 	int m_iFeatureGrowthProbability;
@@ -181,11 +222,36 @@ protected:
 	int m_iImprovementPillage;
 	int m_iImprovementUpgrade;
 	int m_iRequiresXAdjacentLand;
+#if defined(MOD_API_EXTENSIONS)
+	int m_iRequiresXAdjacentWater;
+#endif
+
+#if defined(MOD_GLOBAL_RELOCATION)
+	bool m_bAllowsRebaseTo;
+	bool m_bAllowsAirliftFrom;
+	bool m_bAllowsAirliftTo;
+#endif
 
 	bool m_bHillsMakesValid;
+#if defined(MOD_GLOBAL_ALPINE_PASSES)
+	bool m_bMountainsMakesValid;
+#endif
+#if defined(MOD_GLOBAL_PASSABLE_FORTS)
+	bool m_bMakesPassable;
+#endif
+#if defined(MOD_API_PLOT_BASED_DAMAGE)
+	bool m_bNegatesTerrainDamage;
+	bool m_bNegatesFeatureDamage;
+#endif
+#if defined(MOD_GLOBAL_NO_FOLLOWUP)
+	bool m_bNoFollowup;
+#endif
 	bool m_bFreshWaterMakesValid;
 	bool m_bRiverSideMakesValid;
 	bool m_bNoFreshWater;
+#if defined(MOD_API_EXTENSIONS)
+	bool m_bAddsFreshWater;
+#endif
 	bool m_bRequiresFlatlands;
 	bool m_bRequiresFlatlandsOrFreshWater;
 	bool m_bRequiresFeature;
@@ -233,6 +299,10 @@ protected:
 	bool* m_pbTerrainMakesValid;
 	bool* m_pbFeatureMakesValid;
 	bool* m_pbImprovementMakesValid;
+
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int* m_piAdjacentSameTypeYield;
+#endif
 
 	int** m_ppiTechYieldChanges;
 	int** m_ppiTechNoFreshWaterYieldChanges;

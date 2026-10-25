@@ -1,1 +1,1 @@
-The Plugins screen, and the host's edited copy of the game's Mods menu that adds the Plugins button. The Mods menu copy is Firaxis code; see NOTICE.
+The Plugins screen. It replaces the game's Advanced Setup screen (AdvancedSetup.xml and AdvancedSetup.lua), the only screen on the way to a game that a mod can replace, and its Continue button opens the screen it replaced; section 5 of docs/plugin-host.md explains how. The frame is adapted from the game's Custom Game screen, which is Firaxis code; see NOTICE.

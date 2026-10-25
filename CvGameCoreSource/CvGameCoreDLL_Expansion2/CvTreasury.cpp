@@ -105,6 +105,7 @@ void CvTreasury::DoGold()
 		m_GoldChangeForTurnTimes100.push_back(iGoldChange);
 	}
 
+#if !defined(NO_ACHIEVEMENTS)
 	if (m_pPlayer->isHuman() && !GC.getGame().isGameMultiPlayer())
 	{
 		int iGoldDelta = (GetGoldFromCitiesTimes100(false) - GetGoldFromCitiesTimes100(true)) / 100;
@@ -113,6 +114,7 @@ void CvTreasury::DoGold()
 			gDLL->UnlockAchievement(ACHIEVEMENT_XP2_32);
 		}
 	}
+#endif
 }
 
 /// Returns current balance in treasury
@@ -325,7 +327,11 @@ void CvTreasury::ChangeCityConnectionTradeRouteGoldChange(int iChange)
 }
 
 /// Returns the route-type between two cities
+#if defined(MOD_EVENTS_CITY_CONNECTIONS)
+bool CvTreasury::HasCityConnectionRouteBetweenCities(CvCity* pFirstCity, CvCity* pSecondCity) const
+#else
 bool CvTreasury::HasCityConnectionRouteBetweenCities(CvCity* pFirstCity, CvCity* pSecondCity, bool bBestRoute) const
+#endif
 {
 	CvCityConnections* pCityConnections = m_pPlayer->GetCityConnections();
 	FASSERT(pCityConnections, "m_pCityConnections is null");
@@ -379,11 +385,13 @@ bool CvTreasury::HasCityConnectionRouteBetweenCities(CvCity* pFirstCity, CvCity*
 	CvCityConnections::RouteInfo* pRouteInfo = pCityConnections->GetRouteInfo(iFirstCityIndex, iSecondCityIndex);
 	if(pRouteInfo)
 	{
+#if !defined(MOD_EVENTS_CITY_CONNECTIONS)
 		if(bBestRoute)
 		{
 			return pRouteInfo->m_cRouteState & CvCityConnections::HAS_BEST_ROUTE;
 		}
 		else
+#endif
 		{
 			return pRouteInfo->m_cRouteState & CvCityConnections::HAS_ANY_ROUTE;
 		}
@@ -418,6 +426,9 @@ int CvTreasury::GetGoldPerTurnFromReligion() const
 {
 	int iGoldFromReligion = 0;
 
+#if defined(MOD_API_UNIFIED_YIELDS)
+	iGoldFromReligion += m_pPlayer->GetYieldPerTurnFromReligion(YIELD_GOLD);
+#else
 	CvGameReligions* pReligions = GC.getGame().GetGameReligions();
 
 	// Founder beliefs
@@ -437,6 +448,7 @@ int CvTreasury::GetGoldPerTurnFromReligion() const
 			}
 		}
 	}
+#endif
 
 	return iGoldFromReligion;
 }
@@ -1005,6 +1017,7 @@ void CvTreasury::Read(FDataStream& kStream)
 	uint uiVersion;
 
 	kStream >> uiVersion;
+	MOD_SERIALIZE_INIT_READ(kStream);
 
 	kStream >> m_iGold;
 	kStream >> m_iGoldPerTurnFromDiplomacy;
@@ -1026,6 +1039,7 @@ void CvTreasury::Write(FDataStream& kStream)
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	kStream << m_iGold;
 	kStream << m_iGoldPerTurnFromDiplomacy;

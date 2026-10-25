@@ -44,6 +44,9 @@ class CvBuilderTaskingAI;
 class CvDangerPlots;
 class CvCityConnections;
 class CvNotifications;
+#if defined(MOD_API_PLAYER_LOGS)
+class CvEventLog;
+#endif
 class CvTreasury;
 class CvPlayerTraits;
 class CvGameInitialItemsOverrides;
@@ -84,13 +87,35 @@ public:
 	void addFreeUnitAI(UnitAITypes eUnitAI, int iCount);
 	CvPlot* addFreeUnit(UnitTypes eUnit, UnitAITypes eUnitAI = NO_UNITAI);
 
+#if defined(MOD_API_EXTENSIONS)
+	CvCity* initCity(int iX, int iY, bool bBumpUnits = true, bool bInitialFounding = true, ReligionTypes eInitialReligion = NO_RELIGION, const char* szName = NULL);
+#else
 	CvCity* initCity(int iX, int iY, bool bBumpUnits = true, bool bInitialFounding = true);
+#endif
+#if defined(MOD_API_EXTENSIONS)
+#if defined(MOD_GLOBAL_VENICE_KEEPS_RESOURCES) || defined(MOD_GLOBAL_CS_MARRIAGE_KEEPS_RESOURCES)
+	CvCity* acquireCity(CvCity* pCity, bool bConquest, bool bGift, bool bKeepResources = false);
+#else
+	CvCity* acquireCity(CvCity* pCity, bool bConquest, bool bGift);
+#endif
+#else
+#if defined(MOD_GLOBAL_VENICE_KEEPS_RESOURCES) || defined(MOD_GLOBAL_CS_MARRIAGE_KEEPS_RESOURCES)
+	void acquireCity(CvCity* pCity, bool bConquest, bool bGift, bool bKeepResources = false);
+#else
 	void acquireCity(CvCity* pCity, bool bConquest, bool bGift);
+#endif
+#endif
 	void killCities();
 	CvString getNewCityName() const;
 	CvString GetBorrowedCityName(CivilizationTypes eCivToBorrowFrom) const;
 	void getCivilizationCityName(CvString& szBuffer, CivilizationTypes eCivilization) const;
 	bool isCityNameValid(CvString& szName, bool bTestDestroyed = true) const;
+
+#if defined(MOD_GLOBAL_CITY_WORKING)
+	int getBuyPlotDistance() const;
+	int getWorkPlotDistance() const;
+	int GetNumWorkablePlots() const;
+#endif
 
 	void DoLiberatePlayer(PlayerTypes ePlayer, int iOldCityID);
 	bool CanLiberatePlayer(PlayerTypes ePlayer);
@@ -101,6 +126,13 @@ public:
 
 	void disbandUnit(bool bAnnounce);
 	void killUnits();
+
+#if defined(MOD_API_EXTENSIONS) || defined(MOD_BUGFIX_UNITCLASS_NOT_UNIT)
+	UnitTypes GetSpecificUnitType(const char* szUnitClass, bool hideAssert = false);
+#endif
+#if defined(MOD_API_EXTENSIONS) || defined(MOD_BUGFIX_BUILDINGCLASS_NOT_BUILDING)
+	BuildingTypes GetSpecificBuildingType(const char* szBuildingClass, bool hideAssert = false);
+#endif
 
 	CvPlot *GetGreatAdmiralSpawnPlot (CvUnit *pUnit);
 
@@ -206,6 +238,9 @@ public:
 	bool IsCityConnectedToCity(CvCity* pCity1, CvCity* pCity2, RouteTypes eRestrictRouteType = NO_ROUTE, bool bIgnoreHarbors = false);
 	bool IsCapitalConnectedToPlayer(PlayerTypes ePlayer, RouteTypes eRestrictRouteType = NO_ROUTE);
 	bool IsCapitalConnectedToCity(CvCity* pCity, RouteTypes eRestrictRouteType = NO_ROUTE);
+#if defined(MOD_API_EXTENSIONS)
+	bool IsPlotConnectedToPlot(CvPlot* pFromPlot, CvPlot* pToPlot, RouteTypes eRestrictRoute = NO_ROUTE, bool bIgnoreHarbors = false);
+#endif
 
 	void findNewCapital();
 
@@ -220,7 +255,12 @@ public:
 
 	void AwardFreeBuildings(CvCity* pCity); // slewis - broken out so that Venice can get free buildings when they purchase something
 	bool canFound(int iX, int iY, bool bTestVisible = false) const;
+
+#if defined(MOD_GLOBAL_RELIGIOUS_SETTLERS)
+	void found(int iX, int iY, ReligionTypes eReligion = NO_RELIGION);
+#else
 	void found(int iX, int iY);
+#endif
 
 	bool canTrain(UnitTypes eUnit, bool bContinue = false, bool bTestVisible = false, bool bIgnoreCost = false, bool bIgnoreUniqueUnitStatus = false, CvString* toolTipSink = NULL) const;
 	bool canConstruct(BuildingTypes eBuilding, bool bContinue = false, bool bTestVisible = false, bool bIgnoreCost = false, CvString* toolTipSink = NULL) const;
@@ -235,6 +275,10 @@ public:
 	int getProductionNeeded(BuildingTypes eBuilding) const;
 	int getProductionNeeded(ProjectTypes eProject) const;
 	int getProductionNeeded(SpecialistTypes eSpecialist) const;
+
+#if defined(MOD_PROCESS_STOCKPILE)
+	int getMaxStockpile() const;
+#endif
 
 	int getProductionModifier(CvString* toolTipSink = NULL) const;
 	int getProductionModifier(UnitTypes eUnit, CvString* toolTipSink = NULL) const;
@@ -285,14 +329,24 @@ public:
 
 	int specialistYield(SpecialistTypes eSpecialist, YieldTypes eYield) const;
 
+#if defined(MOD_BUGFIX_MINOR)
+	int GetCityYieldChangeTimes100(YieldTypes eYield) const;
+	void ChangeCityYieldChangeTimes100(YieldTypes eYield, int iChange);
+#else
 	int GetCityYieldChange(YieldTypes eYield) const;
 	void ChangeCityYieldChange(YieldTypes eYield, int iChange);
+#endif
 
 	int GetCoastalCityYieldChange(YieldTypes eYield) const;
 	void ChangeCoastalCityYieldChange(YieldTypes eYield, int iChange);
 
+#if defined(MOD_BUGFIX_MINOR)
+	int GetCapitalYieldChangeTimes100(YieldTypes eYield) const;
+	void ChangeCapitalYieldChangeTimes100(YieldTypes eYield, int iChange);
+#else
 	int GetCapitalYieldChange(YieldTypes eYield) const;
 	void ChangeCapitalYieldChange(YieldTypes eYield, int iChange);
+#endif
 
 	int GetCapitalYieldPerPopChange(YieldTypes eYield) const;
 	void ChangeCapitalYieldPerPopChange(YieldTypes eYield, int iChange);
@@ -376,12 +430,34 @@ public:
 	int GetNumCitiesFreeFoodBuilding() const;
 	void ChangeNumCitiesFreeFoodBuilding(int iChange);
 
+#if defined(MOD_API_UNIFIED_YIELDS)
+	void DoYieldsFromKill(CvUnit* pAttackingUnit, CvUnit* pDefendingUnit, int iX, int iY, int iExistingDelay);
+#if defined(MOD_API_EXTENSIONS)
+	void DoYieldBonusFromKill(YieldTypes eYield, CvUnit* pAttackingUnit, CvUnit* pKilledUnit, UnitTypes eKilledUnitType, int iX, int iY, bool bWasBarbarian, int &iNumBonuses);
+#else
+	void DoYieldBonusFromKill(YieldTypes eYield, CvUnit* pAttackingUnit, UnitTypes eKilledUnitType, int iX, int iY, bool bWasBarbarian, int &iNumBonuses);
+#endif
+#else
 	void DoYieldsFromKill(UnitTypes eAttackingUnitType, UnitTypes eKilledUnitType, int iX, int iY, bool bWasBarbarian, int iExistingDelay);
+#if defined(MOD_API_EXTENSIONS)
+	void DoYieldBonusFromKill(YieldTypes eYield, UnitTypes eAttackingUnitType, CvUnit* pKilledUnit, UnitTypes eKilledUnitType, int iX, int iY, bool bWasBarbarian, int &iNumBonuses);
+#else
 	void DoYieldBonusFromKill(YieldTypes eYield, UnitTypes eAttackingUnitType, UnitTypes eKilledUnitType, int iX, int iY, bool bWasBarbarian, int &iNumBonuses);
+#endif
+#endif
+#if defined(MOD_API_EXTENSIONS)
+	void DoUnresearchedTechBonusFromKill(CvUnit* pKilledUnit, UnitTypes eKilledUnitType, int iX, int iY, int &iNumBonuses);
+#else
 	void DoUnresearchedTechBonusFromKill(UnitTypes eKilledUnitType, int iX, int iY, int &iNumBonuses);
+#endif
 	void ReportYieldFromKill(YieldTypes eYield, int iValue, int iX, int iY, int iDelay);
 
 	void DoTechFromCityConquer(CvCity* pConqueredCity);
+
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldPerTurnFromReligion(YieldTypes eYield) const;
+	int GetYieldPerTurnFromTraits(YieldTypes eYield) const;
+#endif
 
 	// Faith
 	int GetTotalFaithPerTurn() const;
@@ -499,6 +575,11 @@ public:
 	void ChangeStartingSpyRank(int iChange);
 	// END Espionage
 
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int GetConversionModifier() const;
+	void ChangeConversionModifier(int iChange);
+#endif
+
 	int GetExtraLeagueVotes() const;
 	void ChangeExtraLeagueVotes(int iChange);
 
@@ -518,7 +599,14 @@ public:
 	void SetAlwaysSeeBarbCampsCount(int iValue);
 	void ChangeAlwaysSeeBarbCampsCount(int iChange);
 
+#if defined(MOD_API_EXTENSIONS)
+	bool grantPolicy(PolicyTypes iPolicy, bool bFree=false);
+	bool revokePolicy(PolicyTypes iPolicy);
+	bool swapPolicy(PolicyTypes iNewPolicy, PolicyTypes iOldPolicy);
+	void setHasPolicy(PolicyTypes eIndex, bool bNewValue, bool bFree=false);
+#else
 	void setHasPolicy(PolicyTypes eIndex, bool bNewValue);
+#endif
 	int getNextPolicyCost() const;
 	void DoUpdateNextPolicyCost();
 	bool canAdoptPolicy(PolicyTypes ePolicy) const;
@@ -591,9 +679,37 @@ public:
 	void changeGoldenAgeModifier(int iChange);
 
 	// Great People Stuff
+#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+	void createGreatGeneral(UnitTypes eGreatPersonUnit, int iX, int iY, bool bIsFree);
+	void createGreatAdmiral(UnitTypes eGreatPersonUnit, int iX, int iY, bool bIsFree);
+#else
 	void createGreatGeneral(UnitTypes eGreatPersonUnit, int iX, int iY);
 	void createGreatAdmiral(UnitTypes eGreatPersonUnit, int iX, int iY);
+#endif
 
+#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+	int getGreatPeopleCreated(bool bExcludeFree) const;
+	void incrementGreatPeopleCreated(bool bIsFree);
+
+	int getGreatGeneralsCreated(bool bExcludeFree) const;
+	void incrementGreatGeneralsCreated(bool bIsFree);
+	int getGreatAdmiralsCreated(bool bExcludeFree) const;
+	void incrementGreatAdmiralsCreated(bool bIsFree);
+#if defined(MOD_GLOBAL_SEPARATE_GP_COUNTERS)
+	int getGreatMerchantsCreated(bool bExcludeFree) const;
+	void incrementGreatMerchantsCreated(bool bIsFree);
+	int getGreatScientistsCreated(bool bExcludeFree) const;
+	void incrementGreatScientistsCreated(bool bIsFree);
+	int getGreatEngineersCreated(bool bExcludeFree) const;
+	void incrementGreatEngineersCreated(bool bIsFree);
+#endif
+	int getGreatWritersCreated(bool bExcludeFree) const;
+	void incrementGreatWritersCreated(bool bIsFree);
+	int getGreatArtistsCreated(bool bExcludeFree) const;
+	void incrementGreatArtistsCreated(bool bIsFree);
+	int getGreatMusiciansCreated(bool bExcludeFree) const;
+	void incrementGreatMusiciansCreated(bool bIsFree);
+#else
 	int getGreatPeopleCreated() const;
 	void incrementGreatPeopleCreated();
 
@@ -601,12 +717,21 @@ public:
 	void incrementGreatGeneralsCreated();
 	int getGreatAdmiralsCreated() const;
 	void incrementGreatAdmiralsCreated();
+#if defined(MOD_GLOBAL_SEPARATE_GP_COUNTERS)
+	int getGreatMerchantsCreated() const;
+	void incrementGreatMerchantsCreated();
+	int getGreatScientistsCreated() const;
+	void incrementGreatScientistsCreated();
+	int getGreatEngineersCreated() const;
+	void incrementGreatEngineersCreated();
+#endif
 	int getGreatWritersCreated() const;
 	void incrementGreatWritersCreated();
 	int getGreatArtistsCreated() const;
 	void incrementGreatArtistsCreated();
 	int getGreatMusiciansCreated() const;
 	void incrementGreatMusiciansCreated();
+#endif
 
 	int getMerchantsFromFaith() const;
 	void incrementMerchantsFromFaith();
@@ -659,10 +784,18 @@ public:
 	void SetGreatGeneralCombatBonus(int iValue);
 
 	// Unit Killed in Combat
+#if defined(MOD_API_EXTENSIONS)
+	void DoUnitKilledCombat(CvUnit* pKillingUnit, PlayerTypes eKilledPlayer, UnitTypes eUnitType);
+#else
 	void DoUnitKilledCombat(PlayerTypes eKilledPlayer, UnitTypes eUnit);
+#endif
 
 	// Great People Expenditure
+#if defined(MOD_EVENTS_GREAT_PEOPLE)
+	void DoGreatPersonExpended(UnitTypes eGreatPersonUnit, CvUnit* pGreatPersonUnit);
+#else
 	void DoGreatPersonExpended(UnitTypes eGreatPersonUnit);
+#endif
 	int GetGreatPersonExpendGold() const;
 	void ChangeGreatPersonExpendGold(int iChange);
 
@@ -673,7 +806,11 @@ public:
 	void SetGreatPeopleSpawnCounter(int iValue);
 	void ChangeGreatPeopleSpawnCounter(int iChange);
 
+#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+	void DoSpawnGreatPerson(PlayerTypes eMinor, bool bIsFree);
+#else
 	void DoSpawnGreatPerson(PlayerTypes eMinor);
+#endif
 	void DoGreatPeopleSpawnTurn();
 	CvCity* GetGreatPersonSpawnCity(UnitTypes eUnit);
 
@@ -889,6 +1026,9 @@ public:
 
 	bool IsHasLostCapital() const;
 	void SetHasLostCapital(bool bValue, PlayerTypes eConqueror);
+#if defined(MOD_GLOBAL_NO_CONQUERED_SPACESHIPS)
+	void disassembleSpaceship(CvPlot* pPlot);
+#endif
 	PlayerTypes GetCapitalConqueror() const;
 
 	int getCitiesLost() const;
@@ -901,13 +1041,52 @@ public:
 	int calculateEconomicMight() const;
 	int calculateProductionMight() const;
 
+#if defined(MOD_UNITS_XP_TIMES_100)
+	int getCombatExperienceTimes100() const;
+#else
 	int getCombatExperience() const;
+#endif
+#if defined(MOD_GLOBAL_LOCAL_GENERALS)
+#if defined(MOD_UNITS_XP_TIMES_100)
+	void setCombatExperienceTimes100(int iExperienceTimes100, CvUnit* pFromUnit = NULL);
+	void changeCombatExperienceTimes100(int iChangeTimes100, CvUnit* pFromUnit = NULL);
+#else
+	void setCombatExperience(int iExperience, CvUnit* pFromUnit = NULL);
+	void changeCombatExperience(int iChange, CvUnit* pFromUnit = NULL);
+#endif
+#else
+#if defined(MOD_UNITS_XP_TIMES_100)
+	void setCombatExperienceTimes100(int iExperienceTimes100);
+	void changeCombatExperienceTimes100(int iChangeTimes100);
+#else
 	void setCombatExperience(int iExperience);
 	void changeCombatExperience(int iChange);
+#endif
+#endif
+#if defined(MOD_UNITS_XP_TIMES_100)
+	int getLifetimeCombatExperienceTimes100() const;
+	int getNavalCombatExperienceTimes100() const;
+#else
 	int getLifetimeCombatExperience() const;
 	int getNavalCombatExperience() const;
+#endif
+#if defined(MOD_GLOBAL_LOCAL_GENERALS)
+#if defined(MOD_UNITS_XP_TIMES_100)
+	void setNavalCombatExperienceTimes100(int iExperienceTimes100, CvUnit* pFromUnit = NULL);
+	void changeNavalCombatExperienceTimes100(int iChangeTimes100, CvUnit* pFromUnit = NULL);
+#else
+	void setNavalCombatExperience(int iExperience, CvUnit* pFromUnit = NULL);
+	void changeNavalCombatExperience(int iChange, CvUnit* pFromUnit = NULL);
+#endif
+#else
+#if defined(MOD_UNITS_XP_TIMES_100)
+	void setNavalCombatExperienceTimes100(int iExperienceTimes100);
+	void changeNavalCombatExperienceTimes100(int iChangeTimes100);
+#else
 	void setNavalCombatExperience(int iExperience);
 	void changeNavalCombatExperience(int iChange);
+#endif
+#endif
 
 	int getBorderObstacleCount() const;
 	bool isBorderObstacle() const;
@@ -923,6 +1102,9 @@ public:
 	uint getTotalTimePlayed() const;
 
 	bool isMinorCiv() const;
+#if defined(MOD_API_EXTENSIONS)
+	bool isMajorCiv() const;
+#endif
 	bool IsHasBetrayedMinorCiv() const;
 	void SetHasBetrayedMinorCiv(bool bValue);
 
@@ -993,6 +1175,9 @@ public:
 
 	CvLeaderHeadInfo& getLeaderInfo() const;
 	LeaderHeadTypes getLeaderType() const;
+#if defined(MOD_API_EXTENSIONS)
+	void setLeaderType(LeaderHeadTypes eNewLeader);
+#endif
 
 	LeaderHeadTypes getPersonalityType() const;
 	void setPersonalityType(LeaderHeadTypes eNewValue);
@@ -1173,6 +1358,58 @@ public:
 	int getSpecialistExtraYield(SpecialistTypes eIndex1, YieldTypes eIndex2) const;
 	void changeSpecialistExtraYield(SpecialistTypes eIndex1, YieldTypes eIndex2, int iChange);
 
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int getPlotYieldChange(PlotTypes eIndex1, YieldTypes eIndex2) const;
+	void changePlotYieldChange(PlotTypes eIndex1, YieldTypes eIndex2, int iChange);
+#endif
+
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int getFeatureYieldChange(FeatureTypes eIndex1, YieldTypes eIndex2) const;
+	void changeFeatureYieldChange(FeatureTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getCityYieldFromUnimprovedFeature(FeatureTypes eIndex1, YieldTypes eIndex2) const;
+	void changeCityYieldFromUnimprovedFeature(FeatureTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getUnimprovedFeatureYieldChange(FeatureTypes eIndex1, YieldTypes eIndex2) const;
+	void changeUnimprovedFeatureYieldChange(FeatureTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getResourceYieldChange(ResourceTypes eIndex1, YieldTypes eIndex2) const;
+	void changeResourceYieldChange(ResourceTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getTerrainYieldChange(TerrainTypes eIndex1, YieldTypes eIndex2) const;
+	void changeTerrainYieldChange(TerrainTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getTradeRouteYieldChange(DomainTypes eIndex1, YieldTypes eIndex2) const;
+	void changeTradeRouteYieldChange(DomainTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getSpecialistYieldChange(SpecialistTypes eIndex1, YieldTypes eIndex2) const;
+	void changeSpecialistYieldChange(SpecialistTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getGreatPersonExpendedYield(GreatPersonTypes eIndex1, YieldTypes eIndex2) const;
+	void changeGreatPersonExpendedYield(GreatPersonTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getGoldenAgeGreatPersonRateModifier(GreatPersonTypes eIndex1) const;
+	void changeGoldenAgeGreatPersonRateModifier(GreatPersonTypes eIndex1, int iChange);
+
+	int GetYieldFromKills(YieldTypes eYield) const;
+	void changeYieldFromKills(YieldTypes eYield, int iChange);
+
+	int GetYieldFromBarbarianKills(YieldTypes eYield) const;
+	void changeYieldFromBarbarianKills(YieldTypes eYield, int iChange);
+
+	int GetYieldChangeTradeRoute(YieldTypes eYield) const;
+	void ChangeYieldChangeTradeRoute(YieldTypes eYield, int iChange);
+
+	int GetYieldChangesNaturalWonder(YieldTypes eYield) const;
+	void ChangeYieldChangesNaturalWonder(YieldTypes eYield, int iChange);
+
+	int GetYieldChangeWorldWonder(YieldTypes eYield) const;
+	void ChangeYieldChangeWorldWonder(YieldTypes eYield, int iChange);
+
+	int getBuildingClassYieldChange(BuildingClassTypes eIndex1, YieldTypes eIndex2) const;
+	void changeBuildingClassYieldChange(BuildingClassTypes eIndex1, YieldTypes eIndex2, int iChange);
+#endif
+
 	int getImprovementYieldChange(ImprovementTypes eIndex1, YieldTypes eIndex2) const;
 	void changeImprovementYieldChange(ImprovementTypes eIndex1, YieldTypes eIndex2, int iChange);
 
@@ -1301,6 +1538,15 @@ public:
 
 	int GetPlotGoldCostMod() const;
 	void ChangePlotGoldCostMod(int iChange);
+#if defined(MOD_TRAITS_CITY_WORKING) || defined(MOD_BUILDINGS_CITY_WORKING) || defined(MOD_POLICIES_CITY_WORKING) || defined(MOD_TECHS_CITY_WORKING)
+	int GetCityWorkingChange() const;
+	void ChangeCityWorkingChange(int iChange);
+#endif
+
+#if defined(MOD_TRAITS_CITY_AUTOMATON_WORKERS) || defined(MOD_BUILDINGS_CITY_AUTOMATON_WORKERS) || defined(MOD_POLICIES_CITY_AUTOMATON_WORKERS) || defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	int GetCityAutomatonWorkersChange() const;
+	void ChangeCityAutomatonWorkersChange(int iChange);
+#endif
 
 	int GetPlotCultureCostModifier() const;
 	void ChangePlotCultureCostModifier(int iChange);
@@ -1361,6 +1607,9 @@ public:
 	void SetHolyCity(int iCityID);
 
 	PromotionTypes GetEmbarkationPromotion() const;
+#if defined(MOD_PROMOTIONS_DEEP_WATER_EMBARKATION)
+	PromotionTypes GetDeepWaterEmbarkationPromotion() const;
+#endif
 
 	void DoAnnounceReligionAdoption();
 	// End New Religion Stuff
@@ -1446,6 +1695,17 @@ public:
 	CvTradeAI* GetTradeAI() const;
 	CvLeagueAI* GetLeagueAI() const;
 	CvNotifications* GetNotifications() const;
+#if defined(MOD_API_EXTENSIONS)
+	int AddNotification(NotificationTypes eNotificationType, const char* sMessage, const char* sSummary, CvPlot* pPlot = NULL, int iGameDataIndex = -1, int iExtraGameData = -1);
+	int AddNotification(NotificationTypes eNotificationType, const char* sMessage, const char* sSummary, int iGameDataIndex, int iExtraGameData = -1);
+#endif
+#if defined(MOD_API_PLAYER_LOGS)
+	CvEventLog* GetDiplomacyLog() const;
+	bool AddDiplomacyEvent(const char* sMessage, PlayerTypes eFromPlayer, int iData1 = -1, int iData2 = -1, int iData3 = -1, int iData4 = -1);
+
+	CvEventLog* GetMilitaryLog() const;
+	bool AddMilitaryEvent(const char* sMessage, CvPlot* pPlot, PlayerTypes eOtherPlayer, int iData1 = -1, int iData2 = -1, int iData3 = -1, int iData4 = -1);
+#endif
 	CvDiplomacyRequests* GetDiplomacyRequests() const;
 	bool HasActiveDiplomacyRequests() const;
 
@@ -1462,6 +1722,64 @@ public:
 	{
 		return m_strEmbarkedGraphicOverride;
 	};
+
+#if defined(MOD_API_EXTENSIONS)
+	bool HasBelief(BeliefTypes iBeliefType) const;
+	bool HasBuilding(BuildingTypes iBuildingType);
+	bool HasBuildingClass(BuildingClassTypes iBuildingClassType);
+	bool HasAnyWonder();
+	bool HasWonder(BuildingTypes iBuildingType);
+	bool IsCivilization(CivilizationTypes iCivilizationType) const;
+	bool IsInEra(EraTypes iEraType) const;
+	bool HasReachedEra(EraTypes iEraType) const;
+	bool HasAnyNaturalWonder();
+	bool HasNaturalWonder(FeatureTypes iFeatureType);
+	bool HasPolicy(PolicyTypes iPolicyType) const;
+	bool HasTenet(PolicyTypes iPolicyType) const;
+	bool HasPolicyBranch(PolicyBranchTypes iPolicyBranchType) const;
+	bool HasIdeology(PolicyBranchTypes iPolicyBranchType) const;
+	bool HasProject(ProjectTypes iProjectType) const;
+	bool IsAtPeace() const;
+	bool IsAtPeaceAllMajors() const;
+	bool IsAtPeaceAllMinors() const;
+	bool IsAtPeaceWith(PlayerTypes iPlayer) const;
+	bool IsAtWar() const;
+	bool IsAtWarAnyMajor() const;
+	bool IsAtWarAnyMinor() const;
+	bool IsAtWarWith(PlayerTypes iPlayer) const;
+	bool HasPantheon() const;
+	bool HasAnyReligion() const;
+	bool HasReligion(ReligionTypes iReligionType) const;
+	bool HasEnhancedReligion() const;
+	bool IsConnectedTo(PlayerTypes iPlayer);
+	bool HasSpecialistSlot(SpecialistTypes iSpecialistType);
+	bool HasSpecialist(SpecialistTypes iSpecialistType);
+	bool HasTech(TechTypes iTechType) const;
+	bool HasAnyDomesticTradeRoute() const;
+	bool HasAnyInternationalTradeRoute() const;
+	bool HasAnyTradeRoute() const;
+	bool HasAnyTradeRouteWith(PlayerTypes iPlayer) const;
+	bool HasUnit(UnitTypes iUnitType);
+	bool HasUnitClass(UnitClassTypes iUnitClassType);
+
+	bool HasTrait(TraitTypes eTrait) const;
+	bool HasAnyHolyCity();
+	bool HasHolyCity(ReligionTypes eReligion);
+	bool HasCapturedHolyCity(ReligionTypes eReligion);
+	bool HasEmbassyWith(PlayerTypes eOtherPlayer) const;
+	void DoForceDefPact(PlayerTypes eOtherPlayer);
+
+	int CountAllFeature(FeatureTypes iFeatureType);
+	int CountAllWorkedFeature(FeatureTypes iFeatureType);
+	int CountAllImprovement(ImprovementTypes iImprovementType);
+	int CountAllWorkedImprovement(ImprovementTypes iImprovementType);
+	int CountAllPlotType(PlotTypes iPlotType);
+	int CountAllWorkedPlotType(PlotTypes iPlotType);
+	int CountAllResource(ResourceTypes iResourceType);
+	int CountAllWorkedResource(ResourceTypes iResourceType);
+	int CountAllTerrain(TerrainTypes iTerrainType);
+	int CountAllWorkedTerrain(TerrainTypes iTerrainType);
+#endif
 
 	// for serialization
 	virtual void Read(FDataStream& kStream);
@@ -1501,7 +1819,9 @@ public:
 	std::string debugDump(const FAutoVariableBase&) const;
 	std::string stackTraceRemark(const FAutoVariableBase&) const;
 
+#if !defined(NO_ACHIEVEMENTS)
 	CvPlayerAchievements& GetPlayerAchievements(){return m_kPlayerAchievements;}
+#endif
 
 	bool hasTurnTimerExpired();
 
@@ -1599,6 +1919,9 @@ protected:
 	int m_iHappinessPerXPolicies;
 	int m_iEspionageModifier;
 	int m_iSpyStartingRank;
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int m_iConversionModifier;
+#endif
 	int m_iExtraLeagueVotes;
 	FAutoVariable<int, CvPlayer> m_iAdvancedStartPoints;
 	FAutoVariable<int, CvPlayer> m_iAttackBonusTurns;
@@ -1611,9 +1934,27 @@ protected:
 	FAutoVariable<int, CvPlayer> m_iNumUnitGoldenAges;
 	FAutoVariable<int, CvPlayer> m_iStrikeTurns;
 	FAutoVariable<int, CvPlayer> m_iGoldenAgeModifier;
+#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+	int m_iFreeGreatPeopleCreated;
+	int m_iFreeGreatGeneralsCreated;
+	int m_iFreeGreatAdmiralsCreated;
+#if defined(MOD_GLOBAL_SEPARATE_GP_COUNTERS)
+	int m_iFreeGreatMerchantsCreated;
+	int m_iFreeGreatScientistsCreated;
+	int m_iFreeGreatEngineersCreated;
+#endif
+	int m_iFreeGreatWritersCreated;
+	int m_iFreeGreatArtistsCreated;
+	int m_iFreeGreatMusiciansCreated;
+#endif
 	FAutoVariable<int, CvPlayer> m_iGreatPeopleCreated;
 	FAutoVariable<int, CvPlayer> m_iGreatGeneralsCreated;
 	int m_iGreatAdmiralsCreated;
+#if defined(MOD_GLOBAL_SEPARATE_GP_COUNTERS)
+	int m_iGreatMerchantsCreated;
+	int m_iGreatScientistsCreated;
+	int m_iGreatEngineersCreated;
+#endif
 	int m_iGreatWritersCreated;
 	int m_iGreatArtistsCreated;
 	int m_iGreatMusiciansCreated;
@@ -1726,6 +2067,11 @@ protected:
 	FAutoVariable<int, CvPlayer> m_iCombatExperience;
 	int m_iLifetimeCombatExperience;
 	int m_iNavalCombatExperience;
+#if defined(MOD_UNITS_XP_TIMES_100)
+	int m_iCombatExperienceTimes100;
+	int m_iLifetimeCombatExperienceTimes100;
+	int m_iNavalCombatExperienceTimes100;
+#endif
 	int m_iBorderObstacleCount;
 	FAutoVariable<int, CvPlayer> m_iPopRushHurryCount;
 	FAutoVariable<int, CvPlayer> m_iTotalImprovementsBuilt;
@@ -1738,6 +2084,12 @@ protected:
 	FAutoVariable<int, CvPlayer> m_iCapitalGrowthMod;
 	FAutoVariable<int, CvPlayer> m_iNumPlotsBought;
 	FAutoVariable<int, CvPlayer> m_iPlotGoldCostMod;
+#if defined(MOD_TRAITS_CITY_WORKING) || defined(MOD_BUILDINGS_CITY_WORKING) || defined(MOD_POLICIES_CITY_WORKING) || defined(MOD_TECHS_CITY_WORKING)
+	int m_iCityWorkingChange;
+#endif
+#if defined(MOD_TRAITS_CITY_AUTOMATON_WORKERS) || defined(MOD_BUILDINGS_CITY_AUTOMATON_WORKERS) || defined(MOD_POLICIES_CITY_AUTOMATON_WORKERS) || defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	int m_iCityAutomatonWorkersChange;
+#endif
 	FAutoVariable<int, CvPlayer> m_iPlotCultureCostModifier;
 	int m_iPlotCultureExponentModifier;
 	int m_iNumCitiesPolicyCostDiscount;
@@ -1843,6 +2195,26 @@ protected:
 	FAutoVariable<std::vector<bool>, CvPlayer> m_pabGetsScienceFromPlayer;
 
 	FAutoVariable< std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > >, CvPlayer> m_ppaaiSpecialistExtraYield;
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiPlotYieldChange;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS)
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiFeatureYieldChange;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiResourceYieldChange;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiTerrainYieldChange;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiTradeRouteYieldChange;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiSpecialistYieldChange;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiGreatPersonExpendedYield;
+	std::vector<int> m_piGoldenAgeGreatPersonRateModifier;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiUnimprovedFeatureYieldChange;
+	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiCityYieldFromUnimprovedFeature;
+	std::vector<int> m_piYieldFromKills;
+	std::vector<int> m_piYieldFromBarbarianKills;
+	std::vector<int> m_piYieldChangeTradeRoute;
+	std::vector<int> m_piYieldChangesNaturalWonder;
+	std::vector<int> m_piYieldChangeWorldWonder;
+	FAutoVariable< std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > >, CvPlayer> m_ppiBuildingClassYieldChange;
+#endif
 	FAutoVariable< std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > >, CvPlayer> m_ppaaiImprovementYieldChange;
 
 	// Obsolete: only used to read old saves
@@ -1940,6 +2312,10 @@ protected:
 	CvPlayerCulture* m_pCulture;
 
 	CvNotifications* m_pNotifications;
+#if defined(MOD_API_PLAYER_LOGS)
+	CvEventLog* m_pDiplomacyLog;
+	CvEventLog* m_pMilitaryLog;
+#endif
 	CvDiplomacyRequests* m_pDiplomacyRequests;
 
 	CvPlotsVector m_aiPlots;

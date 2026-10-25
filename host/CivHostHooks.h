@@ -7,6 +7,7 @@ struct CivHookEntry
 	void* fn;
 	int plugin;
 	CivHookEntry* next;
+	bool loggedSkippedOriginal;
 };
 
 struct CivHookPoint
@@ -30,11 +31,35 @@ extern CivHookPoint g_CivHookPoints[];
 extern unsigned char g_CivHookActive[];
 extern const int g_CivHookPointCount;
 extern const char* const g_CivHookPointNames[];
+// Zero for a number whose function is gone or changed shape, which a plugin built against an older SDK may still ask for.
+extern const unsigned char g_CivHookLive[];
+
+// A hand-placed hook keeps its plugins in the before list, in load order.
+extern CivHookPoint g_CivHandHookPoints[];
+extern const int g_CivHandHookCount;
+const char* CivHandHookName(int handHook);
+
+// The runtime numbers hand-placed hooks after the generated hook points.
+inline int CivHandHookId(int handHook)
+{
+	return g_CivHookPointCount + handHook;
+}
+
+// Generated from the engine source: the hook points whose functions call a hand-placed hook.
+struct CivHandHookSite
+{
+	int handHook;
+	int hookPoint;
+};
+extern const CivHandHookSite g_CivHandHookSites[];
+extern const int g_CivHandHookSiteCount;
 
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 // False when there is no replacement or it faulted; the wrapper then runs the original.
 bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
+// The original a replacement receives calls this first.
+void CivHookOriginalCalled();
 
 template<class T> struct CivHookArg { typedef T* Ptr; typedef T Type; };
 template<class T> struct CivHookArg<T&> { typedef T* Ptr; typedef T& Type; };

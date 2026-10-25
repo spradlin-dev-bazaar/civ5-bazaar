@@ -52,9 +52,15 @@ public:
 	void updateYield();
 
 	bool canChangeWarPeace(TeamTypes eTeam) const;
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	bool canDeclareWar(TeamTypes eTeam, PlayerTypes eOriginatingPlayer) const;
+	void declareWar(TeamTypes eTeam, bool bDefensivePact, PlayerTypes eOriginatingPlayer);
+	void makePeace(TeamTypes eTeam, bool bBumpUnits, bool bSuppressNotification, PlayerTypes eOriginatingPlayer);
+#else
 	bool canDeclareWar(TeamTypes eTeam) const;
 	void declareWar(TeamTypes eTeam, bool bDefensivePact = false);
 	void makePeace(TeamTypes eTeam, bool bBumpUnits = true, bool bSuppressNotification = false);
+#endif
 
 	int GetTurnMadePeaceTreatyWithTeam(TeamTypes eTeam) const;
 	void SetTurnMadePeaceTreatyWithTeam(TeamTypes eTeam, int iNewValue);
@@ -96,6 +102,9 @@ public:
 	bool isObserver() const;
 	bool isBarbarian() const;
 	bool isMinorCiv() const;
+#if defined(MOD_API_EXTENSIONS)
+	bool isMajorCiv() const;
+#endif
 
 	int GetNumMinorCivsAttacked() const;
 	void SetNumMinorCivsAttacked(int iValue);
@@ -195,6 +204,18 @@ public:
 	bool isPermanentAllianceTrading() const;
 	void changePermanentAllianceTradingCount(int iChange);
 
+#if defined(MOD_TECHS_CITY_WORKING)
+	int GetCityWorkingChange() const;
+	bool isCityWorkingChange() const;
+	void changeCityWorkingChange(int iChange);
+#endif
+
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	int GetCityAutomatonWorkersChange() const;
+	bool isCityAutomatonWorkersChange() const;
+	void changeCityAutomatonWorkersChange(int iChange);
+#endif
+
 	int getBridgeBuildingCount() const;
 	bool isBridgeBuilding() const;
 	void changeBridgeBuildingCount(int iChange);
@@ -248,8 +269,17 @@ public:
 	bool IsHasFoundPlayersTerritory(PlayerTypes ePlayer) const;
 	bool SetHasFoundPlayersTerritory(PlayerTypes ePlayer, bool bValue);
 
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	bool isAggressor(TeamTypes eIndex) const;
+	bool isPacifier(TeamTypes eIndex) const;
+#endif
+
 	bool isAtWar(TeamTypes eIndex) const;
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	void setAtWar(TeamTypes eIndex, bool bNewValue, bool bAggressorPacifier);
+#else
 	void setAtWar(TeamTypes eIndex, bool bNewValue);
+#endif
 	bool HasCommonEnemy(TeamTypes eOtherTeam) const;
 
 	int GetNumTurnsAtWar(TeamTypes eTeam) const;
@@ -272,6 +302,10 @@ public:
 	void CloseEmbassyAtTeam(TeamTypes eIndex);
 	bool HasEmbassyAtTeam(TeamTypes eIndex) const;
 	void SetHasEmbassyAtTeam(TeamTypes eIndex, bool bNewValue);
+
+#if defined(MOD_API_EXTENSIONS)
+	bool HasSpyAtTeam(TeamTypes eIndex) const;
+#endif
 
 	void EvacuateDiplomatsAtTeam(TeamTypes eIndex);
 
@@ -335,6 +369,14 @@ public:
 
 	void setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, bool bFirst, bool bAnnounce);
 	CvTeamTechs* GetTeamTechs() const;
+
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int getFeatureYieldChange(FeatureTypes eIndex1, YieldTypes eIndex2) const;
+	void changeFeatureYieldChange(FeatureTypes eIndex1, YieldTypes eIndex2, int iChange);
+
+	int getTerrainYieldChange(TerrainTypes eIndex1, YieldTypes eIndex2) const;
+	void changeTerrainYieldChange(TerrainTypes eIndex1, YieldTypes eIndex2, int iChange);
+#endif
 
 	int getImprovementYieldChange(ImprovementTypes eIndex1, YieldTypes eIndex2) const;
 	void changeImprovementYieldChange(ImprovementTypes eIndex1, YieldTypes eIndex2, int iChange);
@@ -426,6 +468,13 @@ protected:
 	int m_iResearchAgreementTradingAllowedCount;
 	int m_iTradeAgreementTradingAllowedCount;
 	int m_iPermanentAllianceTradingCount;
+#if defined(MOD_TECHS_CITY_WORKING)
+	int m_iCityWorkingChange;
+#endif
+#if defined(MOD_TECHS_CITY_AUTOMATON_WORKERS)
+	int m_iCityAutomatonWorkersChange;
+#endif
+
 	int m_iBridgeBuildingCount;
 	int m_iWaterWorkCount;
 	int m_iRiverTradeCount;
@@ -464,6 +513,9 @@ protected:
 	Firaxis::Array< bool, REALLY_MAX_PLAYERS > m_abHasFoundPlayersTerritory;
 	Firaxis::Array< bool, REALLY_MAX_TEAMS > m_abHasMet;
 	Firaxis::Array< bool, REALLY_MAX_TEAMS > m_abAtWar;
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	Firaxis::Array< bool, REALLY_MAX_TEAMS > m_abAggressorPacifier;
+#endif
 	Firaxis::Array< bool, REALLY_MAX_TEAMS > m_abPermanentWarPeace;
 	Firaxis::Array< bool, REALLY_MAX_TEAMS > m_abEmbassy;
 	Firaxis::Array< bool, REALLY_MAX_TEAMS > m_abOpenBorders;
@@ -488,10 +540,18 @@ protected:
 					 FAllocArrayType< int,
 	                 FAllocArrayType< int,
 	                 FAllocArrayType< int,
+#if defined(MOD_API_UNIFIED_YIELDS)
+	                 FAllocArray2DType< int,
+	                 FAllocArray2DType< int,
+#endif
 	                 FAllocArray2DType< int,
 	                 FAllocArray2DType< int,
 	                 FAllocArray2DType< int,
+#if defined(MOD_API_UNIFIED_YIELDS)
+	                 FAllocBase< 0, 0 > > > > > > > > > > > > > > > > > > > > CvTeamData;
+#else
 	                 FAllocBase< 0, 0 > > > > > > > > > > > > > > > > > > CvTeamData;
+#endif
 	CvTeamData m_BatchData;
 
 	int* m_aiForceTeamVoteEligibilityCount;
@@ -513,6 +573,11 @@ protected:
 	int* m_paiTerrainTradeCount;
 	int* m_aiVictoryCountdown;
 
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int** m_ppaaiFeatureYieldChange;
+	int** m_ppaaiTerrainYieldChange;
+#endif
+
 	int** m_ppaaiImprovementYieldChange;
 	int** m_ppaaiImprovementNoFreshWaterYieldChange;
 	int** m_ppaaiImprovementFreshWaterYieldChange;
@@ -533,8 +598,16 @@ protected:
 	void announceTechToPlayers(TechTypes eIndex, bool bPartial = false);
 
 	void DoNowAtWarOrPeace(TeamTypes eTeam, bool bWar);
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	void DoDeclareWar(PlayerTypes eOriginatingPlayer, bool bAggressor, TeamTypes eTeam, bool bDefensivePact, bool bMinorAllyPact = false);
+#else
 	void DoDeclareWar(TeamTypes eTeam, bool bDefensivePact, bool bMinorAllyPact = false);
+#endif
+#if defined(MOD_EVENTS_WAR_AND_PEACE)
+	void DoMakePeace(PlayerTypes eOriginatingPlayer, bool bPacifier, TeamTypes eTeam, bool bBumpUnits, bool bSuppressNotification = false);
+#else
 	void DoMakePeace(TeamTypes eTeam, bool bBumpUnits, bool bSuppressNotification = false);
+#endif
 };
 
 // helper for accessing static functions

@@ -11,6 +11,9 @@
 #define CV_DEAL_CLASSES_H
 
 #include "CvDiplomacyAIEnums.h"
+#if defined(MOD_AI_MP_DIPLOMACY)
+#include "CvWeightedVector.h"
+#endif
 
 enum TradeableItems
 {
@@ -161,6 +164,10 @@ public:
 
 	int GetGoldAvailable(PlayerTypes ePlayer, TradeableItems eItemToBeChanged);
 
+#if defined(MOD_AI_MP_DIPLOMACY)
+	bool AreAllTradeItemsValid();
+#endif
+
 	bool IsPossibleToTradeItem(PlayerTypes ePlayer, PlayerTypes eToPlayer, TradeableItems eItem, int iData1 = -1, int iData2 = -1, int iData3 = -1, bool bFlag1 = false, bool bCheckOtherPlayerValidity = true, bool bFinalizing = false);
 	int GetNumResource(PlayerTypes ePlayer, ResourceTypes eResource);
 
@@ -246,6 +253,13 @@ public:
 	void Init();
 
 	void AddProposedDeal(CvDeal kDeal);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	bool RemoveProposedDeal(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, CvDeal* pDealOut, bool latest);
+	bool FinalizeDeal(CvDeal kDeal, bool bAccepted);
+	bool FinalizeDeal(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, bool bAccepted, bool latest);
+	void FinalizeDealValidAndAccepted(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, CvDeal& kDeal, bool bAccepted, CvWeightedVector<TeamTypes, MAX_CIV_TEAMS, true>& veNowAtPeacePairs);
+	void FinalizeDealNotify(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, CvWeightedVector<TeamTypes, MAX_CIV_TEAMS, true>& veNowAtPeacePairs);
+#endif
 	bool FinalizeDeal(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, bool bAccepted);
 	void DoTurn();
 
@@ -256,7 +270,11 @@ public:
 
 	PlayerTypes HasMadeProposal(PlayerTypes eFromPlayer);
 	bool ProposedDealExists(PlayerTypes eFromPlayer, PlayerTypes eToPlayer);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	CvDeal* GetProposedDeal(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, bool latest = false);
+#else
 	CvDeal* GetProposedDeal(PlayerTypes eFromPlayer, PlayerTypes eToPlayer);
+#endif
 
 	CvDeal* GetCurrentDeal(PlayerTypes ePlayer, uint index);
 	CvDeal* GetHistoricDeal(PlayerTypes ePlayer, uint indx);
@@ -270,7 +288,11 @@ public:
 	void DoCancelDealsBetweenTeams(TeamTypes eTeam1, TeamTypes eTeam2);
 	void DoCancelDealsBetweenPlayers(PlayerTypes eFromPlayer, PlayerTypes eToPlayer);
 	void DoCancelAllDealsWithPlayer(PlayerTypes eCancelPlayer);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	void DoCancelAllProposedDealsWithPlayer(PlayerTypes eCancelPlayer, DiplomacyPlayerType eTargetPlayers);
+#else
 	void DoCancelAllProposedDealsWithPlayer(PlayerTypes eCancelPlayer);
+#endif
 	void DoEndTradedItem(CvTradedItem* pItem, PlayerTypes eToPlayer, bool bCancelled);
 
 	int GetTradeItemGoldCost(TradeableItems eItem, PlayerTypes ePlayer1, PlayerTypes ePlayer2) const;
@@ -284,6 +306,9 @@ public:
 
 protected:
 	void LogDealComplete(CvDeal* pDeal);
+#if defined(MOD_AI_MP_DIPLOMACY)
+	void LogDealFailed(CvDeal* pDeal, bool bNoRenew, bool bNotAccepted, bool bNotValid);
+#endif
 
 	CvDeal m_TempDeal;
 

@@ -16,6 +16,9 @@
 #include "CvGameCoreDLLPCH.h"
 #include <algorithm>
 #include "CvDLLDatabaseUtility.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvDllContext.h"
 #include "CvGlobals.h"
 #include "CvGrandStrategyAI.h"
@@ -179,7 +182,15 @@ bool CvDllDatabaseUtility::CacheGameDatabaseData()
 
 	if(bSuccess)
 		m_bGameDatabaseNeedsCaching = false;
+		
+#if defined(CUSTOM_MODS_H)
+	// Load up the CustomModOptions configuration
+	gCustomMods.preloadCache();
+#endif
 
+#if defined(CIV_HOST_API)
+	CivHostOnDatabaseReady();
+#endif
 	return bSuccess;
 }
 //------------------------------------------------------------------------------
@@ -260,10 +271,21 @@ bool CvDllDatabaseUtility::PerformDatabasePostProcessing()
 		InsertGameDefine(kInsertDefine, "BARBARIAN_PLAYER", BARBARIAN_PLAYER);
 		InsertGameDefine(kInsertDefine, "BARBARIAN_TEAM", BARBARIAN_TEAM);
 
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		InsertGameDefine(kInsertDefine, "NUM_CITY_PLOTS", AVG_CITY_PLOTS);
+		InsertGameDefine(kInsertDefine, "MIN_CITY_RADIUS", MIN_CITY_RADIUS);
+		InsertGameDefine(kInsertDefine, "MAX_CITY_RADIUS", MAX_CITY_RADIUS);
+#else
 		InsertGameDefine(kInsertDefine, "NUM_CITY_PLOTS", NUM_CITY_PLOTS);
+#endif
 		InsertGameDefine(kInsertDefine, "CITY_HOME_PLOT", CITY_HOME_PLOT);
+#if defined(MOD_GLOBAL_CITY_WORKING)
+		InsertGameDefine(kInsertDefine, "MAX_CITY_RADIUS", MAX_CITY_RADIUS);
+		InsertGameDefine(kInsertDefine, "MAX_CITY_DIAMETER", (2*MAX_CITY_RADIUS+1));
+#else
 		InsertGameDefine(kInsertDefine, "CITY_PLOTS_RADIUS", CITY_PLOTS_RADIUS);
 		InsertGameDefine(kInsertDefine, "CITY_PLOTS_DIAMETER", CITY_PLOTS_DIAMETER);
+#endif
 	}
 
 	db->EndTransaction();
@@ -320,6 +342,10 @@ bool CvDllDatabaseUtility::PrefetchGameData()
 	PrefetchCollection(GC.getVoteSourceInfo(), "VoteSources");
 	PrefetchCollection(GC.getUnitDomainInfo(), "Domains");
 
+#if defined(MOD_EVENTS_DIPLO_MODIFIERS)
+	PrefetchCollection(GC.getDiploModifierInfo(), "DiploModifiers");
+#endif
+
 	//Leaders
 	PrefetchCollection(GC.getLeaderHeadInfo(), "Leaders");
 
@@ -340,6 +366,16 @@ bool CvDllDatabaseUtility::PrefetchGameData()
 	PrefetchCollection(GC.getImprovementInfo(), "Improvements");
 	PrefetchCollection(GC.getResourceClassInfo(), "ResourceClasses");
 	PrefetchCollection(GC.getResourceInfo(), "Resources");
+#if defined(MOD_API_PLOT_YIELDS)
+	if (MOD_API_PLOT_YIELDS) {
+		PrefetchCollection(GC.getPlotInfo(), "Plots");
+	}
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS)
+	if (MOD_API_UNIFIED_YIELDS) {
+		PrefetchCollection(GC.getGreatPersonInfo(), "GreatPersons");
+	}
+#endif
 	PrefetchCollection(GC.getTerrainInfo(), "Terrains");
 	PrefetchCollection(GC.getYieldInfo(), "Yields");
 
@@ -359,6 +395,11 @@ bool CvDllDatabaseUtility::PrefetchGameData()
 	//Civilizations - must be after buildings and units
 	PrefetchCollection(GC.getCivilizationInfo(), "Civilizations");
 	PrefetchCollection(GC.getMinorCivInfo(), "MinorCivilizations");
+#if defined(MOD_EVENTS_QUESTS)
+	if (MOD_EVENTS_QUESTS) {
+		PrefetchCollection(GC.getQuestInfo(), "Quests");
+	}
+#endif
 	PrefetchCollection(GC.getTraitInfo(), "Traits");
 	PrefetchCollection(GC.getReligionInfo(), "Religions");
 	PrefetchCollection(GC.getBeliefInfo(), "Beliefs");
@@ -367,6 +408,10 @@ bool CvDllDatabaseUtility::PrefetchGameData()
 	PrefetchCollection(GC.getLeagueProjectInfo(), "LeagueProjects");
 	PrefetchCollection(GC.getLeagueProjectRewardInfo(), "LeagueProjectRewards");
 	PrefetchCollection(GC.getResolutionInfo(), "Resolutions");
+
+#if defined(MOD_API_ACHIEVEMENTS) || defined(ACHIEVEMENT_HACKS)
+	PrefetchCollection(GC.getAchievementInfo(), "Achievements");
+#endif
 
 	//Copy flavors into string array
 	{
@@ -591,12 +636,22 @@ bool CvDllDatabaseUtility::ValidatePrefetchProcess()
 	ValidateVectorSize(GetNumPlayerColorInfos);
 	ValidateVectorSize(getNumEntityEventInfos);
 	ValidateVectorSize(getNumMultiUnitFormationInfos);
+#if defined(MOD_API_PLOT_YIELDS)
+	if (MOD_API_PLOT_YIELDS) {
+		ValidateVectorSize(getNumPlotInfos);
+	}
+#endif
 	ValidateVectorSize(getNumTerrainInfos);
 	ValidateVectorSize(getNumResourceClassInfos);
 	ValidateVectorSize(getNumResourceInfos);
 	ValidateVectorSize(getNumFeatureInfos);
 	ValidateVectorSize(getNumCivilizationInfos);
 	ValidateVectorSize(getNumMinorCivInfos);
+#if defined(MOD_EVENTS_QUESTS)
+	if (MOD_EVENTS_QUESTS) {
+		ValidateVectorSize(getNumQuestInfos);
+	}
+#endif
 	ValidateVectorSize(getNumLeaderHeadInfos);
 	ValidateVectorSize(getNumTraitInfos);
 	ValidateVectorSize(getNumUnitInfos);
@@ -625,6 +680,12 @@ bool CvDllDatabaseUtility::ValidatePrefetchProcess()
 	ValidateVectorSize(getNumBuildingInfos);
 	ValidateVectorSize(getNumUnitClassInfos);
 	//ValidateVectorSize(getNumActionInfos);	//Action Infos are generated as a post process.
+
+#if defined(MOD_EVENTS_DIPLO_MODIFIERS)
+	if (MOD_EVENTS_DIPLO_MODIFIERS) {
+		ValidateVectorSize(getNumDiploModifierInfos);
+	}
+#endif
 
 	ValidateCount(gc.getMissionInfo().size);
 	ValidateCount(gc.getControlInfo().size);

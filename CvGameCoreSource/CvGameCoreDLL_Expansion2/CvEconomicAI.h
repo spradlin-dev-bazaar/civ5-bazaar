@@ -162,6 +162,9 @@ public:
 	void SetTurnStrategyAdopted(EconomicAIStrategyTypes eStrategy, int iValue);
 
 	void DoTurn();
+#if defined(MOD_API_EXTENSIONS)
+	void UseStrategy(EconomicAIStrategyTypes eStrategy, bool bUsingStrategy);
+#endif
 
 	CvCity* GetBestGreatWorkCity(CvPlot *pStartPlot, GreatWorkType eGreatWork) const;
 
@@ -230,6 +233,9 @@ private:
 	void DoAntiquitySites();
 	void DisbandExtraWorkers();
 	void DisbandExtraArchaeologists();
+#if defined(MOD_AI_SMART_V3)
+	void DisbandLongObsoleteUnits();
+#endif
 
 	// Low-level utility functions
 	void AssignExplorersToHuts();

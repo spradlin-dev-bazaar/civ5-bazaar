@@ -75,8 +75,14 @@ CvGameCoreSource/BuildTemp/
 tests/runtime/out/
 __pycache__/
 tests/ingame/out/
+sdk/out/
 
 # Visual Studio 2008 per-user files
 *.suo
 *.ncb
 *.user
+
+# A global gitignore may skip .claude/; the review lenses here are shared.
+!/.claude/
+/.claude/*
+!/.claude/gate-lenses/

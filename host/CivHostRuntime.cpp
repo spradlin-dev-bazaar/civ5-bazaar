@@ -1,3 +1,4 @@
+#include "CivHostCrash.h"
 #include "CivHostHooks.h"
 #include "CivHostRuntime.h"
 
@@ -6,6 +7,7 @@
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 namespace
 {
@@ -22,12 +24,24 @@ namespace
 		std::string name;
 	};
 
+	struct PossibleConflict
+	{
+		int other;
+		int hookPoint;
+		int handHook;
+		bool pluginReplaces;
+	};
+
 	std::vector<CivPluginRecord> s_plugins;
 	std::vector<PendingHook> s_pending;
+	std::vector<PossibleConflict> s_possibleConflicts;
 	std::vector<KeptPlugin> s_kept;
+	CivFilePairs s_useBoth;
 	int s_loadingPlugin = -1;
 	const CivPluginInfo* s_loadingInfo = 0;
+	bool s_loadingConflict = false;
 	int s_pluginCallDepth = 0;
+	bool* s_originalCalled = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
 
@@ -44,9 +58,40 @@ namespace
 		OutputDebugStringA("\n");
 	}
 
+	std::string Format(const char* format, ...)
+	{
+		char text[1024];
+		va_list args;
+		va_start(args, format);
+		_vsnprintf_s(text, sizeof(text), _TRUNCATE, format, args);
+		va_end(args);
+		return text;
+	}
+
 	const char* HookName(int id)
 	{
-		return (id >= 0 && id < g_CivHookPointCount) ? g_CivHookPointNames[id] : "?";
+		if (id >= 0 && id < g_CivHookPointCount)
+			return g_CivHookPointNames[id];
+		return id >= g_CivHookPointCount ? CivHandHookName(id - g_CivHookPointCount) : "?";
+	}
+
+	CivHookPoint& Point(int id)
+	{
+		return id < g_CivHookPointCount ? g_CivHookPoints[id] : g_CivHandHookPoints[id - g_CivHookPointCount];
+	}
+
+	// Players see the name alone, unless an overload shares it and only the parameters tell them apart.
+	std::string ShortHookName(int id)
+	{
+		const std::string full = HookName(id);
+		const size_t open = full.find('(');
+		const std::string name = full.substr(0, open);
+		if (open == std::string::npos || name.empty())
+			return full;
+		for (int i = 0; i < g_CivHookPointCount; ++i)
+			if (i != id && strncmp(g_CivHookPointNames[i], name.c_str(), name.size()) == 0 && g_CivHookPointNames[i][name.size()] == '(')
+				return full;
+		return name + "(...)";
 	}
 
 	bool Alive(int plugin)
@@ -81,7 +126,7 @@ namespace
 		return s_plugins[plugin].name.c_str();
 	}
 
-	int FaultFilter(unsigned int code)
+	int FaultFilter(unsigned int code, const EXCEPTION_POINTERS* info, const void* owner)
 	{
 		switch (code)
 		{
@@ -96,6 +141,7 @@ namespace
 		case EXCEPTION_PRIV_INSTRUCTION:
 		case EXCEPTION_STACK_OVERFLOW:
 		case 0xE06D7363: // a C++ exception escaping the plugin
+			CivCrashRecord(code, info, owner);
 			return EXCEPTION_EXECUTE_HANDLER;
 		}
 		return EXCEPTION_CONTINUE_SEARCH;
@@ -112,7 +158,7 @@ namespace
 			{
 				thunk(ctx);
 			}
-			__except (FaultFilter(*code = GetExceptionCode()))
+			__except (FaultFilter(*code = GetExceptionCode(), GetExceptionInformation(), code))
 			{
 				ran = false;
 			}
@@ -126,19 +172,27 @@ namespace
 		return ran;
 	}
 
+	void LogCrash(const void* owner)
+	{
+		const std::vector<std::string> lines = CivCrashReport(owner);
+		for (size_t i = 0; i < lines.size(); ++i)
+			Log("%s", lines[i].c_str());
+	}
+
 	// The player hears about a plugin's first fault only; later ones are logged.
-	void Quarantine(int plugin, int hookId, const char* where, unsigned int code)
+	void Quarantine(int plugin, int hookId, const char* where, const unsigned int* code)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
 		char problem[512];
-		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", code, where);
+		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", *code, where);
 		Log("Plugin %s: %s", rec.name.c_str(), problem);
+		LogCrash(code);
 		if (rec.quarantined)
 			return;
 		rec.quarantined = true;
 		rec.problems.push_back(problem);
 		if (s_faultSink)
-			s_faultSink(plugin, rec.name.c_str(), hookId, code);
+			s_faultSink(plugin, rec.name.c_str(), hookId, *code);
 	}
 
 	bool CallPlugin(const CivHookEntry* e, int hookId, CivHookThunk thunk, void* ctx)
@@ -147,8 +201,122 @@ namespace
 		unsigned int code = 0;
 		if (GuardedCall(thunk, ctx, &code))
 			return true;
-		Quarantine(e->plugin, hookId, HookName(hookId), code);
+		Quarantine(e->plugin, hookId, HookName(hookId), &code);
 		return false;
+	}
+
+	bool PendingReplace(int hookId)
+	{
+		for (size_t i = 0; i < s_pending.size(); ++i)
+			if (s_pending[i].id == hookId && s_pending[i].kind == CIV_HOOK_REPLACE)
+				return true;
+		return false;
+	}
+
+	bool HasText(const std::vector<std::string>& texts, const std::string& text)
+	{
+		for (size_t i = 0; i < texts.size(); ++i)
+			if (texts[i] == text)
+				return true;
+		return false;
+	}
+
+	bool UseBoth(const std::string& a, const std::string& b)
+	{
+		for (size_t i = 0; i < s_useBoth.size(); ++i)
+		{
+			const CivFilePair& pair = s_useBoth[i];
+			if ((SamePath(pair.first, a) && SamePath(pair.second, b)) || (SamePath(pair.first, b) && SamePath(pair.second, a)))
+				return true;
+		}
+		return false;
+	}
+
+	void NotePossibleConflict(int other, int hookPoint, int handHook, bool pluginReplaces)
+	{
+		PossibleConflict conflict = { other, hookPoint, handHook, pluginReplaces };
+		s_possibleConflicts.push_back(conflict);
+	}
+
+	void AddOnce(std::vector<std::string>& texts, const std::string& text)
+	{
+		if (!HasText(texts, text))
+			texts.push_back(text);
+	}
+
+	void AddAndLog(int plugin, std::vector<std::string>& texts, const std::string& text)
+	{
+		if (HasText(texts, text))
+			return;
+		texts.push_back(text);
+		Log("Plugin %s: %s", s_plugins[plugin].name.c_str(), text.c_str());
+	}
+
+	// A replacement that never calls the original skips the hand-placed hooks inside it, so the plugin lower in the list
+	// is held back unless the player chose to use both. True when it is held back.
+	bool ReportPossibleConflicts(int plugin)
+	{
+		CivPluginRecord& rec = s_plugins[plugin];
+		bool heldBack = false;
+		for (size_t i = 0; i < s_possibleConflicts.size(); ++i)
+		{
+			const PossibleConflict& c = s_possibleConflicts[i];
+			const std::string otherFile = FileName(s_plugins[c.other].path);
+			const char* otherName = s_plugins[c.other].name.c_str();
+			const std::string function = ShortHookName(c.hookPoint);
+			const char* hook = CivHandHookName(c.handHook);
+			AddOnce(rec.conflictsWith, otherFile);
+			if (UseBoth(FileName(rec.path), otherFile))
+			{
+				AddAndLog(plugin, rec.notes, Format("You chose to use this plugin with %s anyway, although one of them replaces %s, which runs the %s hook the other uses.",
+					otherName, function.c_str(), hook));
+				continue;
+			}
+			heldBack = true;
+			if (c.pluginReplaces)
+				AddAndLog(plugin, rec.problems, Format("This plugin replaces %s, which runs the %s hook that %s, higher in the list, uses. If the version in this plugin does not run the game's own, %s never gets that hook, so this plugin was held back. If you know the two work together, check Use both anyway.",
+					function.c_str(), hook, otherName, otherName));
+			else
+				AddAndLog(plugin, rec.problems, Format("%s, higher in the list, replaces %s, which runs the %s hook this plugin uses. If the version in %s does not run the game's own, this plugin never gets that hook, so it was held back. If you know the two work together, check Use both anyway.",
+					otherName, function.c_str(), hook, otherName));
+		}
+		s_possibleConflicts.clear();
+		return heldBack;
+	}
+
+	void NoteHandHookUsers(int hookId)
+	{
+		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
+		{
+			const CivHandHookSite& site = g_CivHandHookSites[i];
+			if (site.hookPoint != hookId)
+				continue;
+			for (const CivHookEntry* e = g_CivHandHookPoints[site.handHook].before; e; e = e->next)
+				NotePossibleConflict(e->plugin, hookId, site.handHook, true);
+		}
+	}
+
+	void NoteReplacements(int handHook)
+	{
+		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
+		{
+			const CivHandHookSite& site = g_CivHandHookSites[i];
+			const CivHookEntry* replacement = g_CivHookPoints[site.hookPoint].replace;
+			if (site.handHook == handHook && replacement)
+				NotePossibleConflict(replacement->plugin, site.hookPoint, handHook, false);
+		}
+	}
+
+	int RegisterHandHook(int plugin, int handHook, void* fn)
+	{
+		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
+			return CIV_HOOK_NOT_ALLOWED;
+		if (handHook < 0 || handHook >= g_CivHandHookCount || !fn)
+			return CIV_HOOK_BAD_ID;
+		NoteReplacements(handHook);
+		PendingHook p = { CivHandHookId(handHook), CIV_HOOK_BEFORE, fn };
+		s_pending.push_back(p);
+		return CIV_HOOK_OK;
 	}
 
 	int RegisterHook(int plugin, int hookId, int kind, void* fn)
@@ -157,25 +325,34 @@ namespace
 			return CIV_HOOK_NOT_ALLOWED;
 		if (hookId < 0 || hookId >= g_CivHookPointCount || !fn)
 			return CIV_HOOK_BAD_ID;
+		if (!g_CivHookLive[hookId])
+		{
+			Log("Plugin %s asked for hook %d (%s), which this Bazaar no longer has: the function changed or is gone. Rebuild the plugin with the current SDK.",
+				DisplayName(plugin), hookId, g_CivHookPointNames[hookId]);
+			return CIV_HOOK_BAD_ID;
+		}
 		if (kind < CIV_HOOK_BEFORE || kind > CIV_HOOK_REPLACE)
 			return CIV_HOOK_BAD_KIND;
 		if (kind == CIV_HOOK_REPLACE)
 		{
-			const char* owner = 0;
-			if (g_CivHookPoints[hookId].replace)
-				owner = s_plugins[g_CivHookPoints[hookId].replace->plugin].name.c_str();
-			for (size_t i = 0; i < s_pending.size() && !owner; ++i)
-				if (s_pending[i].id == hookId && s_pending[i].kind == CIV_HOOK_REPLACE)
-					owner = "this plugin";
-			if (owner)
+			std::string problem;
+			if (const CivHookEntry* taken = g_CivHookPoints[hookId].replace)
 			{
-				char problem[512];
-				_snprintf_s(problem, sizeof(problem), _TRUNCATE,
-					"Its replacement of %s was refused: %s already replaces it.", HookName(hookId), owner);
+				// Its other hooks may rely on the replacement it lost, so the whole plugin stays off.
+				s_loadingConflict = true;
+				const char* owner = s_plugins[taken->plugin].name.c_str();
+				problem = Format("%s, higher in the list, already replaces %s, and only one plugin can replace a function. To use this one instead, move it above %s.",
+					owner, ShortHookName(hookId).c_str(), owner);
+			}
+			else if (PendingReplace(hookId))
+				problem = Format("Its replacement of %s was refused: this plugin already replaces it.", ShortHookName(hookId).c_str());
+			if (!problem.empty())
+			{
 				s_plugins[plugin].problems.push_back(problem);
-				Log("Plugin %s: %s", DisplayName(plugin), problem);
+				Log("Plugin %s: %s", DisplayName(plugin), problem.c_str());
 				return CIV_HOOK_REPLACE_TAKEN;
 			}
+			NoteHandHookUsers(hookId);
 		}
 		PendingHook p = { hookId, kind, fn };
 		s_pending.push_back(p);
@@ -187,11 +364,12 @@ namespace
 		for (size_t i = 0; i < s_pending.size(); ++i)
 		{
 			const PendingHook& p = s_pending[i];
-			CivHookPoint& hp = g_CivHookPoints[p.id];
+			CivHookPoint& hp = Point(p.id);
 			CivHookEntry* e = new CivHookEntry;
 			e->fn = p.fn;
 			e->plugin = plugin;
 			e->next = 0;
+			e->loggedSkippedOriginal = false;
 			if (p.kind == CIV_HOOK_BEFORE)
 			{
 				CivHookEntry** tail = &hp.before;
@@ -201,6 +379,7 @@ namespace
 			}
 			else if (p.kind == CIV_HOOK_AFTER)
 			{
+				// After-hooks run in reverse load order, so each plugin's goes in front.
 				e->next = hp.after;
 				hp.after = e;
 			}
@@ -208,9 +387,16 @@ namespace
 			{
 				hp.replace = e;
 			}
-			g_CivHookActive[p.id] = 1;
+			if (p.id < g_CivHookPointCount)
+				g_CivHookActive[p.id] = 1;
 		}
 		s_pending.clear();
+	}
+
+	void DiscardPending()
+	{
+		s_pending.clear();
+		s_possibleConflicts.clear();
 	}
 
 	void PluginLog(int plugin, const char* message)
@@ -230,6 +416,24 @@ namespace
 	{
 		EntryCall& c = *static_cast<EntryCall*>(p);
 		c.accepted = c.entry(c.host, c.info);
+	}
+
+	// A plugin's name and version may point anywhere, even after its entry function crashed partway.
+	// No C++ objects may live in this frame, or __try is not allowed.
+	bool CopyPluginText(const char* text, char* out, size_t size)
+	{
+		out[0] = 0;
+		__try
+		{
+			if (text)
+				strncpy_s(out, size, text, _TRUNCATE);
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			out[0] = 0;
+			return false;
+		}
 	}
 
 	// No C++ objects may live in this frame, or __try is not allowed.
@@ -262,7 +466,7 @@ namespace
 		unsigned int code = 0;
 		if (!shutdown || GuardedCall(&ShutdownThunk, &shutdown, &code))
 			return true;
-		Quarantine(plugin, -1, "its shutdown function", code);
+		Quarantine(plugin, -1, "its shutdown function", &code);
 		return false;
 	}
 
@@ -282,7 +486,6 @@ namespace
 		LONG basePriority;
 	};
 
-	// No C++ objects may live in this frame, or __try is not allowed.
 	// A stack value counts only if it could be a return address into the DLL: the bytes before it are one of
 	// the x86 CALL forms. Ordinary numbers that merely fall inside the DLL's address range then rarely match.
 	bool IsReturnInto(DWORD value, const BYTE* start, const BYTE* end)
@@ -351,8 +554,10 @@ namespace
 	bool ThreadStillInside(HMODULE module)
 	{
 		QueryThreadFn query = (QueryThreadFn)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationThread");
+		if (!query)
+			return true;
 		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-		if (!query || snapshot == INVALID_HANDLE_VALUE)
+		if (snapshot == INVALID_HANDLE_VALUE)
 			return true;
 		const BYTE* start = reinterpret_cast<const BYTE*>(module);
 		const IMAGE_NT_HEADERS* headers = reinterpret_cast<const IMAGE_NT_HEADERS*>(
@@ -377,6 +582,7 @@ namespace
 		const bool threadLeft = clean && ThreadStillInside((HMODULE)rec.module);
 		if (clean && !threadLeft)
 		{
+			CivCrashForgetModule((HMODULE)rec.module);
 			FreeLibrary((HMODULE)rec.module);
 			delete rec.host;
 			Log("Plugin %s unloaded.", rec.name.c_str());
@@ -418,29 +624,104 @@ namespace
 		return 0;
 	}
 
-	std::string RefusalReason(bool accepted, const CivPluginInfo& info, CivPluginStatus* status)
+	bool Fits(DWORD offset, unsigned __int64 bytes, DWORD imageSize)
 	{
-		char problem[256];
-		if (!accepted)
+		return offset <= imageSize && bytes <= imageSize - offset;
+	}
+
+	enum ExportRead
+	{
+		EXPORT_FOUND,
+		EXPORT_MISSING,
+		EXPORT_64_BIT,
+	};
+
+	// Copies a named data export out of a file mapped with LOAD_LIBRARY_AS_IMAGE_RESOURCE, where GetProcAddress does not
+	// work. A file that cannot be read counts as missing. No C++ objects may live in this frame, or __try is not allowed.
+	ExportRead CopyExportedData(HMODULE image, const char* name, void* out, DWORD size)
+	{
+		__try
 		{
-			*status = CIV_PLUGIN_ENTRY_DECLINED;
-			return "Declined to load.";
+			// Windows marks such a handle in its low bits.
+			const BYTE* base = (const BYTE*)((ULONG_PTR)image & ~(ULONG_PTR)3);
+			const IMAGE_NT_HEADERS32* nt = (const IMAGE_NT_HEADERS32*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
+			if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+				return EXPORT_64_BIT;
+			if (nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC || nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
+				return EXPORT_MISSING;
+			const DWORD imageSize = nt->OptionalHeader.SizeOfImage;
+			const IMAGE_DATA_DIRECTORY& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+			if (!dir.VirtualAddress || !Fits(dir.VirtualAddress, sizeof(IMAGE_EXPORT_DIRECTORY), imageSize))
+				return EXPORT_MISSING;
+			const IMAGE_EXPORT_DIRECTORY* exports = (const IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
+			const unsigned __int64 count = exports->NumberOfNames;
+			if (!Fits(exports->AddressOfNames, count * sizeof(DWORD), imageSize)
+				|| !Fits(exports->AddressOfNameOrdinals, count * sizeof(WORD), imageSize)
+				|| !Fits(exports->AddressOfFunctions, (unsigned __int64)exports->NumberOfFunctions * sizeof(DWORD), imageSize))
+				return EXPORT_MISSING;
+			const DWORD* names = (const DWORD*)(base + exports->AddressOfNames);
+			const WORD* ordinals = (const WORD*)(base + exports->AddressOfNameOrdinals);
+			const DWORD* functions = (const DWORD*)(base + exports->AddressOfFunctions);
+			const size_t nameBytes = strlen(name) + 1;
+			for (DWORD i = 0; i < exports->NumberOfNames; ++i)
+			{
+				if (!Fits(names[i], nameBytes, imageSize) || memcmp(base + names[i], name, nameBytes) != 0)
+					continue;
+				if (ordinals[i] >= exports->NumberOfFunctions)
+					return EXPORT_MISSING;
+				const DWORD rva = functions[ordinals[i]];
+				// A forwarded export's address points at the forwarding text, inside the export directory.
+				const bool forwarded = rva >= dir.VirtualAddress && rva - dir.VirtualAddress < dir.Size;
+				if (!rva || forwarded || !Fits(rva, size, imageSize))
+					return EXPORT_MISSING;
+				memcpy(out, base + rva, size);
+				return EXPORT_FOUND;
+			}
 		}
-		if (info.builtApiMajor != CIV_HOST_API_MAJOR)
+		__except (EXCEPTION_EXECUTE_HANDLER)
 		{
-			*status = CIV_PLUGIN_OTHER_MAJOR;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for host API %d.%d, which this host (API %d.%d) cannot run.",
-				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-			return problem;
 		}
-		if (info.builtApiMinor > CIV_HOST_API_MINOR)
+		return EXPORT_MISSING;
+	}
+
+	// Windows maps the file without running any of it or loading the DLLs it imports, so a refused plugin never runs.
+	bool RefusedForApiVersion(CivPluginRecord& rec)
+	{
+		HMODULE image = LoadLibraryExA(rec.path.c_str(), 0, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+		if (!image)
 		{
-			*status = CIV_PLUGIN_NEWER_API;
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Built for a newer host (API %d.%d); this host is API %d.%d.",
-				info.builtApiMajor, info.builtApiMinor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
-			return problem;
+			Refuse(rec, CIV_PLUGIN_FILE_NOT_LOADED, Format("Windows could not open the file (error %lu).", GetLastError()));
+			return true;
 		}
-		return std::string();
+		CivApiVersion built = {0, 0};
+		const ExportRead read = CopyExportedData(image, CIV_PLUGIN_API_VERSION_NAME, &built, sizeof(built));
+		FreeLibrary(image);
+		if (read == EXPORT_64_BIT)
+		{
+			Refuse(rec, CIV_PLUGIN_FILE_NOT_LOADED, "It is a 64-bit DLL, and Civilization V can only load 32-bit ones.");
+			return true;
+		}
+		if (read == EXPORT_MISSING)
+		{
+			Refuse(rec, CIV_PLUGIN_NO_API_VERSION, "The file does not say which Bazaar it was built for (it has no "
+				CIV_PLUGIN_API_VERSION_NAME "), so it was built for an older Bazaar or is not a plugin.");
+			return true;
+		}
+		rec.builtApiMajor = built.major;
+		rec.builtApiMinor = built.minor;
+		if (built.major != CIV_HOST_API_MAJOR)
+		{
+			Refuse(rec, CIV_PLUGIN_OTHER_MAJOR, Format("Built for Bazaar API %d.%d, which this Bazaar (API %d.%d) cannot run.",
+				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
+			return true;
+		}
+		if (built.minor > CIV_HOST_API_MINOR)
+		{
+			Refuse(rec, CIV_PLUGIN_NEWER_API, Format("Built for a newer Bazaar (API %d.%d); this Bazaar is API %d.%d.",
+				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
+			return true;
+		}
+		return false;
 	}
 
 	void LoadOne(const std::string& requested)
@@ -463,6 +744,8 @@ namespace
 			Refuse(s_plugins[index], CIV_PLUGIN_STILL_IN_MEMORY, "It could not be shut down safely earlier, so it stays off until you restart Civilization V.");
 			return;
 		}
+		if (RefusedForApiVersion(s_plugins[index]))
+			return;
 
 		// Lets a plugin's own helper DLLs load from its folder rather than the game's.
 		HMODULE module = LoadLibraryExA(path.c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -477,47 +760,55 @@ namespace
 		if (!entry)
 		{
 			Refuse(s_plugins[index], CIV_PLUGIN_NO_ENTRY, "The file has no " CIV_PLUGIN_ENTRY_NAME " function, so it is not a plugin.");
+			CivCrashForgetModule(module);
 			FreeLibrary(module);
 			return;
 		}
 
 		// A plugin may keep this pointer for as long as its DLL is loaded.
 		CivHostInfo* host = new CivHostInfo;
-		host->apiMajor = CIV_HOST_API_MAJOR;
-		host->apiMinor = CIV_HOST_API_MINOR;
 		host->pluginIndex = index;
 		host->RegisterHook = &RegisterHook;
 		host->Log = &PluginLog;
+		host->RegisterHandHook = &RegisterHandHook;
 		s_plugins[index].module = module;
 		s_plugins[index].host = host;
-		CivPluginInfo info = { 0, 0, 0, 0 };
+		CivPluginInfo info = { 0, 0 };
 		EntryCall call = { entry, host, &info, false };
-		s_pending.clear();
+		DiscardPending();
+		s_loadingConflict = false;
 		unsigned int code = 0;
 		const bool ran = GuardedEntry(&call, &code);
 
 		CivPluginRecord& rec = s_plugins[index];
-		if (info.name && *info.name)
-			rec.name = info.name;
-		rec.version = info.version ? info.version : "";
-		rec.builtApiMajor = info.builtApiMajor;
-		rec.builtApiMinor = info.builtApiMinor;
+		char text[256];
+		if (CopyPluginText(info.name, text, sizeof(text)) && *text)
+			rec.name = text;
+		CopyPluginText(info.version, text, sizeof(text));
+		rec.version = text;
 
 		if (!ran)
 		{
 			char problem[256];
 			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "It stopped working while loading (code 0x%08X) and was turned off until you return to the main menu.", code);
-			s_pending.clear();
+			DiscardPending();
 			rec.quarantined = true;
 			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
+			LogCrash(&code);
 			return;
 		}
-		CivPluginStatus status = CIV_PLUGIN_LOADED;
-		const std::string problem = RefusalReason(call.accepted, info, &status);
-		if (!problem.empty())
+		if (!call.accepted)
 		{
-			s_pending.clear();
-			Refuse(rec, status, problem);
+			DiscardPending();
+			Refuse(rec, CIV_PLUGIN_ENTRY_DECLINED, "Declined to load.");
+			Unload(index);
+			return;
+		}
+		const bool heldBack = !s_loadingConflict && ReportPossibleConflicts(index);
+		if (s_loadingConflict || heldBack)
+		{
+			DiscardPending();
+			rec.status = heldBack ? CIV_PLUGIN_POSSIBLE_CONFLICT : CIV_PLUGIN_REPLACE_CONFLICT;
 			Unload(index);
 			return;
 		}
@@ -536,19 +827,31 @@ namespace
 		}
 	}
 
+	void RemoveHooks(CivHookPoint& hp)
+	{
+		DeleteEntries(hp.before);
+		DeleteEntries(hp.after);
+		delete hp.replace;
+		hp.before = hp.after = hp.replace = 0;
+	}
+
 	void RemoveAllHooks()
 	{
 		for (int i = 0; i < g_CivHookPointCount; ++i)
 		{
 			if (!g_CivHookActive[i])
 				continue;
-			CivHookPoint& hp = g_CivHookPoints[i];
-			DeleteEntries(hp.before);
-			DeleteEntries(hp.after);
-			delete hp.replace;
-			hp.before = hp.after = hp.replace = 0;
+			RemoveHooks(g_CivHookPoints[i]);
 			g_CivHookActive[i] = 0;
 		}
+		for (int i = 0; i < g_CivHandHookCount; ++i)
+			RemoveHooks(g_CivHandHookPoints[i]);
+	}
+
+	void LogSkippedOriginal(int plugin, int hookId)
+	{
+		Log("Plugin %s: its replacement of %s returned without running the original, so no hook inside the original ran. This is logged only once.",
+			s_plugins[plugin].name.c_str(), HookName(hookId));
 	}
 
 	bool SameAsListed(const std::vector<std::string>& paths)
@@ -576,10 +879,38 @@ bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* 
 	return false;
 }
 
+// No C++ objects may live in this frame, or __try is not allowed.
 bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
 {
-	const CivHookEntry* e = hp.replace;
-	return e && Alive(e->plugin) && CallPlugin(e, id, thunk, ctx);
+	CivHookEntry* e = hp.replace;
+	if (!e || !Alive(e->plugin))
+		return false;
+	// The original may run other replacements before this one returns, and an exception nobody here handles may pass
+	// through, so the outer replacement's flag is always put back.
+	bool* const outer = s_originalCalled;
+	bool called = false;
+	bool ran = false;
+	s_originalCalled = &called;
+	__try
+	{
+		ran = CallPlugin(e, id, thunk, ctx);
+	}
+	__finally
+	{
+		s_originalCalled = outer;
+	}
+	if (ran && !called && !e->loggedSkippedOriginal)
+	{
+		e->loggedSkippedOriginal = true;
+		LogSkippedOriginal(e->plugin, id);
+	}
+	return ran;
+}
+
+void CivHookOriginalCalled()
+{
+	if (s_originalCalled)
+		*s_originalCalled = true;
 }
 
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
@@ -604,18 +935,46 @@ const std::vector<CivPluginRecord>& CivHostPlugins()
 	return s_plugins;
 }
 
+std::vector<CivPluginReportRow> CivHostReportRows()
+{
+	std::vector<CivPluginReportRow> rows;
+	for (size_t i = 0; i < s_plugins.size(); ++i)
+	{
+		const CivPluginRecord& p = s_plugins[i];
+		CivPluginReportRow row;
+		row.file = FileName(p.path);
+		row.name = p.name;
+		row.version = p.version;
+		row.failed = p.status != CIV_PLUGIN_LOADED || p.quarantined;
+		if (p.quarantined)
+			row.status = "Turned off after a crash";
+		else if (row.failed)
+			row.status = CIV_REPORT_NOT_LOADED;
+		else
+			row.status = "Loaded";
+		for (size_t j = 0; j < p.problems.size(); ++j)
+			row.problems += (j ? "\n" : "") + p.problems[j];
+		for (size_t j = 0; j < p.notes.size(); ++j)
+			row.problems += (row.problems.empty() ? "" : "\n") + p.notes[j];
+		row.conflictsWith = p.conflictsWith;
+		rows.push_back(row);
+	}
+	return rows;
+}
+
 void CivHostLoadPlugins(const std::vector<std::string>& paths)
 {
 	for (size_t i = 0; i < paths.size(); ++i)
 		LoadOne(paths[i]);
 }
 
-CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths)
+CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths, const CivFilePairs& useBoth)
 {
-	if (SameAsListed(paths))
+	if (SameAsListed(paths) && useBoth == s_useBoth)
 		return CIV_PLUGINS_UNCHANGED;
 	if (!CivHostUnloadPlugins())
 		return CIV_PLUGINS_BUSY;
+	s_useBoth = useBoth;
 	if (!paths.empty())
 		Log("---- Loading plugins");
 	CivHostLoadPlugins(paths);
@@ -632,5 +991,6 @@ bool CivHostUnloadPlugins()
 		if (s_plugins[i].module)
 			Unload((int)i);
 	s_plugins.clear();
+	s_useBoth.clear();
 	return true;
 }

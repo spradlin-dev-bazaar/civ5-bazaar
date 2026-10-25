@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context ColorSet="Beige_Black" Font="TwCenMT22" FontStyle="Shadow" >
+
+  <Instance Name="PluginInstance">
+    <Stack ID="Root" Anchor="L,T" StackGrowth="Bottom" Padding="2">
+      <Box ID="Divider" Anchor="L,T" Size="800,18" Color="White.0">
+        <Image Anchor="L,C" Texture="bar900x2.dds" Size="800,1" />
+      </Box>
+      <!-- The stack measures a one-line label too short, so the name gets a box of fixed height. -->
+      <Box Anchor="L,T" Size="800,32" Color="White.0">
+        <CheckBox ID="UseBox" ButtonTexture="assets/UI/Art/Controls/CheckBox2TheBox.dds" Anchor="L,C" IsChecked="1" ConsumeMouse="1" ToolTip="Uncheck to skip this plugin without turning off its mod." />
+        <Label ID="Title" Anchor="L,C" Offset="40,0" Font="TwCenMT22" TruncateWidth="680" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
+        <Button ID="UpButton" Anchor="R,C" Offset="28,0" Style="ScrollBarUp" />
+        <Button ID="DownButton" Anchor="R,C" Offset="4,0" Style="ScrollBarDown" />
+      </Box>
+      <Label ID="Status" Anchor="L,T" Offset="40,0" WrapWidth="760" LeadingOffset="-5" Font="TwCenMT18" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
+      <Box ID="UseBothRow" Anchor="L,T" Size="800,30" Color="White.0" Hidden="1">
+        <CheckBox ID="UseBothBox" ButtonTexture="assets/UI/Art/Controls/CheckBox2TheBox.dds" Anchor="L,C" Offset="40,0" TextAnchorSide="Right" TextOffset="40,0" Font="TwCenMT18" String="Use both anyway" IsChecked="0" ConsumeMouse="1" />
+      </Box>
+    </Stack>
+  </Instance>
+
+  <Box Size="Full,Full" Color="Black,0" ConsumeMouse="1" HideBox="1" />
+
+  <Grid Size="960,658" Anchor="C,C" Offset="0,36" Padding="0,0" Style="Grid9DetailFive140" ConsumeMouse="1">
+
+    <Box Style="MenuLeftSideTreatment" />
+    <Box Style="MenuRightSideTreatment" />
+    <Box Style="MenuTopTreatment" />
+    <Box Style="MenuBottomTreatment" />
+
+    <Label Style="MenuTitleCaption" String="PLUGINS" />
+
+    <Box Anchor="L,T" Offset="48,102" Size="864,404" Color="255,255,255,0" >
+      <ScrollPanel Anchor="L,T" Offset="0,2" Size="840,400" ID="PluginScrollPanel" Vertical="1" AutoScrollBar="1" >
+        <Stack ID="PluginStack" Anchor="L,T" Offset="14,12" StackGrowth="Bottom" Padding="4">
+          <Label ID="EmptyLabel" Anchor="L,T" WrapWidth="800" LeadingOffset="-5" Font="TwCenMT20" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
+        </Stack>
+        <ScrollBar Anchor="R,C" AnchorSide="O,I" Offset="0,0" Length="400" Style="VertSlider" />
+      </ScrollPanel>
+      <Grid Anchor="L,T" Offset="0,-2" Size="864,404" Padding="0,0" Style="Grid9Frame" />
+    </Box>
+
+    <Box Anchor="C,B" AnchorSide="I,I" Offset="0,54" Size="910,56" Color="255,255,255,0" >
+      <GridButton Anchor="L,B" Style="SmallButton" Size="150,32" Offset="14,0" StateOffsetIncrement="0,0" ID="BackButton" >
+        <Label Anchor="C,C" Offset="0,0" String="TXT_KEY_BACK_BUTTON" Font="TwCenMT18" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
+      </GridButton>
+    </Box>
+
+    <Label ID="ReloadNote" Anchor="C,B" Offset="0,112" WrapWidth="800" Font="TwCenMT18" ColorSet="Beige_Black_Alpha" FontStyle="Shadow" />
+
+    <Stack ID="ActionStack" Anchor="R,B" Offset="38,54" StackGrowth="Left" Padding="10">
+      <GridButton ID="ContinueButton" Anchor="R,B" Size="260,45" Style="BaseButton" String="Continue" />
+      <GridButton ID="ReloadButton" Anchor="R,B" Size="260,45" Style="BaseButton" String="Reload Plugins" Hidden="1" />
+    </Stack>
+
+  </Grid>
+
+</Context>

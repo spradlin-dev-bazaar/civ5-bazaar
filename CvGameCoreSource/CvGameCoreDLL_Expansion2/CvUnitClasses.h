@@ -31,8 +31,17 @@ public:
 	int GetProductionCost() const;
 	int GetFaithCost() const;
 	bool IsRequiresFaithPurchaseEnabled() const;
+#if defined(MOD_GLOBAL_EXCLUDE_FROM_GIFTS)
+	bool IsNoMinorGifts() const;
+#endif
 	bool IsPurchaseOnly() const;
 	bool CanMoveAfterPurchase() const;
+#if defined(MOD_GLOBAL_MOVE_AFTER_UPGRADE)
+	bool CanMoveAfterUpgrade() const;
+#endif
+#if defined(MOD_GLOBAL_CANNOT_EMBARK)
+	bool CannotEmbark() const;
+#endif
 	int GetHurryCostModifier() const;
 	int GetAdvancedStartCost() const;
 	int GetMinAreaSize() const;
@@ -60,11 +69,21 @@ public:
 	bool IsProhibitsSpread() const;
 	bool IsRemoveHeresy() const;
 	bool IsCanBuyCityState() const;
+#if defined(MOD_GLOBAL_SEPARATE_GREAT_ADMIRAL)
+	bool IsCanRepairFleet() const;
+	bool IsCanChangePort() const;
+#endif
 	int GetCombat() const;
 	void SetCombat(int iNum);
 	int GetCombatLimit() const;
 	int GetRangedCombat() const;
 	int GetRangedCombatLimit() const;
+#if defined(MOD_UNITS_NO_SUPPLY)
+	bool IsNoSupply() const;
+#endif
+#if defined(MOD_UNITS_MAX_HP)
+	int GetMaxHitPoints() const;
+#endif
 	int GetXPValueAttack() const;
 	int GetXPValueDefense() const;
 	int GetSpecialCargo() const;
@@ -78,6 +97,12 @@ public:
 	int GetSpecialUnitType() const;
 	int GetUnitCaptureClassType() const;
 	int GetUnitCombatType() const;
+#if defined(MOD_GLOBAL_PROMOTION_CLASSES)
+	int GetUnitPromotionType() const;
+#endif
+#if defined(MOD_EVENTS_CAN_MOVE_INTO)
+	bool IsSendCanMoveIntoEvent() const;
+#endif
 	int GetDomainType() const;
 	int GetCivilianAttackPriority() const;
 	int GetDefaultUnitAIType() const;
@@ -139,6 +164,9 @@ public:
 	int GetResourceQuantityRequirement(int i) const;
 	int GetBuildingProductionModifier(BuildingTypes eBuilding) const;
 	int GetYieldFromKills(YieldTypes eYield) const;
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldFromBarbarianKills(YieldTypes eYield) const;
+#endif
 	int GetProductionTraits(int i) const;
 	int GetFlavorValue(int i) const;
 	int GetUnitGroupRequired(int i) const;
@@ -163,8 +191,17 @@ private:
 	int m_iProductionCost;
 	int m_iFaithCost;
 	bool m_bRequiresFaithPurchaseEnabled;
+#if defined(MOD_GLOBAL_EXCLUDE_FROM_GIFTS)
+	bool m_bNoMinorGifts;
+#endif
 	bool m_bPurchaseOnly;
 	bool m_bMoveAfterPurchase;
+#if defined(MOD_GLOBAL_MOVE_AFTER_UPGRADE)
+	bool m_bMoveAfterUpgrade;
+#endif
+#if defined(MOD_GLOBAL_CANNOT_EMBARK)
+	bool m_bCannotEmbark;
+#endif
 	int m_iHurryCostModifier;
 	int m_iAdvancedStartCost;
 	int m_iMinAreaSize;
@@ -192,10 +229,20 @@ private:
 	bool m_bProhibitsSpread;
 	bool m_bRemoveHeresy;
 	bool m_bCanBuyCityState;
+#if defined(MOD_GLOBAL_SEPARATE_GREAT_ADMIRAL)
+	bool m_bCanRepairFleet;
+	bool m_bCanChangePort;
+#endif
 	int m_iCombat;
 	int m_iCombatLimit;
 	int m_iRangedCombat;
 	int m_iRangedCombatLimit;
+#if defined(MOD_UNITS_NO_SUPPLY)
+	bool m_bNoSupply;
+#endif
+#if defined(MOD_UNITS_MAX_HP)
+	int m_iMaxHitPoints;
+#endif
 	int m_iXPValueAttack;
 	int m_iXPValueDefense;
 	int m_iSpecialCargo;
@@ -209,6 +256,12 @@ private:
 	int m_iSpecialUnitType;
 	int m_iUnitCaptureClassType;
 	int m_iUnitCombatType;
+#if defined(MOD_GLOBAL_PROMOTION_CLASSES)
+	int m_iUnitPromotionType;
+#endif
+#if defined(MOD_EVENTS_CAN_MOVE_INTO)
+	bool m_bSendCanMoveIntoEvent;
+#endif
 	int m_iDomainType;
 	int m_iCivilianAttackPriority;
 	int m_iDefaultUnitAIType;
@@ -270,6 +323,9 @@ private:
 	int* m_piUnitGroupRequired;
 	int* m_piProductionModifierBuildings;
 	int* m_piYieldFromKills;
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int* m_piYieldFromBarbarianKills;
+#endif
 
 	bool* m_pbUpgradeUnitClass;
 	bool* m_pbUnitAIType;

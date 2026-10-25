@@ -26,6 +26,9 @@ public:
 	  m_iBonus(0),
 	  m_bSameEra(false),
 	  m_bUniqueEras(false),
+#if defined(MOD_API_EXTENSIONS)
+	  m_bConsecutiveEras(false),
+#endif
 	  m_bMustBeArt(false),
 	  m_bMustBeArtifact(false),
 	  m_bMustBeEqualArtArtifact(false),
@@ -41,7 +44,12 @@ public:
 	int GetBonus() {return m_iBonus;};
 	CvString GetDescription() {return m_strDescription;};
 	bool IsSameEra() {return m_bSameEra;};
+#if defined(MOD_API_EXTENSIONS)
+	bool IsUniqueEras() {return m_bUniqueEras || IsConsecutiveEras();};
+	bool IsConsecutiveEras() {return m_bConsecutiveEras;};
+#else
 	bool IsUniqueEras() {return m_bUniqueEras;};
+#endif
 	bool IsMustBeArt() {return m_bMustBeArt;};
 	bool IsMustBeArtifact() {return m_bMustBeArtifact;};
 	bool IsMustBeEqualArtArtifact() {return m_bMustBeEqualArtArtifact;};
@@ -56,6 +64,9 @@ protected:
 	CvString m_strDescription;
 	bool m_bSameEra;
 	bool m_bUniqueEras;
+#if defined(MOD_API_EXTENSIONS)
+	bool m_bConsecutiveEras;
+#endif
 	bool m_bMustBeArt;
 	bool m_bMustBeArtifact;
 	bool m_bMustBeEqualArtArtifact;
@@ -105,6 +116,9 @@ public:
 	int GetSpecialistExtraCulture() const;
 	int GetGreatPeopleRateChange() const;
 	GreatWorkSlotType GetGreatWorkSlotType() const;
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	YieldTypes GetGreatWorkYieldType() const;
+#endif
 	int GetGreatWorkCount() const;
 	GreatWorkType GetFreeGreatWork() const;
 	int GetFreeBuildingClass() const;
@@ -147,6 +161,14 @@ public:
 	int GetPlotCultureCostModifier() const;
 	int GetGlobalPlotBuyCostModifier() const;
 	int GetPlotBuyCostModifier() const;
+#if defined(MOD_BUILDINGS_CITY_WORKING)
+	int GetGlobalCityWorkingChange() const;
+	int GetCityWorkingChange() const;
+#endif
+#if defined(MOD_BUILDINGS_CITY_AUTOMATON_WORKERS)
+	int GetGlobalCityAutomatonWorkersChange() const;
+	int GetCityAutomatonWorkersChange() const;
+#endif
 	int GetMinAreaSize() const;
 	int GetConquestProbability() const;
 	int GetHealRateChange() const;
@@ -181,6 +203,10 @@ public:
 	int GetTradeRouteTargetBonus() const;
 	int GetNumTradeRouteBonus() const;
 	int GetInstantSpyRankChange() const;
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int GetConversionModifier() const;
+	int GetGlobalConversionModifier() const;
+#endif
 	int GetLandmarksTourismPercent() const;
 	int GetInstantMilitaryIncrease() const;
 	int GetGreatWorksTourismModifier() const;
@@ -198,6 +224,10 @@ public:
 	bool IsWater() const;
 	bool IsRiver() const;
 	bool IsFreshWater() const;
+#if defined(MOD_API_EXTENSIONS)
+	bool IsAddsFreshWater() const;
+	bool IsPurchaseOnly() const;
+#endif
 	bool IsMountain() const;
 	bool IsHill() const;
 	bool IsFlat() const;
@@ -223,7 +253,6 @@ public:
 	bool AllowsFoodTradeRoutes() const;
 	bool AllowsProductionTradeRoutes() const;
 	bool NullifyInfluenceModifier() const;
-
 	const char* GetArtDefineTag() const;
 	void SetArtDefineTag(const char* szVal);
 	const bool GetArtInfoCulturalVariation() const;
@@ -289,6 +318,10 @@ public:
 	int* GetResourceYieldModifierArray(int i) const;
 	int GetTerrainYieldChange(int i, int j) const;
 	int* GetTerrainYieldChangeArray(int i) const;
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int GetPlotYieldChange(int i, int j) const;
+	int* GetPlotYieldChangeArray(int i) const;
+#endif
 	int GetBuildingClassYieldChange(int i, int j) const;
 	int GetBuildingClassHappiness(int i) const;
 
@@ -317,6 +350,9 @@ private:
 	int m_iSpecialistExtraCulture;
 	int m_iGreatPeopleRateChange;
 	GreatWorkSlotType m_eGreatWorkSlotType;
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	YieldTypes m_eGreatWorkYieldType;
+#endif
 	int m_iGreatWorkCount;
 	GreatWorkType m_eFreeGreatWork;
 	int m_iFreeBuildingClass;
@@ -359,6 +395,14 @@ private:
 	int m_iPlotCultureCostModifier;
 	int m_iGlobalPlotBuyCostModifier;
 	int m_iPlotBuyCostModifier;
+#if defined(MOD_BUILDINGS_CITY_WORKING)
+	int m_iGlobalCityWorkingChange;
+	int m_iCityWorkingChange;
+#endif
+#if defined(MOD_BUILDINGS_CITY_AUTOMATON_WORKERS)
+	int m_iGlobalCityAutomatonWorkersChange;
+	int m_iCityAutomatonWorkersChange;
+#endif
 	int m_iMinAreaSize;
 	int m_iConquestProbability;
 	int m_iHealRateChange;
@@ -391,6 +435,12 @@ private:
 	int m_iExtraSpies;
 	int m_iSpyRankChange;
 	int m_iInstantSpyRankChange;
+
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int m_iConversionModifier;
+	int m_iGlobalConversionModifier;
+#endif
+
 	int m_iLandmarksTourismPercent;
 	int m_iInstantMilitaryIncrease;
 	int m_iGreatWorksTourismModifier;
@@ -412,6 +462,10 @@ private:
 	bool m_bWater;
 	bool m_bRiver;
 	bool m_bFreshWater;
+#if defined(MOD_API_EXTENSIONS)
+	bool m_bAddsFreshWater;
+	bool m_bPurchaseOnly;
+#endif
 	bool m_bMountain;
 	bool m_bHill;
 	bool m_bFlat;
@@ -484,6 +538,9 @@ private:
 	int** m_ppaiSpecialistYieldChange;
 	int** m_ppaiResourceYieldModifier;
 	int** m_ppaiTerrainYieldChange;
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int** m_ppaiPlotYieldChange;
+#endif
 	int** m_ppiBuildingClassYieldChanges;
 	int* m_paiBuildingClassHappiness;
 
@@ -596,8 +653,15 @@ public:
 	bool GetNextAvailableGreatWorkSlot(BuildingClassTypes *eBuildingClass, int *iSlot) const;
 	bool GetNextAvailableGreatWorkSlot(GreatWorkSlotType eGreatWorkSlot, BuildingClassTypes *eBuildingClass, int *iSlot) const;
 
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES) || defined(MOD_API_UNIFIED_YIELDS)
+	int GetYieldFromGreatWorks(YieldTypes eYield) const;
+#endif
 	int GetCultureFromGreatWorks() const;
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	int GetNumGreatWorks(bool bIgnoreYield = true) const;
+#else
 	int GetNumGreatWorks() const;
+#endif
 	int GetNumGreatWorks(GreatWorkSlotType eGreatWorkSlot) const;
 
 	int GetLandmarksTourismPercent() const;
@@ -605,7 +669,11 @@ public:
 	int GetGreatWorksTourismModifier() const;
 	void ChangeGreatWorksTourismModifier(int iChange);
 
+#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+	int GetThemingBonuses(YieldTypes eYield) const;
+#else
 	int GetThemingBonuses() const;
+#endif
 	int GetNumBuildingsFromFaith() const;
 
 	int GetCityStateTradeRouteProductionModifier() const;

@@ -18,6 +18,9 @@ import common
 
 ID_PLACEHOLDER = "\0HOOK_ID\0"
 INCLUDE_LINE = re.compile(rb"^[ \t]*#[ \t]*(?:include\b|pragma[ \t]+once\b)[^\n]*", re.MULTILINE)
+QUOTED_INCLUDE = re.compile(rb'^([ \t]*#[ \t]*include[ \t]*")([^"\r\n]+)"', re.MULTILINE)
+DIRECTIVE = re.compile(r"^[ \t]*#[ \t]*(\w+)")
+HAND_HOOK_CALL = re.compile(rb"\bCivHand([A-Z][A-Za-z0-9]*)\s*\(")
 CALLING_CONVENTIONS = {"__stdcall", "__cdecl", "__thiscall", "__fastcall", "DLLCALL", "WINAPI", "CALLBACK", "APIENTRY"}
 LEADING_SPECIFIERS = {"static", "inline", "__inline", "__forceinline", "extern", "virtual", "explicit"}
 OPERATOR_NAMES = {
@@ -106,6 +109,12 @@ def read(path):
         return f.read()
 
 
+def cached_read(files, path):
+    if path not in files:
+        files[path] = read(path)
+    return files[path]
+
+
 def text(data, start, end):
     return data[start:end].decode("cp1252")
 
@@ -165,12 +174,42 @@ def wrapper_signature(fn, data, keep_defaults=False):
                 raise Skip("unnamed parameter with a default value")
             at = p["end"] - start
             sig[at:at] = (" civ_p%d" % i).encode("cp1252")
-    return sig.decode("cp1252").rstrip()
+    return active_version(sig.decode("cp1252")).rstrip()
+
+
+def active_version(sig):
+    """The signature without other versions written around it with #if. The body is always active, so an #if the
+    signature leaves open is the branch it is in, and an unmatched #else, #elif or #endif starts another version."""
+    kept, open_ifs = [], []
+    for line in sig.split("\n"):
+        m = DIRECTIVE.match(line)
+        word = m.group(1) if m else None
+        if word in ("if", "ifdef", "ifndef"):
+            open_ifs.append([len(kept), False])
+        elif word in ("else", "elif", "endif") and not open_ifs:
+            break
+        elif word in ("else", "elif"):
+            open_ifs[-1][1] = True
+        elif word == "endif":
+            open_ifs.pop()
+        kept.append(line)
+    for at, has_other_branch in reversed(open_ifs):
+        if has_other_branch:
+            raise Skip("signature split across #if branches")
+        del kept[at]
+    return "\n".join(kept)
 
 
 def collapse(code):
     code = re.sub(r"//[^\n]*", "", code)
     return " ".join(code.split())
+
+
+def one_line(sig):
+    """The signature collapsed onto one line, which an #if inside it cannot be."""
+    if any(DIRECTIVE.match(line) for line in sig.split("\n")):
+        raise Skip("#if inside a free function's signature")
+    return collapse(sig)
 
 
 def qualifier_start(fn, data):
@@ -195,7 +234,7 @@ def free_function_declarations(fn, data, exported):
         sig = wrapper_signature(fn, data)
         rel_q = q - fn["def_start"]
         rel_end = fn["name_end"] - fn["def_start"]
-        orig_decl = collapse(sig[:rel_q] + orig_name(fn) + sig[rel_end:]) + ";"
+        orig_decl = one_line(sig[:rel_q] + orig_name(fn) + sig[rel_end:]) + ";"
         semantic, lexical = fn["namespaces"], fn["lex_namespaces"]
         if semantic[: len(lexical)] != lexical:
             raise Skip("qualified definition outside its namespace")
@@ -205,7 +244,7 @@ def free_function_declarations(fn, data, exported):
         return namespace_open(inner) + orig_decl + " " + namespace_close(inner) + " "
     if fn["decl"] is None:
         marker = "CIV_HOST_API " if exported else ""
-        return marker + collapse(wrapper_signature(fn, data, keep_defaults=True)) + "; "
+        return marker + one_line(wrapper_signature(fn, data, keep_defaults=True)) + "; "
     return ""
 
 
@@ -234,7 +273,7 @@ def original_line(fn, self_type, types, result):
     ]
     call = "%s%s(%s)" % ("s->" if self_type else "", orig_name(fn), ", ".join("o%d" % i for i in range(len(types))))
     body = call if result == "void" else "return " + call
-    return "\t\tstatic %s Original(%s) { %s; }" % (result, ", ".join(params), body)
+    return "\t\tstatic %s Original(%s) { CivHookOriginalCalled(); %s; }" % (result, ", ".join(params), body)
 
 
 def hooked_lines(is_void, self_type, types, names, call):
@@ -257,6 +296,7 @@ def hooked_lines(is_void, self_type, types, names, call):
     if is_void:
         lines.append("\t\t\t\t%s;" % call)
     else:
+        # Only a reference result can be empty: one a veto left unset runs the original after all (CivHookResult).
         lines += ["\t\t\t\tciv_res.Set(%s);" % call, "\t\t\tif (civ_res.Empty())", "\t\t\t\tciv_res.Set(%s);" % call]
     lines.append("\t\t\tCivHookRunAfter(civ_hp, %s, &civ_C::After, &civ_c);" % ID_PLACEHOLDER)
     if not is_void:
@@ -313,7 +353,7 @@ def orig_declaration(fn, files):
     """Text declaring the renamed original inside its class, and where to insert it."""
     decl = fn["decl"]
     path = decl["file"]
-    data = files.setdefault(path, read(path))
+    data = cached_read(files, path)
     toks = decl["tokens"]
     out = []
     i = 0
@@ -348,7 +388,8 @@ def orig_declaration(fn, files):
         pos += 1
     if data[pos : pos + 1] != b";":
         raise Skip("declaration does not end where expected")
-    return path, pos + 1, " " + " ".join(out) + ";"
+    # Inserted before the `;`, so it can never share an offset with an export marker on the next declaration.
+    return path, pos, "; " + " ".join(out)
 
 
 def named_scopes(fn):
@@ -384,61 +425,81 @@ def hook_name(fn, taken):
     return name
 
 
+def hook_shape(fn):
+    """What a plugin's hook depends on besides the key: whether the function is static, and what it returns, as libclang
+    spells it so that reformatting the source changes nothing."""
+    return ("static " if fn["static_method"] else "") + fn["result_type"]
+
+
 class Registry:
-    """The committed id-to-function list. Ids are only ever added."""
+    """The committed id-to-function list. Ids are only ever added; a function whose shape changes gets a new one."""
 
     def __init__(self, path):
         self.path = path
         self.entries = {}
         ids = set()
         self.names = set()
+        self.claimed = set()
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 for number, line in enumerate(f, 1):
                     if not line.strip():
                         continue
-                    fields = line.rstrip("\n").split("\t", 2)
-                    if len(fields) != 3 or not fields[0].isdigit():
-                        raise RuntimeError("%s line %d is not 'id<TAB>name<TAB>function'" % (path, number))
+                    fields = line.rstrip("\n").split("\t", 3)
+                    if len(fields) not in (3, 4) or not re.fullmatch(r"[0-9]+", fields[0]):
+                        raise RuntimeError("%s line %d is not 'id<TAB>name<TAB>function<TAB>shape'" % (path, number))
                     hook_id, name, key = int(fields[0]), fields[1], fields[2]
+                    shape = fields[3] if len(fields) == 4 else ""
                     # A merge of two branches that both added hooks can repeat an id, which would make one
                     # function's hooks run on another.
-                    if hook_id in ids or name in self.names or key in self.entries:
+                    if hook_id in ids or name in self.names or (key, shape) in self.entries:
                         raise RuntimeError("%s line %d repeats an id, name or function seen earlier" % (path, number))
                     ids.add(hook_id)
                     self.names.add(name)
-                    self.entries[key] = (hook_id, name)
+                    self.entries[(key, shape)] = (hook_id, name)
         self.next_id = max([i for i, _ in self.entries.values()] or [-1]) + 1
         self.added = 0
+        self.reshaped = 0
 
     def claim(self, fn):
-        key = hook_key(fn)
-        if key not in self.entries:
+        key, shape = hook_key(fn), hook_shape(fn)
+        if (key, shape) not in self.entries and (key, "") in self.entries:
+            # A row written before shapes were recorded.
+            self.entries[(key, shape)] = self.entries.pop((key, ""))
+        if (key, shape) not in self.entries:
+            if any(k == key for k, _ in self.entries):
+                self.reshaped += 1
             name = hook_name(fn, self.names)
-            self.entries[key] = (self.next_id, name)
+            self.entries[(key, shape)] = (self.next_id, name)
             self.next_id += 1
             self.names.add(name)
             self.added += 1
-        return key, self.entries[key][0], self.entries[key][1]
+        hook_id, name = self.entries[(key, shape)]
+        self.claimed.add(hook_id)
+        return key, hook_id, name
 
     def save(self):
-        rows = sorted((hook_id, name, key) for key, (hook_id, name) in self.entries.items())
+        rows = sorted((hook_id, name, key, shape) for (key, shape), (hook_id, name) in self.entries.items())
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "w", encoding="utf-8", newline="\n") as f:
-            f.writelines("%d\t%s\t%s\n" % row for row in rows)
+            for hook_id, name, key, shape in rows:
+                f.write("%d\t%s\t%s%s\n" % (hook_id, name, key, "\t" + shape if shape else ""))
 
     def count(self):
         return self.next_id
 
 
-def load_functions(project):
+def load_analysis(project):
+    """The analyzed functions and shared variables, each once."""
     with open(os.path.join(project.build_dir, "analysis.json")) as f:
         results = json.load(f)
-    functions = {}
+    functions, variables = {}, {}
     for r in results:
         for fn in r["functions"]:
             functions.setdefault(fn["usr"] + "@" + fn["file"], fn)
-    return list(functions.values())
+        for v in r["variables"]:
+            variables.setdefault(v["usr"], v)
+    return list(functions.values()), list(variables.values())
 
 
 def prepare_hook(fn, project, files):
@@ -449,7 +510,7 @@ def prepare_hook(fn, project, files):
     if (ex and ex["first_token"] == "friend") or (fn["decl"] and fn["decl"]["tokens"][0][0] == "friend"):
         raise Skip("friend function")
     src = os.path.join(project.root, fn["file"])
-    data = files.setdefault(src, read(src))
+    data = cached_read(files, src)
     exported = bool(ex and ex["is_definition"])
     edits = [(src, fn["name_start"], fn["name_end"], orig_name(fn))]
     if fn["class"]:
@@ -474,13 +535,14 @@ def plan_hooks(functions, project, files, edits, registry):
         for path, start, end, insert in fn_edits:
             edits.setdefault(path, []).append((start, end, insert))
         src = os.path.join(project.root, fn["file"])
+        fn["signature"] = hooked_signature(fn, files[src])
         wrappers.setdefault(src, []).append((fn, code.replace(ID_PLACEHOLDER, str(fn["hook_id"]))))
         hooks.append(fn)
     return hooks, skipped, wrappers
 
 
 def mark_exports(functions, files, edits):
-    """Put the export marker on each function's first declaration. Returns (marked, missed)."""
+    """Put the export marker on the first declaration of each function or shared variable. Returns (marked, missed)."""
     marked, missed, sites = 0, 0, set()
     for fn in functions:
         ex = fn.get("export_decl")
@@ -492,7 +554,7 @@ def mark_exports(functions, files, edits):
         site = (os.path.normcase(ex["file"]), ex["start"])
         if site in sites:
             continue
-        data = files.setdefault(ex["file"], read(ex["file"]))
+        data = cached_read(files, ex["file"])
         if text(data, ex["start"], ex["start"] + len(ex["first_token"])) != ex["first_token"]:
             missed += 1
             continue
@@ -503,10 +565,27 @@ def mark_exports(functions, files, edits):
 
 
 def apply_edits(data, edits):
+    """Each edit is (start, end, text) against the original data; texts inserted at one offset keep their order."""
     out = bytearray(data)
-    for start, end, repl in sorted(edits, key=lambda e: (e[0], e[1]), reverse=True):
+    limit = len(data)
+    for start, end, repl in reversed(sorted(edits, key=lambda e: (e[0], e[1]))):
+        if end > limit:
+            raise RuntimeError("generator: edits overlap at offset %d" % start)
         out[start:end] = repl.encode("cp1252")
+        limit = start
     return bytes(out)
+
+
+def pin_outside_includes(project, path, data):
+    """Point quoted #includes that climb out of the project at the originals, which the mirror does not copy."""
+
+    def pin(m):
+        target = os.path.normpath(os.path.join(os.path.dirname(path), m.group(2).decode("cp1252")))
+        if project.contains(target) or not os.path.isfile(target):
+            return m.group(0)
+        return m.group(1) + target.encode("cp1252") + b'"'
+
+    return QUOTED_INCLUDE.sub(pin, data)
 
 
 def add_line_directive(path, data):
@@ -540,7 +619,8 @@ def write_mirror(project, files, edits, wrappers):
             if not name.lower().endswith((".cpp", ".h", ".inl")):
                 shutil.copyfile(src, dst)
                 continue
-            out = add_line_directive(src, apply_edits(files.get(src) or read(src), edits.get(src, [])))
+            data = apply_edits(files.get(src) or read(src), edits.get(src, []))
+            out = add_line_directive(src, pin_outside_includes(project, src, data))
             if src in wrappers:
                 tail = ["", '#include "CivHostHooks.h"', ""]
                 for fn, code in wrappers[src]:
@@ -550,10 +630,26 @@ def write_mirror(project, files, edits, wrappers):
                 f.write(out)
 
 
-def write_table(project, registry):
-    by_id = dict((hook_id, key) for key, (hook_id, _) in registry.entries.items())
+def hand_hook_enum(name):
+    """A call to CivHand<Name> runs the hand-placed hook CIV_HAND_<NAME> of CivPluginApi.h."""
+    return "CIV_HAND_" + re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).upper()
+
+
+def hand_hook_sites(hooks, files, root):
+    """(hand-placed hook, hook id) once for each hooked function whose body calls that hand-placed hook."""
+    sites = set()
+    for fn in hooks:
+        data = files[os.path.join(root, fn["file"])]
+        for m in HAND_HOOK_CALL.finditer(data, fn["body_start"], fn["def_end"]):
+            sites.add((hand_hook_enum(m.group(1).decode("ascii")), fn["hook_id"]))
+    return sorted(sites, key=lambda site: (site[1], site[0]))
+
+
+def write_table(project, registry, sites):
+    by_id = dict((hook_id, key) for (key, _), (hook_id, _) in registry.entries.items())
     lines = [
         '#include "CivHostHooks.h"',
+        '#include "CivPluginApi.h"',
         "",
         "CivHookPoint g_CivHookPoints[%d];" % max(1, registry.count()),
         "unsigned char g_CivHookActive[%d];" % max(1, registry.count()),
@@ -565,22 +661,40 @@ def write_table(project, registry):
     lines += ['\t"%s",' % by_id.get(i, "(unused)").replace("\\", "\\\\") for i in range(registry.count())]
     if not registry.count():
         lines.append('\t"",')
-    lines.append("};")
+    lines += ["};", "", "extern const unsigned char g_CivHookLive[] =", "{"]
+    live = ["1" if i in registry.claimed else "0" for i in range(registry.count())] or ["0"]
+    lines += ["\t" + ", ".join(live[i : i + 40]) + "," for i in range(0, len(live), 40)]
+    lines += ["};", "", "extern const CivHandHookSite g_CivHandHookSites[] =", "{"]
+    lines += ["\t{ %s, %d }," % site for site in sites] or ["\t{ -1, -1 },"]
+    lines += ["};", "const int g_CivHandHookSiteCount = %d;" % len(sites)]
     with open(os.path.join(project.mirror_dir, "CivHookTable.cpp"), "w", newline="\r\n") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def write_plugin_header(project, registry):
+def hooked_signature(fn, data):
+    result = "void" if fn["result"]["kind"] == "void" else return_text(fn, data)
+    return ("static " if fn["static_method"] else "") + result + " " + fn["hook_key"]
+
+
+def write_plugin_header(project, registry, hooks):
+    signatures = dict((fn["hook_id"], fn["signature"]) for fn in hooks)
     lines = [
         "#pragma once",
         "",
-        "// Generated: one namespace per hook point, with its id.",
+        "// Generated: one namespace per hook point, with its id and the function it hooks.",
         "",
         "namespace CivHooks",
         "{",
     ]
-    for hook_id, name in sorted(registry.entries.values()):
-        lines.append("\tnamespace %s { enum { ID = %d }; }" % (name, hook_id))
+    live_names = dict((key, name) for (key, _), (hook_id, name) in registry.entries.items() if hook_id in signatures)
+    for (key, _), (hook_id, name) in sorted(registry.entries.items(), key=lambda item: item[1]):
+        if hook_id in signatures:
+            lines.append("\tnamespace %s { enum { ID = %d }; } // %s" % (name, hook_id, signatures[hook_id]))
+            continue
+        # Left out, so a plugin rebuilt against this SDK stops at its old name rather than being refused in the game.
+        replacement = live_names.get(key)
+        changed = ": its function changed, and its hook is now %s" % replacement if replacement else ""
+        lines.append("\t// %s (id %d) is no longer a hook point%s." % (name, hook_id, changed))
     lines.append("}")
     out_dir = os.path.join(project.build_dir, "sdk")
     os.makedirs(out_dir, exist_ok=True)
@@ -623,6 +737,10 @@ def write_engine_build_files(project):
     extra = []
     for path in [
         os.path.join(common.HOST_DIR, "CivHostRuntime.cpp"),
+        os.path.join(common.HOST_DIR, "CivHostCrash.cpp"),
+        os.path.join(common.HOST_DIR, "CivHostHand.cpp"),
+        os.path.join(common.HOST_DIR, "CivHostOrder.cpp"),
+        os.path.join(common.HOST_DIR, "CivHostSetup.cpp"),
         os.path.join(common.HOST_DIR, "CivHostEngine.cpp"),
         os.path.join(project.mirror_dir, "CivHookTable.cpp"),
     ]:
@@ -657,36 +775,29 @@ def write_engine_build_files(project):
         f.write(sln)
 
 
-def write_hook_list(project, hooks):
-    rows = [
-        {"id": fn["hook_id"], "name": fn["hook_name"], "key": fn["hook_key"], "file": fn["file"], "line": fn["line"]}
-        for fn in hooks
-    ]
-    with open(os.path.join(project.build_dir, "hooks.json"), "w") as f:
-        json.dump(sorted(rows, key=lambda r: r["id"]), f, indent=0)
-
-
 def run(project):
-    functions = load_functions(project)
+    functions, variables = load_analysis(project)
     files, edits = PathDict(), PathDict()
     registry = Registry(project.registry)
     hooks, skipped, wrappers = plan_hooks(functions, project, files, edits, registry)
     marked, missed = mark_exports(functions, files, edits)
+    shared, missed_shared = mark_exports(variables, files, edits)
     write_mirror(project, files, edits, wrappers)
     registry.save()
-    write_table(project, registry)
-    write_plugin_header(project, registry)
-    write_hook_list(project, hooks)
+    write_table(project, registry, hand_hook_sites(hooks, files, project.root))
+    write_plugin_header(project, registry, hooks)
     if project.vcproj:
         write_engine_build_files(project)
 
     vanished = len(registry.entries) - len(hooks)
     print(
-        "hook points %d (new %d, no longer present %d), functions marked for export %d"
-        % (len(hooks), registry.added, vanished, marked)
+        "hook points %d (new %d, no longer present %d), marked for export: functions %d, shared variables %d"
+        % (len(hooks), registry.added, vanished, marked, shared)
     )
-    if missed:
-        print("  export marker not placed (declaration not written literally): %d" % missed)
+    if registry.reshaped:
+        print("  new numbers for functions whose return type or static changed: %d" % registry.reshaped)
+    if missed or missed_shared:
+        print("  export marker not placed (declaration not written literally): %d" % (missed + missed_shared))
     for reason, n in sorted(skipped.items(), key=lambda kv: -kv[1]):
         print("  skipped while generating, %s: %d" % (reason, n))
     return hooks

@@ -1,1 +1,7 @@
 CvGameCoreSource/** -text
+mod/vmc/** -text
+frontend/** -text
+sdk/plugin-template/** -text
+claude-plugin/skills/new-lua-mod/template/** -text
+# cmd.exe can miss a batch label in a file with Unix line endings.
+*.cmd text eol=crlf

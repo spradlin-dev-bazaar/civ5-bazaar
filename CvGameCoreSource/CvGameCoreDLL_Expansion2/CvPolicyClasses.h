@@ -91,6 +91,12 @@ public:
 	int GetUnhappinessFromUnitsMod() const;
 	int GetNumExtraBuilders() const;
 	int GetPlotGoldCostMod() const;
+#if defined(MOD_POLICIES_CITY_WORKING)
+	int GetCityWorkingChange() const;
+#endif
+#if defined(MOD_POLICIES_CITY_AUTOMATON_WORKERS)
+	int GetCityAutomatonWorkersChange() const;
+#endif
 	int GetPlotCultureCostModifier() const;
 	int GetPlotCultureExponentModifier() const;
 	int GetNumCitiesPolicyCostDiscount() const;
@@ -104,6 +110,9 @@ public:
 	int GetStealTechSlowerModifier() const;
 	int GetStealTechFasterModifier() const;
 	int GetCatchSpiesModifier() const;
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int GetConversionModifier() const;
+#endif
 	int GetGoldPerUnit() const;
 	int GetGoldPerMilitaryUnit() const;
 	int GetCityStrengthMod() const;
@@ -199,6 +208,10 @@ public:
 	int* GetSpecialistExtraYieldArray() const;
 	int IsFreePromotion(int i) const;
 	bool IsFreePromotionUnitCombat(const int promotionID, const int unitCombatID) const;
+#if defined(MOD_RELIGION_POLICY_BRANCH_FAITH_GP)
+	bool HasFaithPurchaseUnitClasses() const;
+	bool IsFaithPurchaseUnitClass(const int eUnitClass, const int eCurrentEra) const;
+#endif
 	int GetUnitCombatProductionModifiers(int i) const;
 	int GetUnitCombatFreeExperiences(int i) const;
 	int GetBuildingClassCultureChange(int i) const;
@@ -212,10 +225,37 @@ public:
 	int GetHurryModifier(int i) const;
 	bool IsSpecialistValid(int i) const;
 	int GetImprovementYieldChanges(int i, int j) const;
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int GetPlotYieldChanges(int i, int j) const;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int GetFeatureYieldChanges(int i, int j) const;
+	int GetCityYieldFromUnimprovedFeature(int i, int j) const;
+	int GetUnimprovedFeatureYieldChanges(int i, int j) const;
+	int GetResourceYieldChanges(int i, int j) const;
+	int GetTerrainYieldChanges(int i, int j) const;
+	int GetTradeRouteYieldChange(int i, int j) const;
+	int GetSpecialistYieldChanges(int i, int j) const;
+	int GetGreatPersonExpendedYield(int i, int j) const;
+	int GetGoldenAgeGreatPersonRateModifier(int i) const;
+	int GetYieldFromKills(int i) const;
+	int* GetYieldFromKillsArray() const;
+	int GetYieldFromBarbarianKills(int i) const;
+	int* GetYieldFromBarbarianKillsArray() const;
+	int GetYieldChangeTradeRoute(int i) const;
+	int* GetYieldChangeTradeRouteArray() const;
+	int GetYieldChangesNaturalWonder(int i) const;
+	int* GetYieldChangesNaturalWonderArray() const;
+	int GetYieldChangeWorldWonder(int i) const;
+	int* GetYieldChangeWorldWonderArray() const;
+#endif
 	int GetBuildingClassYieldModifiers(int i, int j) const;
 	int GetBuildingClassYieldChanges(int i, int j) const;
 	int GetFlavorValue(int i) const;
 
+#if defined(MOD_BUGFIX_DUMMY_POLICIES)
+	bool IsDummy() const;
+#endif
 	bool IsOneShot() const;
 	bool IncludesOneShotFreeUnits() const;
 
@@ -283,6 +323,12 @@ private:
 	int m_iUnhappinessFromUnitsMod;
 	int m_iNumExtraBuilders;
 	int m_iPlotGoldCostMod;
+#if defined(MOD_POLICIES_CITY_WORKING)
+	int m_iCityWorkingChange;
+#endif
+#if defined(MOD_POLICIES_CITY_AUTOMATON_WORKERS)
+	int m_iCityAutomatonWorkersChange;
+#endif
 	int m_iPlotCultureCostModifier;
 	int m_iPlotCultureExponentModifier;
 	int m_iNumCitiesPolicyCostDiscount;
@@ -296,6 +342,9 @@ private:
 	int m_iStealTechSlowerModifier;
 	int m_iStealTechFasterModifier;
 	int m_iCatchSpiesModifier;
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+	int m_iConversionModifier;
+#endif
 	int m_iGoldPerUnit;
 	int m_iGoldPerMilitaryUnit;
 	int m_iCityStrengthMod;
@@ -363,6 +412,9 @@ private:
 	bool m_bEnablesSSPartPurchase;
 	bool m_bAbleToAnnexCityStates;
 
+#if defined(MOD_BUGFIX_DUMMY_POLICIES)
+	bool m_bDummy;
+#endif
 	bool m_bOneShot;
 	bool m_bIncludesOneShotFreeUnits;
 
@@ -373,6 +425,9 @@ private:
 
 	// Arrays
 	std::multimap<int, int> m_FreePromotionUnitCombats;
+#if defined(MOD_RELIGION_POLICY_BRANCH_FAITH_GP)
+	std::multimap<int, int> m_FaithPurchaseUnitClasses;
+#endif
 	int* m_piPrereqOrPolicies;
 	int* m_piPrereqAndPolicies;
 	int* m_piPolicyDisables;
@@ -399,6 +454,25 @@ private:
 //	bool* m_pabHurry;
 	bool* m_pabSpecialistValid;
 	int** m_ppiImprovementYieldChanges;
+#if defined(MOD_API_UNIFIED_YIELDS) && defined(MOD_API_PLOT_YIELDS)
+	int** m_ppiPlotYieldChanges;
+#endif
+#if defined(MOD_API_UNIFIED_YIELDS)
+	int** m_ppiFeatureYieldChanges;
+	int** m_ppiCityYieldFromUnimprovedFeature;
+	int** m_ppiUnimprovedFeatureYieldChanges;
+	int** m_ppiResourceYieldChanges;
+	int** m_ppiTerrainYieldChanges;
+	int** m_ppiTradeRouteYieldChange;
+	int** m_ppiSpecialistYieldChanges;
+	int** m_ppiGreatPersonExpendedYield;
+	int* m_piGoldenAgeGreatPersonRateModifier;
+	int* m_piYieldFromKills;
+	int* m_piYieldFromBarbarianKills;
+	int* m_piYieldChangeTradeRoute;
+	int* m_piYieldChangesNaturalWonder;
+	int* m_piYieldChangeWorldWonder;
+#endif
 	int** m_ppiBuildingClassYieldModifiers;
 	int** m_ppiBuildingClassYieldChanges;
 	int* m_piFlavorValue;
@@ -537,6 +611,9 @@ enum PolicyModifierType
     POLICYMOD_SHARED_RELIGION_TOURISM_MODIFIER,
     POLICYMOD_TRADE_ROUTE_TOURISM_MODIFIER,
 	POLICYMOD_OPEN_BORDERS_TOURISM_MODIFIER,
+#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
+    POLICYMOD_CONVERSION_MODIFIER,
+#endif
 };
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -566,8 +643,25 @@ public:
 
 	// Accessor functions
 	bool HasPolicy(PolicyTypes eIndex) const;
+#if defined(MOD_API_EXTENSIONS)
+	bool IsFreePolicy(PolicyTypes eIndex) const;
+	void SetPolicy(PolicyTypes eIndex, bool bNewValue, bool bFree);
+#else
 	void SetPolicy(PolicyTypes eIndex, bool bNewValue);
+#endif
+#if defined(MOD_BUGFIX_DUMMY_POLICIES)
+#if defined(MOD_API_EXTENSIONS)
+	int GetNumPoliciesOwned(bool bExcludeOrphans, bool bExcludeFree = false) const;
+#else
+	int GetNumPoliciesOwned(bool bExcludeOrphans) const;
+#endif
+#else
+#if defined(MOD_API_EXTENSIONS)
+	int GetNumPoliciesOwned(bool bExcludeFree = false) const;
+#else
 	int GetNumPoliciesOwned() const;
+#endif
+#endif
 	int GetNumPoliciesOwnedInBranch(PolicyBranchTypes eBranch) const;
 	CvPolicyXMLEntries* GetPolicies() const;
 
@@ -593,6 +687,9 @@ public:
 	// Policy Branch Stuff
 	void DoUnlockPolicyBranch(PolicyBranchTypes eBranchType);
 	bool CanUnlockPolicyBranch(PolicyBranchTypes eBranchType);
+#if defined(MOD_AI_SMART_V3)
+	bool IsEraPrereqBranch(PolicyBranchTypes eBranchType);
+#endif
 
 	bool IsPolicyBranchUnlocked(PolicyBranchTypes eBranchType) const;
 	void SetPolicyBranchUnlocked(PolicyBranchTypes eBranchType, bool bNewValue, bool bRevolution);
@@ -603,6 +700,11 @@ public:
 	void SetPolicyBranchBlocked(PolicyBranchTypes eBranchType, bool bValue);
 	bool IsPolicyBranchBlocked(PolicyBranchTypes eBranchType) const;
 	bool IsPolicyBlocked(PolicyTypes eType) const;
+
+#if defined(MOD_API_EXTENSIONS)
+	bool CanAdoptIdeology(PolicyBranchTypes eIdeology) const;
+	bool HasAdoptedIdeology(PolicyBranchTypes eIdeology) const;
+#endif
 
 	// Ideology change
 	void DoSwitchIdeologies(PolicyBranchTypes eBranchType);
@@ -656,6 +758,9 @@ private:
 	// Logging functions
 	void LogFlavors(FlavorTypes eFlavor = NO_FLAVOR);
 
+#if defined(MOD_API_EXTENSIONS)
+	bool* m_pabFreePolicy;
+#endif
 	bool* m_pabHasPolicy;
 	bool* m_pabHasOneShotPolicyFired;
 	bool* m_pabHaveOneShotFreeUnitsFired;

@@ -132,6 +132,14 @@
 				</FileConfiguration>
 			</File>
 			<File
+				RelativePath=".\CustomMods.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\CvAchievementInfo.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\CvAchievementUnlocker.cpp"
 				>
 			</File>
@@ -248,6 +256,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\CvEventLog.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\CvFlavorManager.cpp"
 				>
 			</File>
@@ -289,6 +301,10 @@
 			</File>
 			<File
 				RelativePath=".\CvGrandStrategyAI.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\CvGreatPersonInfo.cpp"
 				>
 			</File>
 			<File
@@ -352,6 +368,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\CvPlotInfo.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\CvPlotManager.cpp"
 				>
 			</File>
@@ -389,6 +409,10 @@
 			</File>
 			<File
 				RelativePath=".\CvPromotionClasses.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\CvQuestInfo.cpp"
 				>
 			</File>
 			<File
@@ -511,6 +535,14 @@
 			>
 			<File
 				RelativePath=".\banned.h"
+				>
+			</File>
+			<File
+				RelativePath=".\CustomMods.h"
+				>
+			</File>
+			<File
+				RelativePath=".\CvAchievementInfo.h"
 				>
 			</File>
 			<File
@@ -646,6 +678,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\CvEventLog.h"
+				>
+			</File>
+			<File
 				RelativePath=".\CvFlavorManager.h"
 				>
 			</File>
@@ -695,6 +731,10 @@
 			</File>
 			<File
 				RelativePath=".\CvGrandStrategyAI.h"
+				>
+			</File>
+			<File
+				RelativePath=".\CvGreatPersonInfo.h"
 				>
 			</File>
 			<File
@@ -758,6 +798,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\CvPlotInfo.h"
+				>
+			</File>
+			<File
 				RelativePath=".\CvPlotManager.h"
 				>
 			</File>
@@ -799,6 +843,10 @@
 			</File>
 			<File
 				RelativePath=".\CvPromotionClasses.h"
+				>
+			</File>
+			<File
+				RelativePath=".\CvQuestInfo.h"
 				>
 			</File>
 			<File
