@@ -1,6 +1,6 @@
 # Bazaar Multi-DLL Mod Loader: one DLL, many plugin DLLs
 
-Status: planned 2026-10-19, reworked 2026-10-21. P0 to P2.5 are done, and 0.4.1 is the newest pre-release. P3.1 is under way on the p3.1 branch. What the rest of P3 and the later phases add is a plan.
+Status: planned 2026-10-19, reworked 2026-10-21. P0 to P3.1 are done, and 0.4.1 is the newest pre-release. What the rest of P3 and the later phases add is a plan.
 
 ## Goal
 
@@ -131,7 +131,7 @@ Before unloading any plugin, the host checks that none of its threads is still r
 
 Known limit: a plugin that faulted halfway through a replace may already have changed some state, and the original then runs on top of it. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
 
-Known limit: a crash caught below a protected Lua call (`lua_pcall`, which the game also uses to fire Lua events) leaves that Lua state's error handling pointing at a call that no longer exists, because the guard unwinds past Lua's own clean-up. The next Lua error in that state may then crash the game; for a crash in a plugin's Lua function, that is the error the host raises at once to report it. The host cannot repair it, since that part of the Lua state is Lua's own; the notice already warns that the game may be unstable.
+Known limit: a crash caught below a protected Lua call (`lua_pcall`, which the game also uses to fire Lua events) leaves that Lua state's error handling pointing at a call that no longer exists, because the guard unwinds past Lua's own clean-up. The next Lua error in that state may then crash the game; when the protected call was made inside a plugin's Lua function, that is the error the host raises at once to report the crash. The host cannot repair it, since that part of the Lua state is Lua's own; the notice already warns that the game may be unstable.
 
 ### 5. The Plugins screen
 
@@ -306,7 +306,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 - #28: the plugin order functions whose names collided are renamed;
 - #31: the host's source files are listed in one place, so every host file builds without being listed.
 
-The other maintainability issues (#6, #11, #14, #16, #17, #21, #23, #24, #26, #27, #29, #30, #32, #34, #35) each name the change that should set them off. They wait for it, in whichever phase it comes.
+The other maintainability issues (#6, #11, #16, #17, #21, #23, #24, #26, #27, #29, #30, #32, #34, #35) each name the change that should set them off. They wait for it, in whichever phase it comes. #19 set off #14, so the Claude Code plugin's scripts and event list got their tests in P3.1.
 
 **P3.2 — plugin saves (#50).** Plugins keep their own data in saved games, and their own values on players, cities, units and plots, as described under Save games; the SDK guide and the plugin template show how. Exit: a plugin's data and values survive saving and loading in the game, a value carries over when a city is captured and when a unit upgrades, and a game saved with 0.4 still loads.
 

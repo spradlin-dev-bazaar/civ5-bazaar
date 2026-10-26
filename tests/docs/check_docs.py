@@ -48,6 +48,11 @@ DECLARATIONS = {
     "Setup::Option::GetValue() const": [
         "static bool BeforeSetup_Option_GetValue(const Setup::Option* self, int& result);"
     ],
+    "Thing::Feel(Mood) const": [
+        "static bool BeforeThing_Feel(const Thing* self, Thing::Mood mood, int& result);",
+        "static int ReplaceThing_Feel(int (*original)(const Thing*, Thing::Mood), const Thing* self, Thing::Mood mood)",
+        "CivRegisterBefore<CivHooks::Thing_Feel>(host, &BeforeThing_Feel);",
+    ],
 }
 WHOLE_DECLARATIONS = {
     "Thing::Reset()": """static bool BeforeThing_Reset(Thing* self);

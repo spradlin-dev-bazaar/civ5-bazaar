@@ -694,9 +694,10 @@ def hook_type_lines(result, params, suffix=""):
     ]
 
 
-def plugin_typedefs(fn, qualified=False):
-    """The hook point's typedefs for CivHooks.h: with its types as the game's code writes them, which a plugin cannot
-    always name (a nested type written inside its own class), or qualified, which reads worse but always names it."""
+def hook_types(fn, qualified=False):
+    """A hook point's result type and parameter types, self first: as the game's code writes them, which a plugin
+    cannot always name (a nested type written inside its own class), or qualified, which reads worse but always names
+    it."""
     if qualified:
         owner = fn["canonical_class"]
         params, result = fn["canonical_params"], fn["canonical_result"]
@@ -705,7 +706,12 @@ def plugin_typedefs(fn, qualified=False):
         params, result = [p["type"] for p in fn["params"]], fn["result_type"]
     self_type = ["%s%s *" % ("const " if fn["const"] else "", owner)] if fn["class"] and not fn["static_method"] else []
     result = "void" if fn["result"]["kind"] == "void" else result
-    return hook_type_lines(plugin_spelling(result), [plugin_spelling(t) for t in self_type + params])
+    return plugin_spelling(result), [plugin_spelling(t) for t in self_type + params]
+
+
+def plugin_typedefs(fn, qualified=False):
+    """The hook point's typedefs for CivHooks.h."""
+    return hook_type_lines(*hook_types(fn, qualified))
 
 
 def function_types(fn):
@@ -780,8 +786,9 @@ def failing_hooks(check, type_lines, expected):
 
 
 def checked_plugin_header(project, registry, hooks):
-    """CivHooks.h's text, and the hook points it gives no types. Each hook point's types are spelled as the game's
-    code writes them, else qualified, else left out, whichever first compiles in a plugin as the function's own."""
+    """CivHooks.h's text, the hook points it gives no types, and those whose types it qualifies. Each hook point's
+    types are spelled as the game's code writes them, else qualified, else left out, whichever first compiles in a
+    plugin as the function's own."""
     expected = dict((fn["hook_id"], function_types(fn)) for fn in hooks)
     qualified, untyped = set(), set()
     with tempfile.TemporaryDirectory() as folder:
@@ -792,7 +799,7 @@ def checked_plugin_header(project, registry, hooks):
                 f.write(text)
             failed = failing_hooks(analyze.check_plugin_header(project, path), type_lines, expected)
             if not failed:
-                return text, untyped
+                return text, untyped, qualified - untyped
             if retry_in is None:
                 raise RuntimeError("generator: CivHooks.h still fails for hook points %s" % sorted(failed)[:20])
             retry_in |= failed
@@ -800,7 +807,7 @@ def checked_plugin_header(project, registry, hooks):
 
 def write_plugin_header(project, registry, hooks):
     """Writes CivHooks.h. Returns the hook points it gives no types."""
-    text, untyped = checked_plugin_header(project, registry, hooks)
+    text, untyped, _ = checked_plugin_header(project, registry, hooks)
     out_dir = os.path.join(project.build_dir, "sdk")
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "CivHooks.h"), "w", newline="\r\n") as f:
@@ -897,7 +904,7 @@ def run(project):
     if registry.reshaped:
         print("  new numbers for functions whose return type or static changed: %d" % registry.reshaped)
     if untyped:
-        print("  hook points whose types plugins cannot name, so CivHooks.h leaves them out: %d" % len(untyped))
+        print("  hook points whose types plugins cannot name, so CivHooks.h gives them no types: %d" % len(untyped))
     if missed or missed_shared:
         print("  export marker not placed (declaration not written literally): %d" % (missed + missed_shared))
     for reason, n in sorted(skipped.items(), key=lambda kv: -kv[1]):

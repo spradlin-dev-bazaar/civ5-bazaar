@@ -59,9 +59,10 @@ class Engine:
         self.registry = generate.Registry(self.project.registry)
         cpp = [fn for fn in self.functions if fn["compiled"]]
         hooks, _, _ = generate.plan_hooks(cpp, self.project, files, edits, self.registry)
-        _, untyped = generate.checked_plugin_header(self.project, self.registry, hooks)
+        _, untyped, qualified = generate.checked_plugin_header(self.project, self.registry, hooks)
         for fn in hooks:
-            fn["declarations"] = hook_declarations(fn, self.text(fn["file"]), fn["hook_id"] not in untyped)
+            hook = fn["hook_id"]
+            fn["declarations"] = hook_declarations(fn, self.text(fn["file"]), hook not in untyped, hook in qualified)
         self.unregistered_hooks = self.registry.added
         self.stale_registry_entries = len(self.registry.entries) - len(hooks)
 
@@ -203,16 +204,23 @@ def result_slot(result):
     return re.sub(r"^const\s+(?=[^*&]*$)", "", value) + "&"
 
 
-def hook_declarations(fn, data, typed):
+def hook_declarations(fn, data, typed, qualified):
+    """qualified: CivHooks.h names the hook point's types in full, since a plugin cannot name them as the game's code
+    writes them, so the declarations must too."""
     params = [generate.param_parts(fn, data, i) for i in range(len(fn["params"]))]
-    types = [t for t, _ in params]
-    args = ["%s %s" % (t, "arg" + n[len("civ_p") :] if n.startswith("civ_p") else n) for t, n in params]
+    void = fn["result"]["kind"] == "void"
+    if qualified:
+        result, types = generate.hook_types(fn, qualified=True)
+        types, owner = types[len(types) - len(params) :], fn["canonical_class"]
+    else:
+        result = "void" if void else generate.return_text(fn, data)
+        types, owner = [t for t, _ in params], fn["owner"]
+    names = ["arg" + n[len("civ_p") :] if n.startswith("civ_p") else n for _, n in params]
+    args = ["%s %s" % (t, n) for t, n in zip(types, names)]
     self_type = []
     if fn["owner"] and not fn["static_method"]:
-        self_type = ["%s%s*" % ("const " if fn["const"] else "", fn["owner"])]
+        self_type = ["%s%s*" % ("const " if fn["const"] else "", owner)]
     self_param = ["%s self" % t for t in self_type]
-    void = fn["result"]["kind"] == "void"
-    result = "void" if void else generate.return_text(fn, data)
     slot = [] if void else [result_slot(result) + " result"]
     original = "%s (*original)(%s)" % (result, ", ".join(self_type + types))
     name = fn["hook_name"]

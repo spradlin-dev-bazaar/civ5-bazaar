@@ -207,12 +207,12 @@ namespace
 		Database::Connection* modding = gDLL->GetModsDatabase();
 		Database::Results rows;
 		if (!modding || !modding->Execute(rows,
-			"SELECT m.ModID, m.Version, f.EvaluatedPath, f.Import, (SELECT p.Value FROM ModProperties p WHERE p.ModID = m.ModID "
-			"AND p.Version = m.Version AND p.Name = 'AffectsSavedGames') FROM Mods m JOIN ModFiles f ON f.ModID = m.ModID "
+			"SELECT m.ModID, m.Version, (SELECT p.Value FROM ModProperties p WHERE p.ModID = m.ModID AND p.Version = m.Version "
+			"AND p.Name = 'AffectsSavedGames'), f.EvaluatedPath, f.Import FROM Mods m JOIN ModFiles f ON f.ModID = m.ModID "
 			"AND f.Version = m.Version WHERE m.Activated = 1 ORDER BY m.RowID, f.rowid"))
 			return false;
 		while (rows.Step())
-			CivAddModRow(mods, Text(rows, 0), rows.GetInt(1), Text(rows, 4), CivUtf8(CivWide(Text(rows, 2))), rows.GetInt(3) != 0);
+			CivAddModRow(mods, Text(rows, 0), rows.GetInt(1), Text(rows, 2), CivUtf8(CivWide(Text(rows, 3))), rows.GetInt(4) != 0);
 		return true;
 	}
 

@@ -402,6 +402,19 @@ class ScaffoldTest(unittest.TestCase):
             self.assertIn(message, done.stderr)
 
 
+class SharedCodeTest(unittest.TestCase):
+    def test_the_scaffold_script_finds_positions_in_a_project_as_the_templates_release_script_does(self):
+        def function(path, name):
+            with open(path, encoding="ascii") as f:
+                text = f.read()
+            start = text.index("function %s(" % name)
+            return text[start : text.index("\n}\n", start)]
+
+        scaffold = os.path.join(REPO, "claude-plugin", "scripts", "scaffold.ps1")
+        release = os.path.join(PLUGIN_TEMPLATE, "release.ps1")
+        self.assertEqual(function(scaffold, "Get-TextOffset"), function(release, "Get-TextOffset"))
+
+
 class GraderTest(unittest.TestCase):
     def test_the_new_mod_id_graders_name_their_template_s_ids(self):
         for skill, template in [("new-dll-plugin", PLUGIN_TEMPLATE), ("new-lua-mod", LUA_TEMPLATE)]:

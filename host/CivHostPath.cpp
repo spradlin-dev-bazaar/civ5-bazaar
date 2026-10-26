@@ -61,6 +61,11 @@ bool CivSameText(const std::string& a, const std::string& b)
 	return a == b || Upper(CivWide(a)) == Upper(CivWide(b));
 }
 
+std::string CivFileName(const std::string& path)
+{
+	return path.substr(path.find_last_of("\\/") + 1);
+}
+
 std::string CivFullPath(const std::string& path)
 {
 	const std::wstring wide = CivWide(path);

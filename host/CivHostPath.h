@@ -10,8 +10,9 @@ std::wstring CivWide(const std::string& utf8);
 std::string CivUtf8(const std::wstring& wide);
 std::string CivShortened(const std::string& utf8, size_t most);
 
-// Without regard to case, as Windows compares file names; for paths and mod IDs too.
+// Without regard to case, as Windows compares file names; for paths too.
 bool CivSameText(const std::string& a, const std::string& b);
+std::string CivFileName(const std::string& path);
 std::string CivFullPath(const std::string& path);
 bool CivExists(const std::string& path);
 bool CivReadFile(const std::string& path, std::string* text);

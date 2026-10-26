@@ -283,11 +283,15 @@ class RegistryTest(unittest.TestCase):
             return check
 
         with mock.patch.object(generate.analyze, "check_plugin_header", failing(lambda n: [feel])):
-            text, untyped = generate.checked_plugin_header(project, registry, hooks)
-        self.assertEqual(untyped, {hooks[0]["hook_id"]})
+            text, untyped, qualified = generate.checked_plugin_header(project, registry, hooks)
+        self.assertEqual((untyped, qualified), ({hooks[0]["hook_id"]}, set()))
         self.assertIn("\t\ttypedef int (*Original)(Game::Unit *, Mood);", rounds[0])
         self.assertIn("\t\ttypedef int (*Original)(Game::Unit *, Game::Unit::Mood);", rounds[1])
         self.assertEqual([has_types for _, _, has_types in generate.header_hooks(text)], [False, True])
+        del rounds[:]
+        with mock.patch.object(generate.analyze, "check_plugin_header", failing(lambda n: [feel] if n == 1 else [])):
+            _, untyped, qualified = generate.checked_plugin_header(project, registry, hooks)
+        self.assertEqual((untyped, qualified), (set(), {hooks[0]["hook_id"]}))
         del rounds[:]
         late = failing(lambda n: [feel] if n < 3 else [rest])
         with mock.patch.object(generate.analyze, "check_plugin_header", late):

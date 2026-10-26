@@ -69,7 +69,8 @@ void TestHandHookFaults()
 	StartWith(names);
 	const int before = FaultCount();
 	Check(CivHandIsPluginControlledPlayer(3), "a plugin that faults while answering counts as a no, and the plugins below it are still asked");
-	Check(FaultCount() == before + 1 && IsQuarantined("toy_hand_fault.dll"), "a plugin that faults in a hand-placed hook is quarantined");
+	Check(FaultCount() == before + 1 && IsQuarantined("toy_hand_fault.dll") && !LastFaultWhileShuttingDown(),
+		"a plugin that faults in a hand-placed hook is quarantined, and it is reported as a crash");
 	Check(LogHas("Plugin Toy Hand Fault: Faulted (code 0xC0000005) in IsPluginControlledPlayer."), "the log names the hand-placed hook that faulted");
 	Check(LogHas("    #00 toy_hand_fault.dll+0x"), "a fault in a hand-placed hook has its call stack logged");
 	Check(LogHas("  It wrote to address 0x00000000, at toy_hand_fault.dll+0x"), "a crash that wrote memory says so");

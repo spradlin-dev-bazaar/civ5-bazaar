@@ -200,7 +200,8 @@ void TestQuarantine()
 	const DWORD options = SymGetOptions() & ~(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS);
 	SymSetOptions(options);
 	const int result = unit.add(2, 3);
-	Check(FaultCount() == before + 2, "faulting before- and after-hooks are both caught and reported");
+	Check(FaultCount() == before + 2 && !LastFaultWhileShuttingDown(),
+		"faulting before- and after-hooks are both caught and reported as crashes, not as ones while shutting down");
 	Check(SymGetOptions() == options, "a crash report puts back dbghelp's settings, which the game's own crash handling shares");
 	Check(result == 110, "the other plugins' hooks still run on the same call");
 	Check(IsQuarantined("toy_fault.dll"), "a faulting plugin is quarantined");
@@ -222,7 +223,7 @@ void TestQuarantine()
 
 	const int calls = g_levelCalls;
 	const int level = unit.Level();
-	Check(FaultCount() == before + 3, "a faulting replacement is caught");
+	Check(FaultCount() == before + 3 && !LastFaultWhileShuttingDown(), "a faulting replacement is caught and reported as a crash");
 	Check(level == 7 && g_levelCalls == calls + 1, "when a replacement faults, the original runs instead, once");
 	Check(unit.Level() == 7 && g_levelCalls == calls + 2, "the original keeps running once the replacement is quarantined");
 	Check(FaultCount() == before + 3, "a quarantined replacement does not fault again");

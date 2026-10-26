@@ -3,12 +3,6 @@
 
 namespace
 {
-	std::string FileNameOf(const std::string& path)
-	{
-		const size_t slash = path.find_last_of("\\/");
-		return slash == std::string::npos ? path : path.substr(slash + 1);
-	}
-
 	std::string WindowsPath(const std::string& path)
 	{
 		std::string out = path;
@@ -22,7 +16,7 @@ namespace
 	{
 		std::string found;
 		for (size_t i = 0; i < mod.files.size(); ++i)
-			if ((mod.files[i].imported || !importedOnly) && CivSameText(FileNameOf(mod.files[i].path), fileName))
+			if ((mod.files[i].imported || !importedOnly) && CivSameText(CivFileName(mod.files[i].path), fileName))
 				found = WindowsPath(mod.files[i].path);
 		return found;
 	}

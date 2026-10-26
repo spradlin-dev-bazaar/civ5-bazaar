@@ -102,11 +102,6 @@ namespace
 		return plugin >= 0 && plugin < (int)s_plugins.size() && !s_plugins[plugin].quarantined;
 	}
 
-	const char* FileName(const std::string& path)
-	{
-		return path.c_str() + (path.find_last_of("\\/") + 1);
-	}
-
 	// A plugin registers and logs from its entry point, before the host has copied its name.
 	const char* DisplayName(int plugin)
 	{
@@ -252,12 +247,12 @@ namespace
 		for (size_t i = 0; i < s_possibleConflicts.size(); ++i)
 		{
 			const PossibleConflict& c = s_possibleConflicts[i];
-			const std::string otherFile = FileName(s_plugins[c.other].path);
+			const std::string otherFile = CivFileName(s_plugins[c.other].path);
 			const char* otherName = s_plugins[c.other].name.c_str();
 			const std::string function = ShortHookName(c.hookPoint);
 			const char* hook = CivHandHookName(c.handHook);
 			AddOnce(rec.conflictsWith, otherFile);
-			if (UseBoth(FileName(rec.path), otherFile))
+			if (UseBoth(CivFileName(rec.path), otherFile))
 			{
 				AddAndLog(plugin, rec.notes, Format("You chose to use this plugin with %s anyway, although one of them replaces %s, which runs the %s hook the other uses.",
 					otherName, function.c_str(), hook));
@@ -395,26 +390,27 @@ namespace
 		Log("[%s] %s", DisplayName(plugin), message ? message : "");
 	}
 
-	// Serial 0 belongs to no plugin, so a function pushed with a wrong index refuses to run rather than unbalancing the
-	// plugin's Lua stack.
-	const char* PluginWithCode(const void* address)
+	int PluginWithCode(const void* address)
 	{
 		HMODULE module = 0;
 		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)address, &module);
 		for (size_t i = 0; i < s_plugins.size(); ++i)
 			if (module && s_plugins[i].module == module)
-				return DisplayName((int)i);
-		return "?";
+				return (int)i;
+		return -1;
 	}
 
+	// Serial 0 belongs to no plugin, so a function pushed with a wrong index refuses to run rather than unbalancing the
+	// plugin's Lua stack, or getting another plugin turned off when it crashes.
 	void PushLuaFunction(int plugin, lua_State* L, CivLuaFunction fn)
 	{
-		const bool known = plugin >= 0 && plugin < (int)s_plugins.size();
-		if (!known)
-			Log("Plugin %s pushed a Lua function with plugin index %d, which no plugin has, so calling it raises a Lua error.",
-				PluginWithCode((const void*)fn), plugin);
+		const int owner = PluginWithCode((const void*)fn);
+		const bool own = plugin >= 0 && plugin < (int)s_plugins.size() && (owner < 0 || owner == plugin);
+		if (!own)
+			Log("Plugin %s pushed a Lua function with plugin index %d, which is not its own, so calling it raises a Lua error.",
+				owner < 0 ? "?" : DisplayName(owner), plugin);
 		if (s_luaPusher)
-			s_luaPusher(L, known ? s_plugins[plugin].serial : 0, fn);
+			s_luaPusher(L, own ? s_plugins[plugin].serial : 0, fn);
 	}
 
 	struct EntryCall
@@ -743,7 +739,7 @@ namespace
 		const int index = (int)s_plugins.size();
 		CivPluginRecord blank;
 		blank.path = path;
-		blank.name = FileName(path);
+		blank.name = CivFileName(path);
 		blank.serial = ++s_lastSerial;
 		const bool duplicate = AlreadyListed(path);
 		s_plugins.push_back(blank);
@@ -1018,7 +1014,7 @@ std::vector<CivPluginReportRow> CivHostReportRows()
 	{
 		const CivPluginRecord& p = s_plugins[i];
 		CivPluginReportRow row;
-		row.file = FileName(p.path);
+		row.file = CivFileName(p.path);
 		row.name = p.name;
 		row.version = p.version;
 		row.failed = p.status != CIV_PLUGIN_LOADED || p.quarantined;

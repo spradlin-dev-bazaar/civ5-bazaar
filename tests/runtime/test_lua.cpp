@@ -14,6 +14,7 @@ namespace
 		kError,
 		kHighIndex,
 		kNegativeIndex,
+		kOtherPluginsIndex,
 		kPushed
 	};
 
@@ -58,10 +59,11 @@ namespace
 		return false;
 	}
 
+	// toy_lua loads second, so the index before its own is toy_basic's.
 	std::vector<Pushed> LoadToyLua()
 	{
 		s_pushed.clear();
-		const char* const names[] = {"toy_lua.dll"};
+		const char* const names[] = {"toy_basic.dll", "toy_lua.dll"};
 		StartWith(names);
 		return s_pushed;
 	}
@@ -71,10 +73,12 @@ void TestLuaFunctions()
 {
 	CivHostSetLuaPusher(&Record);
 	const std::vector<Pushed> first = LoadToyLua();
-	Check(first.size() == kPushed && first[kTwo].serial != 0 && first[kHighIndex].serial == 0 && first[kNegativeIndex].serial == 0,
+	Check(first.size() == kPushed && first[kTwo].serial != 0 && first[kHighIndex].serial == 0 && first[kNegativeIndex].serial == 0
+		&& first[kOtherPluginsIndex].serial == 0,
 		"each Lua function a plugin pushes carries its plugin's serial, and one pushed with a wrong index carries none");
-	Check(LogHas("Plugin Toy Lua pushed a Lua function with plugin index -1"),
-		"a Lua function pushed with a wrong index is logged as it is pushed, with the plugin it came from");
+	Check(LogHas("Plugin Toy Lua pushed a Lua function with plugin index -1")
+		&& LogHas("Plugin Toy Lua pushed a Lua function with plugin index 0,"),
+		"a Lua function pushed with a wrong index, another plugin's included, is logged as it is pushed, with the plugin it came from");
 	if (first.size() != kPushed)
 	{
 		CivHostSetLuaPusher(0);
@@ -85,7 +89,8 @@ void TestLuaFunctions()
 	Check(Run(first[kTwo], &results, &why) && results == 2, "a plugin's Lua function runs, and how many results it pushed comes back");
 	Check(Run(first[kMinusOne], &results, &why) && results == -1,
 		"a negative count, such as a coroutine's yield, comes back as it is and is not taken for a refusal");
-	Check(Refused(first[kHighIndex], "wrong plugin index") && Refused(first[kNegativeIndex], "wrong plugin index"),
+	Check(Refused(first[kHighIndex], "wrong plugin index") && Refused(first[kNegativeIndex], "wrong plugin index")
+		&& Refused(first[kOtherPluginsIndex], "wrong plugin index"),
 		"a Lua function pushed with a wrong index raises a Lua error that says so");
 	Check(JumpsBack(first[kError]) && !IsQuarantined("toy_lua.dll"),
 		"a Lua error the plugin raises leaves through the crash guard without being taken for a crash");

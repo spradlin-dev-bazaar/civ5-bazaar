@@ -891,6 +891,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	host->PushLuaFunction(host->pluginIndex, 0, &LuaError);
 	host->PushLuaFunction(host->pluginIndex + 100, 0, &LuaTwo);
 	host->PushLuaFunction(-1, 0, &LuaTwo);
+	host->PushLuaFunction(host->pluginIndex - 1, 0, &LuaTwo);
 	return true;
 }
 

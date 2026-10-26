@@ -284,13 +284,16 @@ class RunTest(unittest.TestCase):
         out = io.StringIO()
         with mock.patch.object(layouts, "compile_report", lambda *args: next(texts)):
             with mock.patch.object(layouts.layout_types, "read", self.read_types):
-                with mock.patch.object(layouts, "check_hooks_header", lambda *args: None), redirect_stdout(out):
+                with mock.patch.object(layouts, "check_hooks_header", self.check_header), redirect_stdout(out):
                     code = layouts.main(["--accept"] if step == "accept" else [])
         return code, out.getvalue()
 
     def read_types(self, unit, includes):
         self.read_with = (unit, includes)
         return self.types
+
+    def check_header(self, folder, includes):
+        self.header_checked_with = (folder, includes)
 
     def check(self, plugin, host=None):
         return self.run_step("check", plugin, host)
@@ -344,6 +347,11 @@ class RunTest(unittest.TestCase):
             self.version = (1, 4)
             self.assertEqual(self.check(current)[0], 0)
         self.assertEqual(self.saved(), ((2, 0), layouts.parse_report(report(GROWN, moved))))
+
+    def test_the_check_compiles_civhooks_h_with_the_include_folders_plugins_use(self):
+        self.check(report(UNIT))
+        folder = os.path.dirname(self.read_with[0])
+        self.assertEqual(self.header_checked_with, (folder, layouts.include_dirs(self.project)))
 
     def test_the_types_libclang_reads_join_the_record_and_a_change_to_them_fails(self):
         self.types = layouts.parse_report(UNIT_TYPES + VALUES)

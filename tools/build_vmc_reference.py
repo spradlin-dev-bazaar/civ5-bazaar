@@ -254,11 +254,7 @@ def read_engine(option_names):
                 kinds.setdefault(name, set()).add(KINDS[kind])
                 number = text.count("\n", 0, match.start())
                 if KINDS[kind] == "test-all":
-                    if call is VMC_CALL:
-                        reading = answer_reading(code, match.end(), None)
-                    else:
-                        filled = FILLED_ANSWER.match(code, match.end())
-                        reading = filled and answer_reading(code, filled.end(), filled.group(1))
+                    reading = test_all_reading(code, match.end(), call is VMC_CALL)
                     if reading is None:
                         raise SystemExit(
                             "build_vmc_reference: %s line %d reads a test-all event's answer in a way this script "
@@ -272,6 +268,25 @@ def read_engine(option_names):
                 blocks = sorted(b[4:] for b in pairs[number][1] if b[4:] in option_names)
                 pushed = pushed_before(lines, number) if call is BASE_CALL else []
                 sites.setdefault(name, []).append(Site(path.name, options, blocks, pushed))
+    problems = read_problems(readings, skipped, set(kinds) | set(types))
+    if problems:
+        raise SystemExit("build_vmc_reference: " + "; ".join(problems))
+    acts_on_true = {name for name, seen in readings.items() if seen == {"acts"}}
+    return Engine(types, kinds, vmc_sites, base_sites, acts_on_true, unused)
+
+
+def test_all_reading(code, end, vmc_call):
+    """answer_reading for the test-all call that ends at end: a VMC call compares its answer where it is made, and a
+    base-game call fills a variable first."""
+    if vmc_call:
+        return answer_reading(code, end, None)
+    filled = FILLED_ANSWER.match(code, end)
+    return filled and answer_reading(code, filled.end(), filled.group(1))
+
+
+def read_problems(readings, skipped, events):
+    """Why what read_engine read cannot be trusted: an event read both ways, or a hand list naming something the engine
+    no longer has."""
     problems = []
     mixed = sorted(name for name, seen in readings.items() if len(seen) > 1)
     if mixed:
@@ -279,13 +294,10 @@ def read_engine(option_names):
     gone = sorted(NOT_EVENTS - skipped)
     if gone:
         problems.append("NOT_EVENTS names test calls the engine no longer makes: " + ", ".join(gone))
-    unknown = sorted(name for name in EXTRA_NOTES if name not in kinds and name not in types)
+    unknown = sorted(name for name in EXTRA_NOTES if name not in events)
     if unknown:
         problems.append("EXTRA_NOTES names events the engine no longer has: " + ", ".join(unknown))
-    if problems:
-        raise SystemExit("build_vmc_reference: " + "; ".join(problems))
-    acts_on_true = {name for name, seen in readings.items() if seen == {"acts"}}
-    return Engine(types, kinds, vmc_sites, base_sites, acts_on_true, unused)
+    return problems
 
 
 def closest(event, engine):

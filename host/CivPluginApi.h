@@ -14,7 +14,7 @@ class CvUnit;
 enum CivHookKind
 {
 	// Returning true vetoes the call: the caller gets what the before-hooks left in the result, and the after-hooks
-	// still run.
+	// still run. A veto on a function that returns a reference still runs the function if no before-hook set the result.
 	CIV_HOOK_BEFORE = 0,
 	// Runs after the function, or after a veto, and may change the result.
 	CIV_HOOK_AFTER = 1,

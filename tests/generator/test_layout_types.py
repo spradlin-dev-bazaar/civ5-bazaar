@@ -96,6 +96,11 @@ class ReadTest(unittest.TestCase):
     def test_a_struct_named_by_a_typedef_gets_its_own_block(self):
         self.assertIn("types Plain", self.read("typedef struct { int a; } Plain;"))
 
+    def test_a_class_template_is_left_out_and_a_class_using_one_names_it_with_its_arguments(self):
+        found = self.read("template <class T> struct Box { T m_v; };\nstruct Use { Box<int> m_b; };\n")
+        self.assertEqual(sorted(found), ["types Use"])
+        self.assertIn(" field m_b: Box<int>", found["types Use"])
+
     def test_a_class_with_no_fields_or_virtual_functions_adds_nothing(self):
         self.assertEqual(self.read("struct Empty { void Act(); static int s_count; };"), {})
 
