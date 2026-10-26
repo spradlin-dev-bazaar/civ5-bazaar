@@ -1,4 +1,4 @@
-release	0.4.0
+release	0.4.1
 AppendToLog(CvString &, CvString &, CvString, CvString) @CvEconomicAI.cpp	ec95342116785ed6			
 AppendToLog(CvString &, CvString &, CvString, float) @CvEconomicAI.cpp	9ecda06675a848e4			
 AppendToLog(CvString &, CvString &, CvString, int) @CvEconomicAI.cpp	adb2228a01664de0			
