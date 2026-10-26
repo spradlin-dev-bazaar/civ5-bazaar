@@ -23,6 +23,7 @@ $templateDll = 'Template' + 'Plugin.dll'
 $templateTeasers = @('A minimal plugin for the Bazaar Multi-DLL Mod Loader.', 'A minimal Lua mod for the Bazaar Multi-DLL Mod Loader.')
 # Latin-1 maps every byte to one character and back, so files keep their encoding and line endings.
 $latin1 = [Text.Encoding]::GetEncoding(28591)
+$utf8Bom = [string] [char] 0xEF + [char] 0xBB + [char] 0xBF
 $number = '(?:0|[1-9][0-9]{0,8})'
 $wholeNumberPattern = '^[1-9][0-9]{0,8}$'
 $identifiers = '[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*'
@@ -51,13 +52,17 @@ function Set-FileText([string] $path, [string] $content) {
     }
 }
 
-# For the files an author edits by hand, which some editors save with a byte order mark.
-function Read-TextFile([string] $path) {
-    $text = Read-RawText $path
+function Assert-NotUtf16([string] $path, [string] $text) {
     if ($text.StartsWith([string] [char] 0xFF + [char] 0xFE) -or $text.StartsWith([string] [char] 0xFE + [char] 0xFF)) {
         Stop-Release "$(Split-Path -Leaf $path) is saved as UTF-16. Save it as plain text (UTF-8 or ANSI)."
     }
-    if ($text.StartsWith([string] [char] 0xEF + [char] 0xBB + [char] 0xBF)) {
+}
+
+# For the files an author edits by hand, which some editors save with a byte order mark.
+function Read-TextFile([string] $path) {
+    $text = Read-RawText $path
+    Assert-NotUtf16 $path $text
+    if ($text.StartsWith($utf8Bom)) {
         return $text.Substring(3)
     }
     return $text
@@ -72,12 +77,73 @@ function Invoke-Program([string] $file, [string] $arguments) {
     return $process.ExitCode
 }
 
-function Get-ProjectElement([string] $text, [string] $element) {
-    $found = [regex]::Match($text, "<$element>([^<]*)</$element>")
-    if (-not $found.Success) {
+# The document, or the parser's reason the file is not valid XML. Any other failure, such as a locked file, stops the
+# script with its own message.
+function Read-Xml([string] $path) {
+    $xml = New-Object Xml.XmlDocument
+    try {
+        $xml.Load($path)
+    } catch [Xml.XmlException] {
+        return $_.Exception.GetBaseException().Message
+    }
+    return $xml
+}
+
+# XmlTextReader starts a new line at CRLF, LF and a lone CR alike.
+function Get-TextOffset([string] $text, [int] $line, [int] $column) {
+    if ($line -le 1) {
+        return $column - 1
+    }
+    $break = [regex]::Matches($text, "\r\n|\r|\n")[$line - 2]
+    return $break.Index + $break.Length + $column - 1
+}
+
+# The project's text with only the digits of its own <ModVersion> changed, where an XML reader finds them, so every
+# other byte stays as the author or ModBuddy wrote it.
+function Get-VersionedProject([string] $path, [int] $from, [int] $to) {
+    $raw = Read-RawText $path
+    if ($from -eq $to) {
+        return $raw
+    }
+    $start = if ($raw.StartsWith($utf8Bom)) { $utf8Bom.Length } else { 0 }
+    $text = $raw.Substring($start)
+    $reader = New-Object Xml.XmlTextReader (New-Object IO.StringReader $text)
+    $reader.XmlResolver = $null
+    $names = @{}
+    $offset = -1
+    try {
+        while ($offset -lt 0 -and $reader.Read()) {
+            if ($reader.NodeType -eq [Xml.XmlNodeType]::Element) {
+                $names[$reader.Depth] = $reader.LocalName
+            } elseif ($reader.NodeType -eq [Xml.XmlNodeType]::Text -and $reader.Depth -eq 3 -and $names[0] -eq 'Project' -and
+                $names[1] -eq 'PropertyGroup' -and $names[2] -eq 'ModVersion') {
+                $offset = Get-TextOffset $text $reader.LineNumber $reader.LinePosition
+            }
+        }
+    } catch [Xml.XmlException] {
+        $offset = -1
+    } finally {
+        $reader.Close()
+    }
+    $end = if ($offset -gt 0) { $text.IndexOf('<', $offset) } else { -1 }
+    if ($end -lt 0 -or $text[$offset - 1] -ne '>' -or $text.Substring($offset, $end - $offset).Trim() -ne [string] $from) {
+        Stop-Release "Could not find where the .civ5proj writes its <ModVersion>, so nothing was changed. Set it to $to by hand, then run release.cmd again."
+    }
+    $span = $text.Substring($offset, $end - $offset)
+    $digits = $start + $offset + $span.Length - $span.TrimStart().Length
+    return $raw.Substring(0, $digits) + $to + $raw.Substring($digits + ([string] $from).Length)
+}
+
+function Find-ProjectElement($xml, [string] $element) {
+    return $xml.SelectSingleNode("/*[local-name()='Project']/*[local-name()='PropertyGroup']/*[local-name()='$element']")
+}
+
+function Get-ProjectElement($xml, [string] $element) {
+    $node = Find-ProjectElement $xml $element
+    if (-not $node) {
         Stop-Release "The .civ5proj has no <$element> line."
     }
-    return $found.Groups[1].Value
+    return $node.InnerText
 }
 
 function Read-VersionFile([string] $path) {
@@ -130,19 +196,22 @@ function Read-Project([string] $root) {
     if ($files.Count -ne 1) {
         Stop-Release "Expected one .civ5proj in the mod folder, found $($files.Count)."
     }
-    $text = Read-RawText $files[0].FullName
-    $modVersion = (Get-ProjectElement $text 'ModVersion').Trim()
+    Assert-NotUtf16 $files[0].FullName (Read-RawText $files[0].FullName)
+    $xml = Read-Xml $files[0].FullName
+    if ($xml -is [string]) {
+        Stop-Release "The .civ5proj is not valid XML, so its settings cannot be read: $xml Fix it in ModBuddy or a text editor."
+    }
+    $modVersion = (Get-ProjectElement $xml 'ModVersion').Trim()
     if ($modVersion -notmatch $wholeNumberPattern) {
         Stop-Release "The .civ5proj's <ModVersion> is '$modVersion', not a whole number above 0."
     }
     return @{
-        File       = $files[0].FullName
-        Text       = $text
-        Name        = Get-ProjectElement $text 'Name'
-        Id          = (Get-ProjectElement $text 'Guid').Trim().ToLowerInvariant()
-        Authors     = (Get-ProjectElement $text 'Authors').Trim()
-        Teaser      = [regex]::Match($text, '<Teaser>([^<]*)</Teaser>').Groups[1].Value
-        Description = [regex]::Match($text, '<Description>([^<]*)</Description>').Groups[1].Value
+        File        = $files[0].FullName
+        Name        = Get-ProjectElement $xml 'Name'
+        Id          = (Get-ProjectElement $xml 'Guid').Trim().ToLowerInvariant()
+        Authors     = (Get-ProjectElement $xml 'Authors').Trim()
+        Teaser      = [string] (Find-ProjectElement $xml 'Teaser').InnerText
+        Description = [string] (Find-ProjectElement $xml 'Description').InnerText
         ModVersion  = [int] $modVersion
     }
 }
@@ -300,10 +369,10 @@ function Test-ChangesSection([string] $root, [string] $release) {
 }
 
 function Write-Versions($version, [int] $modVersion, $project, [string] $versionFile, [string] $header) {
+    $projectText = Get-VersionedProject $project.File $project.ModVersion $modVersion
     $modLine = if ($version.IsWholeNumber) { '' } else { "mod $modVersion`n" }
     Set-FileText $versionFile ("release $($version.Release)`n" + $modLine + "bazaar $($version.Bazaar)`n")
-    $element = [regex] '<ModVersion>[^<]*</ModVersion>'
-    Set-FileText $project.File ($element.Replace($project.Text, "<ModVersion>$modVersion</ModVersion>", 1))
+    Set-FileText $project.File $projectText
     if ($header) {
         $text = Read-RawText $header
         Set-FileText $header ([regex]::Replace($text, $versionDefine, "`${1}$($version.Release)`${2}"))
@@ -395,14 +464,24 @@ function Get-UnpackedModProblems([string] $folder, [int] $modVersion, [bool] $is
         $problems.Add("it has $($modinfo.Count) mod descriptions (.modinfo files), not one")
         return $problems
     }
-    $text = Read-RawText $modinfo[0].FullName
-    $packaged = [regex]::Match($text, '<Mod [^>]*\bversion="(\d+)"')
-    if (-not $packaged.Success -or [int] $packaged.Groups[1].Value -ne $modVersion) {
-        $shown = if ($packaged.Success) { $packaged.Groups[1].Value } else { 'missing' }
+    $xml = Read-Xml $modinfo[0].FullName
+    if ($xml -is [string]) {
+        $problems.Add("its mod description is not valid XML: $xml")
+        return $problems
+    }
+    $mod = $xml.SelectSingleNode('/Mod')
+    if (-not $mod) {
+        $problems.Add('its mod description has no <Mod> element, so it does not describe a mod')
+        return $problems
+    }
+    $packaged = $mod.GetAttribute('version')
+    if ($packaged -ne [string] $modVersion) {
+        $shown = if ($packaged) { $packaged } else { 'missing' }
         $problems.Add("its mod version is $shown, not $modVersion")
     }
-    $updates = @([regex]::Matches($text, '<UpdateDatabase>([^<]+)</UpdateDatabase>') | ForEach-Object { $_.Groups[1].Value })
-    if ($updates.Count -and $text -notmatch '<AffectsSavedGames>1</AffectsSavedGames>') {
+    $updates = @($mod.SelectNodes('Actions//UpdateDatabase') | ForEach-Object { $_.InnerText.Trim() })
+    $affects = $mod.SelectSingleNode('Properties/AffectsSavedGames')
+    if ($updates.Count -and -not ($affects -and $affects.InnerText -eq '1')) {
         $problems.Add('it changes the game''s database but does not affect saved games, so a loaded save would leave those changes out')
     }
     $dlls = @(foreach ($update in $updates) {

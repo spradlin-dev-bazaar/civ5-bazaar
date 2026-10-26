@@ -5,7 +5,8 @@ usage: fake_build.py PROJECT_FOLDER
 
 Environment variables make it go wrong on purpose: FAKE_BUILD_FAIL, FAKE_NO_PACKAGE, FAKE_API ("major.minor", or
 "none" for no API version), FAKE_64BIT, FAKE_SKIP_DLL (a DLL name to leave out), FAKE_AFFECTS_SAVES ("0"),
-FAKE_NO_ROW, FAKE_MODINFO_VERSION, FAKE_TWO_MODINFO and FAKE_PACKAGE_NAME.
+FAKE_COMMENTED_SAVES (the setting commented out), FAKE_BROKEN_MODINFO, FAKE_NO_ROW, FAKE_MODINFO_VERSION,
+FAKE_TWO_MODINFO and FAKE_PACKAGE_NAME.
 """
 
 import glob
@@ -16,6 +17,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+from xml.etree import ElementTree
 
 TAR = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar.exe")
 
@@ -80,6 +82,19 @@ def write_dll(path):
         f.write(fake_dll(exports, 0x20B if os.environ.get("FAKE_64BIT") else 0x10B))
 
 
+def local_name(element):
+    return element.tag.rsplit("}", 1)[-1]
+
+
+def project_property(civ5proj, name):
+    for group in ElementTree.parse(civ5proj).getroot():
+        if local_name(group) == "PropertyGroup":
+            for element in group:
+                if local_name(element) == name:
+                    return element.text or ""
+    return None
+
+
 def stage_mod(project, stage, mod):
     updates = []
     for sql in glob.glob(os.path.join(project, "mod", "*.sql")):
@@ -91,15 +106,20 @@ def stage_mod(project, stage, mod):
         for dll in dll_plugin_rows(text):
             if dll != os.environ.get("FAKE_SKIP_DLL"):
                 write_dll(os.path.join(stage, dll))
+    saves = "<AffectsSavedGames>%s</AffectsSavedGames>" % os.environ.get("FAKE_AFFECTS_SAVES", "1")
+    if os.environ.get("FAKE_COMMENTED_SAVES"):
+        saves = "<!-- %s -->" % saves
     modinfo = (
-        '<Mod id="x" version="%s"><Properties><AffectsSavedGames>%s</AffectsSavedGames></Properties>'
+        '<Mod id="x" version="%s"><Properties>%s</Properties>'
         "<Actions><OnModActivated>%s</OnModActivated></Actions></Mod>"
         % (
             os.environ.get("FAKE_MODINFO_VERSION", mod),
-            os.environ.get("FAKE_AFFECTS_SAVES", "1"),
+            saves,
             "".join("<UpdateDatabase>%s</UpdateDatabase>" % u for u in updates),
         )
     )
+    if os.environ.get("FAKE_BROKEN_MODINFO"):
+        modinfo = modinfo.replace("</Properties>", "", 1)
     write(os.path.join(stage, "mod.modinfo"), modinfo)
     if os.environ.get("FAKE_TWO_MODINFO"):
         write(os.path.join(stage, "another.modinfo"), modinfo)
@@ -112,9 +132,8 @@ def main(project):
     if os.environ.get("FAKE_NO_PACKAGE"):
         return 0
     (civ5proj,) = glob.glob(os.path.join(project, "mod", "*.civ5proj"))
-    text = read(civ5proj)
-    name = os.environ.get("FAKE_PACKAGE_NAME") or re.search(r"<Name>([^<]*)</Name>", text).group(1)
-    mod = re.search(r"<ModVersion>([^<]*)</ModVersion>", text).group(1).strip()
+    name = os.environ.get("FAKE_PACKAGE_NAME") or project_property(civ5proj, "Name")
+    mod = project_property(civ5proj, "ModVersion").strip()
     packages = os.path.join(project, "Packages")
     os.makedirs(packages, exist_ok=True)
     package = os.path.join(packages, "%s (v %s).civ5mod" % (name, mod))

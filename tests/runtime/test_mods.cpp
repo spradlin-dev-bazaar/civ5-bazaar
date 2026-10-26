@@ -27,8 +27,8 @@ void TestModDescriptions()
 	const CivModInfo saves = WithProperties("    <AffectsSavedGames>1</AffectsSavedGames>\r\n", "a mod description is read");
 	Check(saves.id == "mod-id" && saves.version == 3, "it gives the mod's own ID and version, not a dependency's");
 	Check(saves.affectsSavedGames, "a mod that affects saved games says so");
-	Check(WithProperties("    <AffectsSavedGames>\r\n      1\r\n    </AffectsSavedGames>\r\n", "a setting across lines is read").affectsSavedGames,
-		"the setting counts however it is laid out");
+	Check(!WithProperties("    <AffectsSavedGames>\r\n      1\r\n    </AffectsSavedGames>\r\n", "a setting across lines is read").affectsSavedGames,
+		"only exactly 1 counts, as ModBuddy writes it");
 	Check(!WithProperties("    <AffectsSavedGames>0</AffectsSavedGames>\r\n", "a setting of 0 is read").affectsSavedGames,
 		"0 does not affect saved games");
 	Check(!WithProperties("    <AffectsSavedGames>true</AffectsSavedGames>\r\n", "a setting of true is read").affectsSavedGames,

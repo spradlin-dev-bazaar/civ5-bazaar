@@ -14,6 +14,7 @@ import re
 import sys
 from collections import namedtuple
 from pathlib import Path
+from xml.etree import ElementTree
 
 REPO = Path(__file__).resolve().parents[1]
 VMC = REPO / "mod" / "vmc"
@@ -55,8 +56,7 @@ Engine = namedtuple("Engine", "types kinds vmc_sites base_sites")
 
 
 def read_version():
-    modinfo = next(VMC.glob("*.modinfo")).read_text(encoding="utf-8-sig")
-    return re.search(r'<Mod\b[^>]*\bversion="(\d+)"', modinfo).group(1)
+    return str(int(ElementTree.parse(next(VMC.glob("*.modinfo"))).getroot().attrib["version"]))
 
 
 def read_options():

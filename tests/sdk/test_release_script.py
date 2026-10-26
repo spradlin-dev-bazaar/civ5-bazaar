@@ -12,6 +12,9 @@ import sys
 import tempfile
 import unittest
 import uuid
+from xml.sax.saxutils import escape
+
+from fake_build import project_property
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -30,7 +33,7 @@ BOM = "\xef\xbb\xbf"
 
 
 def read(path):
-    with open(path, encoding="latin-1") as f:
+    with open(path, encoding="latin-1", newline="") as f:
         return f.read()
 
 
@@ -45,13 +48,13 @@ def civ5proj(folder):
 
 
 def project_value(folder, element):
-    return re.search(r"<%s>([^<]*)</%s>" % (element, element), read(civ5proj(folder))).group(1)
+    return project_property(civ5proj(folder), element).strip()
 
 
 def set_project_value(folder, element, value):
     path = civ5proj(folder)
     pattern = r"<%s>[^<]*</%s>" % (element, element)
-    write(path, re.sub(pattern, lambda _: "<%s>%s</%s>" % (element, value, element), read(path), 1))
+    write(path, re.sub(pattern, lambda _: "<%s>%s</%s>" % (element, escape(value), element), read(path), 1))
 
 
 def snapshot(folder, *parts):
@@ -435,12 +438,69 @@ class ReleaseScriptTest(unittest.TestCase):
             ({"FAKE_SKIP_DLL": DLL}, ["it has no " + DLL]),
             ({"FAKE_MODINFO_VERSION": "7"}, ["mod version is 7, not 1"]),
             ({"FAKE_TWO_MODINFO": "1"}, ["2 mod descriptions"]),
+            ({"FAKE_COMMENTED_SAVES": "1"}, ["does not affect saved games"]),
+            ({"FAKE_AFFECTS_SAVES": "\r\n  1\r\n"}, ["does not affect saved games"]),
+            ({"FAKE_BROKEN_MODINFO": "1"}, ["its mod description is not valid XML"]),
             ({"FAKE_API": "0.3", "FAKE_AFFECTS_SAVES": "0"}, ["declares API 0.3", "does not affect saved games"]),
         ):
             with self.subTest(fake=fake):
                 folder = self.project()
                 self.assert_refused_after_build(folder, "The package was not released", *words, **fake)
                 shutil.rmtree(folder)
+
+    def test_only_the_projects_own_version_changes_in_a_file_as_modbuddy_writes_it(self):
+        folder = self.project()
+        path = civ5proj(folder)
+        odd = "<Note kind='odd'>&quot;quoted&quot; &apos;text&apos;</Note>\n    <Empty/>\n    <ModVersion>"
+        text = read(path).replace("<ModVersion>", odd, 1)
+        text = text.replace("<ModVersion>1", "<!-- <ModVersion>9</ModVersion> -->\n    <ModVersion>1", 1)
+        text = text.replace("<ModVersion>1</ModVersion>", "<ModVersion> 1 </ModVersion>", 1)
+        # A lone carriage return, which some editors leave, still counts as a line break.
+        write(path, BOM + text.replace("\n", "\r\n").replace("<Empty/>", "<Empty/>\r<Empty/>", 1))
+        before = read(path)
+        self.set_version(folder, "release 2\nbazaar 0.4.0\n")
+        self.assert_released(self.release(folder), folder, "2", 2)
+        self.assertEqual(read(path), before.replace("<ModVersion> 1 </ModVersion>", "<ModVersion> 2 </ModVersion>"))
+
+    def test_a_version_the_script_cannot_find_in_the_project_is_refused_before_anything_changes(self):
+        folder = self.project()
+        path = civ5proj(folder)
+        write(path, read(path).replace("<ModVersion>1</ModVersion>", "<ModVersion><![CDATA[1]]></ModVersion>"))
+        self.set_version(folder, "release 2\nbazaar 0.4.0\n")
+        self.assert_refused_before_build(folder, "Set it to 2 by hand")
+
+    def test_a_plain_project_keeps_every_byte_but_its_version(self):
+        folder = self.project()
+        before = read(civ5proj(folder))
+        self.set_version(folder, "release 2\nbazaar 0.4.0\n")
+        self.assert_released(self.release(folder), folder, "2", 2)
+        self.assertEqual(
+            read(civ5proj(folder)), before.replace("<ModVersion>1</ModVersion>", "<ModVersion>2</ModVersion>")
+        )
+
+    def test_only_the_projects_own_name_counts(self):
+        folder = self.project()
+        path = civ5proj(folder)
+        other = (
+            "<ItemGroup>\n    <Thing>\n      <Name>Not The Mod</Name>\n    </Thing>\n  </ItemGroup>\n  <PropertyGroup>"
+        )
+        write(path, read(path).replace("<PropertyGroup>", other, 1))
+        done = self.release(folder)
+        self.assert_released(done, folder, "1", 1)
+        self.assertIn("released %s 1" % NAME, done.stdout)
+
+    def test_a_project_that_is_not_valid_xml_is_refused_with_the_place_it_breaks(self):
+        folder = self.project()
+        write(civ5proj(folder), read(civ5proj(folder)).replace("</Project>", ""))
+        self.assert_refused_before_build(folder, "The .civ5proj is not valid XML", "Line ")
+
+    def test_a_project_saved_as_utf16_is_refused(self):
+        folder = self.project()
+        path = civ5proj(folder)
+        text = read(path)
+        with open(path, "wb") as f:
+            f.write(text.encode("utf-16"))
+        self.assert_refused_before_build(folder, "is saved as UTF-16")
 
     def test_every_dll_a_row_names_is_checked(self):
         folder = self.project()

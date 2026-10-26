@@ -82,7 +82,7 @@ namespace
 		{
 			if (At(open, L"Properties", L"AffectsSavedGames"))
 			{
-				mod->affectsSavedGames = Trimmed(text) == "1";
+				mod->affectsSavedGames = text == L"1";
 			}
 			else if (At(open, L"Files", L"File"))
 			{
