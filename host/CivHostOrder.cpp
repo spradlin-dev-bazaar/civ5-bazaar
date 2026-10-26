@@ -80,18 +80,18 @@ namespace
 	}
 }
 
-std::vector<CivOrderEntry> CivApplyOrder(const std::vector<std::string>& listedFiles, const std::vector<CivOrderEntry>& saved)
+std::vector<CivOrderEntry> CivOrderListedFiles(const std::vector<std::string>& listedFiles, const std::vector<CivOrderEntry>& wanted)
 {
 	std::vector<bool> placed(listedFiles.size(), false);
 	std::vector<CivOrderEntry> order;
-	for (size_t s = 0; s < saved.size(); ++s)
+	for (size_t w = 0; w < wanted.size(); ++w)
 	{
 		for (size_t l = 0; l < listedFiles.size(); ++l)
 		{
-			if (placed[l] || !SameFile(listedFiles[l], saved[s].file))
+			if (placed[l] || !SameFile(listedFiles[l], wanted[w].file))
 				continue;
 			placed[l] = true;
-			CivOrderEntry entry = saved[s];
+			CivOrderEntry entry = wanted[w];
 			entry.file = listedFiles[l];
 			order.push_back(entry);
 			break;

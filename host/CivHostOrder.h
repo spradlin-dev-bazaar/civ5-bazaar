@@ -20,8 +20,8 @@ struct CivOrderEntry
 	std::vector<std::string> useBothWith;
 };
 
-// The listed plugin files in the saved order; files the saved order lacks follow, in listed order.
-std::vector<CivOrderEntry> CivApplyOrder(const std::vector<std::string>& listedFiles, const std::vector<CivOrderEntry>& saved);
+// The listed plugin files in the wanted order; files the wanted order lacks follow, in listed order.
+std::vector<CivOrderEntry> CivOrderListedFiles(const std::vector<std::string>& listedFiles, const std::vector<CivOrderEntry>& wanted);
 // What to save: the order, then the saved entries it leaves out, so a plugin whose mod is off keeps its place and skip.
 std::vector<CivOrderEntry> CivKeepUnlisted(const std::vector<CivOrderEntry>& order, const std::vector<CivOrderEntry>& saved);
 std::string CivFormatOrder(const std::vector<CivOrderEntry>& order);

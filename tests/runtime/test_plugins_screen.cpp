@@ -59,7 +59,7 @@ namespace
 		return mod;
 	}
 
-	void TestApplyOrder()
+	void TestOrderListedFiles()
 	{
 		std::vector<std::string> listed;
 		listed.push_back("A.dll");
@@ -70,7 +70,7 @@ namespace
 		saved.push_back(Entry("c.dll", true, "Toy C"));
 		saved.push_back(Entry("gone.dll", false, ""));
 		saved.push_back(Entry("a.DLL", false, ""));
-		const std::vector<CivOrderEntry> order = CivApplyOrder(listed, saved);
+		const std::vector<CivOrderEntry> order = CivOrderListedFiles(listed, saved);
 		Check(order.size() == 4, "every listed plugin is in the order once per listing, and a saved one no longer listed is not");
 		if (order.size() != 4)
 			return;
@@ -172,7 +172,7 @@ namespace
 
 void TestOrder()
 {
-	TestApplyOrder();
+	TestOrderListedFiles();
 	TestOrderText();
 	TestOrderRows();
 	TestUseBoth();

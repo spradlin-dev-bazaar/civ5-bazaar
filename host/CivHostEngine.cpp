@@ -273,7 +273,7 @@ namespace
 
 	// False when the plugins were left as they were; the Plugins screen's report says why. A warning, if any, heads the
 	// report.
-	bool LoadPlugins(const std::vector<CivOrderEntry>& saved, const char* warning)
+	bool UseListedPlugins(const std::vector<CivOrderEntry>& wanted, const char* warning)
 	{
 		std::vector<std::string> files;
 		if (!ListedPluginFiles(&files))
@@ -289,7 +289,7 @@ namespace
 			return false;
 		}
 
-		const std::vector<CivOrderEntry> order = CivApplyOrder(files, saved);
+		const std::vector<CivOrderEntry> order = CivOrderListedFiles(files, wanted);
 		std::vector<std::string> paths;
 		std::vector<std::string> missing;
 		ResolvePaths(order, &paths, &missing);
@@ -382,11 +382,11 @@ namespace
 	}
 
 	// Saved before reloading so a failed save shows on the screen: when a game starts, the plugins reload from the saved order.
-	bool ApplyOrder(lua_State* L)
+	bool SaveAndReloadFromScreen(lua_State* L)
 	{
 		const std::vector<CivOrderEntry> requested = RequestedOrder(L, 2);
 		const bool saved = SaveOrder(CivKeepUnlisted(requested, SavedOrder()));
-		return LoadPlugins(requested, saved ? NULL : kNotSaved);
+		return UseListedPlugins(requested, saved ? NULL : kNotSaved);
 	}
 
 	// The screen sends Modding.GetActivatedMods(): { { ID = ..., Version = ... }, ... }, in the order the game switched them on.
@@ -463,7 +463,7 @@ std::vector<int> CivHostTeamPlayers(int team)
 
 void CivHostOnDatabaseReady()
 {
-	LoadPlugins(SavedOrder(), NULL);
+	UseListedPlugins(SavedOrder(), NULL);
 }
 
 bool CivHostOnFrontEndCall(lua_State* L, int* results)
@@ -480,7 +480,7 @@ bool CivHostOnFrontEndCall(lua_State* L, int* results)
 		return true;
 	}
 	if (request == "bazaar:apply" && lua_type(L, 2) == LUA_TTABLE)
-		lua_pushboolean(L, ApplyOrder(L));
+		lua_pushboolean(L, SaveAndReloadFromScreen(L));
 	else if (request == "bazaar:nextsetup" && lua_type(L, 2) == LUA_TTABLE)
 		PushReplacedSetup(L);
 	else
