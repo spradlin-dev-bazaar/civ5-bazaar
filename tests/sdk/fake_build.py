@@ -21,10 +21,10 @@ TAR = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar
 
 
 def fake_dll(exports, magic=0x10B):
-    """A DLL holding only an export table with exports, a {name: bytes} dict; magic 0x20B marks it 64-bit. Each
-    name's ordinal is the reverse of its place in the sorted name table, so a reader that confuses the two reads the
-    wrong export."""
-    base = 0x1000
+    """A DLL holding an empty section and then an export table with exports, a {name: bytes} dict; magic 0x20B marks
+    it 64-bit. Each name's ordinal is the reverse of its place in the sorted name table, so a reader that confuses the
+    two reads the wrong export, and the export table is in the second section, so a reader must walk the sections."""
+    base = 0x3000
     names = sorted(exports)
     count = len(names)
     functions_at, names_at, ordinals_at = 40, 40 + 4 * count, 40 + 8 * count
@@ -40,12 +40,14 @@ def fake_dll(exports, magic=0x10B):
     headers = bytearray(0x200)
     struct.pack_into("<I", headers, 0x3C, 0x40)
     headers[0x40:0x44] = b"PE" + bytes(2)
-    struct.pack_into("<HH", headers, 0x44, 0x14C, 1)
+    struct.pack_into("<HH", headers, 0x44, 0x14C, 2)
     struct.pack_into("<H", headers, 0x54, 224)
     struct.pack_into("<H", headers, 0x58, magic)
     struct.pack_into("<II", headers, 0x58 + 96, base, len(body))
-    struct.pack_into("<IIII", headers, 0x58 + 224 + 8, len(body), base, len(body), 0x200)
-    return bytes(headers + body)
+    sections = 0x58 + 224
+    struct.pack_into("<IIII", headers, sections + 8, 0x2000, 0x1000, 0x200, 0x200)
+    struct.pack_into("<IIII", headers, sections + 40 + 8, len(body) + 0x100, base, len(body), 0x400)
+    return bytes(headers + bytes(0x200) + body)
 
 
 def read(path):
@@ -65,7 +67,7 @@ def sdk_api():
 
 def dll_plugin_rows(sql):
     code = re.sub(r"'[^']*'|--[^\r\n]*|/\*.*?\*/", lambda m: m[0] if m[0][0] == "'" else "", sql, flags=re.S)
-    for insert in re.findall(r"(?i)INSERT\s+(?:OR\s+\w+\s+)?INTO\s+[\"`\[]?DllPlugins\b[^;]*", code):
+    for insert in re.findall(r"(?i)(?:INSERT\s+(?:OR\s+\w+\s+)?|REPLACE\s+)INTO\s+[\"`\[]?DllPlugins\b[^;]*", code):
         yield from re.findall(r"'([^']+)'", insert)
 
 

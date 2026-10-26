@@ -19,6 +19,7 @@ $root = $PSScriptRoot
 $templateIds = @('63a9bd4c-c9fc-4d26-97c7-9a8a86e331be', 'f4d85239-ecea-43dc-b4ff-e64e23ad91b4')
 # Split so the scaffold scripts, which put a new mod's names in place of the template's in every file, leave these.
 $templateNames = @(('Template' + ' Plugin'), ('Template' + ' Lua Mod'))
+$templateDll = 'Template' + 'Plugin.dll'
 $templateTeasers = @('A minimal plugin for the Bazaar Multi-DLL Mod Loader.', 'A minimal Lua mod for the Bazaar Multi-DLL Mod Loader.')
 # Latin-1 maps every byte to one character and back, so files keep their encoding and line endings.
 $latin1 = [Text.Encoding]::GetEncoding(28591)
@@ -29,6 +30,7 @@ $semanticVersionPattern = "^$number\.$number\.$number(?:-$identifiers)?(?:\+$ide
 $bazaarReleasePattern = "^($number)\.($number)\.($number)$"
 $versionDefine = '(#define\s+PLUGIN_VERSION\s+")[^"]*(")'
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+$rerunNote = 'VERSION and the project files already have the new version, so run release.cmd again once it is fixed.'
 
 function Stop-Release([string] $message) {
     [Console]::Error.WriteLine("release: $message")
@@ -89,7 +91,7 @@ function Read-VersionFile([string] $path) {
         }
         $parsed = [regex]::Match($line, '^(release|mod|bazaar) +(\S+) *$')
         if (-not $parsed.Success) {
-            Stop-Release "VERSION's line '$line' is not 'release', 'mod' or 'bazaar' and a number."
+            Stop-Release "VERSION's line '$line' should look like 'release 2', 'mod 3' or 'bazaar 0.4.0'."
         }
         $key = $parsed.Groups[1].Value
         if ($fields.ContainsKey($key)) {
@@ -136,14 +138,16 @@ function Read-Project([string] $root) {
     return @{
         File       = $files[0].FullName
         Text       = $text
-        Name       = Get-ProjectElement $text 'Name'
-        Id         = (Get-ProjectElement $text 'Guid').Trim().ToLowerInvariant()
-        Authors    = (Get-ProjectElement $text 'Authors').Trim()
-        ModVersion = [int] $modVersion
+        Name        = Get-ProjectElement $text 'Name'
+        Id          = (Get-ProjectElement $text 'Guid').Trim().ToLowerInvariant()
+        Authors     = (Get-ProjectElement $text 'Authors').Trim()
+        Teaser      = [regex]::Match($text, '<Teaser>([^<]*)</Teaser>').Groups[1].Value
+        Description = [regex]::Match($text, '<Description>([^<]*)</Description>').Groups[1].Value
+        ModVersion  = [int] $modVersion
     }
 }
 
-function Assert-NoTemplateLeftovers($project) {
+function Assert-NoTemplateLeftovers($project, [string] $root) {
     if ($templateIds -contains $project.Id) {
         Stop-Release "The .civ5proj still has the template's mod ID. Give the mod its own: put a new GUID on the <Guid> line (PowerShell's New-Guid makes one)."
     }
@@ -152,6 +156,16 @@ function Assert-NoTemplateLeftovers($project) {
     }
     if ($project.Authors -eq 'Your name') {
         Stop-Release "The .civ5proj's author is still 'Your name'. Change its <Authors> line."
+    }
+    foreach ($teaser in $templateTeasers) {
+        if ($project.Teaser.Contains($teaser) -or $project.Description.Contains($teaser)) {
+            Stop-Release "The .civ5proj's <Teaser> or <Description> still has the template's text '$teaser'. Describe your mod there."
+        }
+    }
+    foreach ($sql in Get-ChildItem -LiteralPath (Join-Path $root 'mod') -Filter '*.sql' -File) {
+        if (@(Get-DllPluginRows (Read-RawText $sql.FullName)) -contains $templateDll) {
+            Stop-Release "mod\$($sql.Name) still adds the template's DLL, $templateDll, to DllPlugins. Rename the DLL and its row as the guide's Step 2 says: no two plugins may ship a DLL with the same name."
+        }
     }
 }
 
@@ -190,6 +204,31 @@ function Test-Released([string] $releases, [string] $release) {
     return $packages.Count -gt 0
 }
 
+function Test-ReleaseBelow([string] $release, [string] $other) {
+    $mine = [regex]::Match($release, '^(\d+)\.(\d+)\.(\d+)')
+    $theirs = [regex]::Match($other, '^(\d+)\.(\d+)\.(\d+)')
+    for ($part = 1; $part -le 3; $part++) {
+        $difference = [long] $mine.Groups[$part].Value - [long] $theirs.Groups[$part].Value
+        if ($difference) {
+            return $difference -lt 0
+        }
+    }
+    return $false
+}
+
+function Assert-NotBelowReleased([string] $releases, $version) {
+    if ($version.IsWholeNumber) {
+        return
+    }
+    $released = Get-ChildItem -LiteralPath $releases -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match $semanticVersionPattern -and (Test-Released $releases $_.Name) }
+    foreach ($folder in $released) {
+        if (Test-ReleaseBelow $version.Release $folder.Name) {
+            Stop-Release "$($version.Release) is below $($folder.Name), which is already released. Raise the release in VERSION above it."
+        }
+    }
+}
+
 function Resolve-ModVersion($version, $project, [int[]] $releasedModVersions) {
     $highest = 0
     if ($releasedModVersions.Count) {
@@ -212,7 +251,7 @@ function Resolve-ModVersion($version, $project, [int[]] $releasedModVersions) {
     return [int] $modVersion
 }
 
-function Get-SdkApiVersion([string] $root, [string] $bazaar) {
+function Get-SdkApiVersion([string] $root) {
     $sdk = if ($env:BAZAAR_SDK) { $env:BAZAAR_SDK } else { Split-Path $root }
     if (-not (Test-Path -LiteralPath (Join-Path $sdk 'CivPlugin.vsprops') -PathType Leaf)) {
         Stop-Release 'Set BAZAAR_SDK to the Bazaar SDK folder.'
@@ -227,18 +266,21 @@ function Get-SdkApiVersion([string] $root, [string] $bazaar) {
     if (-not $major.Success -or -not $minor.Success) {
         Stop-Release "The SDK's include\CivPluginApi.h names no API version."
     }
-    $api = '{0}.{1}' -f [int] $major.Groups[1].Value, [int] $minor.Groups[1].Value
-    $needs = [regex]::Match($bazaar, $bazaarReleasePattern)
-    if ([int] $major.Groups[1].Value -ne [int] $needs.Groups[1].Value -or [int] $minor.Groups[1].Value -gt [int] $needs.Groups[2].Value) {
-        Stop-Release "This SDK builds plugins for Bazaar's API $api, which Bazaar $bazaar refuses. Change the bazaar line in VERSION to $api.0, or build with the SDK of Bazaar $bazaar."
-    }
-    return $api
+    return '{0}.{1}' -f [int] $major.Groups[1].Value, [int] $minor.Groups[1].Value
 }
 
-function Assert-PluginVersionHeader([string] $root) {
-    $header = Join-Path $root 'src\PluginVersion.h'
+# Bazaar refuses a plugin built for another major version or a newer minor one.
+function Assert-SdkFitsBazaar([string] $api, [string] $bazaar) {
+    $built = [regex]::Match($api, '^(\d+)\.(\d+)$')
+    $needs = [regex]::Match($bazaar, $bazaarReleasePattern)
+    if ([int] $built.Groups[1].Value -ne [int] $needs.Groups[1].Value -or [int] $built.Groups[2].Value -gt [int] $needs.Groups[2].Value) {
+        Stop-Release "This SDK builds plugins for Bazaar's API $api, which Bazaar $bazaar refuses. Change the bazaar line in VERSION, and the 'Requires Bazaar ... or newer.' sentence in workshop-description.txt, to $api.0, or build with the SDK of Bazaar $bazaar."
+    }
+}
+
+function Assert-PluginVersionHeader([string] $root, [string] $header) {
     if (-not (Test-Path -LiteralPath $header -PathType Leaf) -or (Read-RawText $header) -notmatch $versionDefine) {
-        Stop-Release "src\PluginVersion.h is missing or has no '#define PLUGIN_VERSION' line. Copy it from the SDK's plugin template."
+        Stop-Release "src\PluginVersion.h is missing or has no line '#define PLUGIN_VERSION `"<version>`"'. Copy it from the SDK's plugin template."
     }
     $users = @(Get-ChildItem -LiteralPath (Join-Path $root 'src') -Recurse -File |
             Where-Object { $_.Extension -in '.cpp', '.h' -and $_.Name -ne 'PluginVersion.h' } |
@@ -246,7 +288,6 @@ function Assert-PluginVersionHeader([string] $root) {
     if (-not $users.Count) {
         Stop-Release 'No file in src uses PLUGIN_VERSION, so the plugin would report a version of its own. Include PluginVersion.h and set the plugin''s version to PLUGIN_VERSION in CivPluginEntry, as the template does.'
     }
-    return $header
 }
 
 function Test-ChangesSection([string] $root, [string] $release) {
@@ -277,18 +318,19 @@ function Get-BuiltPackages([string] $root, [int] $modVersion) {
 function Invoke-Build([string] $root, [int] $modVersion) {
     Get-BuiltPackages $root $modVersion | Remove-Item -Force
     if ((Invoke-Program $env:ComSpec "/d /s /c `"`"$(Join-Path $root 'build.cmd')`" 2>&1`"") -ne 0) {
-        Stop-Release 'build.cmd stopped; its messages are above. Nothing was released. VERSION and the project files already have the new version, so run release.cmd again once it is fixed.'
+        Stop-Release "build.cmd stopped; its messages are above. Nothing was released. $rerunNote"
     }
     $built = @(Get-BuiltPackages $root $modVersion)
     if ($built.Count -ne 1) {
-        Stop-Release "build.cmd made $($built.Count) packages ending in '(v $modVersion).civ5mod' in Packages, not one. Nothing was released. VERSION and the project files already have the new version, so run release.cmd again once it is fixed."
+        Stop-Release "build.cmd made $($built.Count) packages ending in '(v $modVersion).civ5mod' in Packages, not one. Nothing was released. $rerunNote"
     }
     return $built[0].FullName
 }
 
 function Get-DllPluginRows([string] $sql) {
+    # Quoted text is matched first and kept, so '--' inside a DLL's name is not taken for a comment.
     $code = [regex]::Replace($sql, "'[^']*'|--[^\r\n]*|/\*[\s\S]*?\*/", { param($found) if ($found.Value[0] -eq "'") { $found.Value } else { '' } })
-    foreach ($insert in [regex]::Matches($code, '(?i)INSERT\s+(?:OR\s+\w+\s+)?INTO\s+["`\[]?DllPlugins\b[^;]*')) {
+    foreach ($insert in [regex]::Matches($code, '(?i)(?:INSERT\s+(?:OR\s+\w+\s+)?|REPLACE\s+)INTO\s+["`\[]?DllPlugins\b[^;]*')) {
         foreach ($value in [regex]::Matches($insert.Value, "'([^']+)'")) {
             $value.Groups[1].Value
         }
@@ -347,19 +389,21 @@ function Get-ExportedApiVersion([byte[]] $data) {
 }
 
 function Get-UnpackedModProblems([string] $folder, [int] $modVersion, [bool] $isPlugin, [string] $sdkApi) {
+    $problems = New-Object 'System.Collections.Generic.List[string]'
     $modinfo = @(Get-ChildItem -LiteralPath $folder -Filter '*.modinfo' -File)
     if ($modinfo.Count -ne 1) {
-        return "it has $($modinfo.Count) mod descriptions (.modinfo files), not one"
+        $problems.Add("it has $($modinfo.Count) mod descriptions (.modinfo files), not one")
+        return $problems
     }
     $text = Read-RawText $modinfo[0].FullName
     $packaged = [regex]::Match($text, '<Mod [^>]*\bversion="(\d+)"')
     if (-not $packaged.Success -or [int] $packaged.Groups[1].Value -ne $modVersion) {
         $shown = if ($packaged.Success) { $packaged.Groups[1].Value } else { 'missing' }
-        "its mod version is $shown, not $modVersion"
+        $problems.Add("its mod version is $shown, not $modVersion")
     }
     $updates = @([regex]::Matches($text, '<UpdateDatabase>([^<]+)</UpdateDatabase>') | ForEach-Object { $_.Groups[1].Value })
     if ($updates.Count -and $text -notmatch '<AffectsSavedGames>1</AffectsSavedGames>') {
-        'it changes the game''s database but does not affect saved games, so a loaded save would leave those changes out'
+        $problems.Add('it changes the game''s database but does not affect saved games, so a loaded save would leave those changes out')
     }
     $dlls = @(foreach ($update in $updates) {
             $sql = Join-Path $folder $update
@@ -369,31 +413,32 @@ function Get-UnpackedModProblems([string] $folder, [int] $modVersion, [bool] $is
         })
     if (-not $isPlugin) {
         if ($dlls.Count -or @(Get-ChildItem -LiteralPath $folder -Filter '*.dll' -Recurse -File).Count) {
-            'it holds a DLL, but this project has no src\*.vcproj, so it was checked as a Lua mod, without the plugin checks. A plugin keeps its Visual C++ project in src, as the template does'
+            $problems.Add('it holds a DLL, but this project has no src\*.vcproj, so it was checked as a Lua mod, without the plugin checks. A plugin keeps its Visual C++ project in src, as the template does')
         }
-        return
+        return $problems
     }
     if (-not $dlls.Count) {
-        'no database update in it adds the plugin''s DLL to the DllPlugins table, so Bazaar would never load it'
+        $problems.Add('no database update in it adds the plugin''s DLL to the DllPlugins table, so Bazaar would never load it (the script reads rows written as INSERT INTO DllPlugins (File) VALUES (''Name.dll''), as the template does)')
     }
     foreach ($dll in $dlls) {
         $path = Join-Path $folder $dll
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            "it has no $dll, which its DllPlugins row names"
+            $problems.Add("it has no $dll, which its DllPlugins row names")
             continue
         }
         try {
             $api = Get-ExportedApiVersion ([IO.File]::ReadAllBytes($path))
         } catch {
-            "$dll could not be read as a 32-bit Windows DLL, which Civilization V needs"
+            $problems.Add("$dll could not be read as a 32-bit Windows DLL, which Civilization V needs")
             continue
         }
         if (-not $api) {
-            "$dll declares no API version: one of its .cpp files needs the line CIV_PLUGIN_EXPORT_API_VERSION;"
+            $problems.Add("$dll declares no API version: one of its .cpp files needs the line CIV_PLUGIN_EXPORT_API_VERSION;")
         } elseif ($api -ne $sdkApi) {
-            "$dll declares API $api, but this SDK's is $sdkApi"
+            $problems.Add("$dll declares API $api, but this SDK's is $sdkApi")
         }
     }
+    return $problems
 }
 
 function Get-PackageProblems([string] $package, [int] $modVersion, [bool] $isPlugin, [string] $sdkApi) {
@@ -403,7 +448,7 @@ function Get-PackageProblems([string] $package, [int] $modVersion, [bool] $isPlu
         if ((Invoke-Program $tar "-xf `"$package`" -C `"$unpacked`"") -ne 0) {
             return "Windows' tar could not unpack it"
         }
-        Get-UnpackedModProblems $unpacked $modVersion $isPlugin $sdkApi
+        return (Get-UnpackedModProblems $unpacked $modVersion $isPlugin $sdkApi)
     } finally {
         Remove-Item -LiteralPath $unpacked -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -413,19 +458,22 @@ $versionFile = Join-Path $root 'VERSION'
 $releases = Join-Path $root 'Releases'
 $version = Read-VersionFile $versionFile
 $project = Read-Project $root
-Assert-NoTemplateLeftovers $project
+Assert-NoTemplateLeftovers $project $root
 Assert-WorkshopDescription $root $version.Bazaar
 if (Test-Released $releases $version.Release) {
     Stop-Release "$($version.Release) is already released, in Releases\$($version.Release). Raise the release in VERSION."
 }
+Assert-NotBelowReleased $releases $version
 $releasedModVersions = @(Get-ReleasedModVersions $releases)
 $modVersion = Resolve-ModVersion $version $project $releasedModVersions
 $isPlugin = [bool] @(Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.vcproj' -File -ErrorAction SilentlyContinue).Count
 $sdkApi = $null
 $header = $null
 if ($isPlugin) {
-    $sdkApi = Get-SdkApiVersion $root $version.Bazaar
-    $header = Assert-PluginVersionHeader $root
+    $sdkApi = Get-SdkApiVersion $root
+    Assert-SdkFitsBazaar $sdkApi $version.Bazaar
+    $header = Join-Path $root 'src\PluginVersion.h'
+    Assert-PluginVersionHeader $root $header
 }
 if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) {
     Stop-Release "Windows' tar.exe, which checks the package, is not at $tar. It comes with Windows 10 version 1803 and later."
@@ -440,7 +488,7 @@ Write-Output "release: building $($project.Name) $($version.Release), mod versio
 $package = Invoke-Build $root $modVersion
 $problems = @(Get-PackageProblems $package $modVersion $isPlugin $sdkApi)
 if ($problems.Count) {
-    Stop-Release ("The package was not released, because:`n" + (($problems | ForEach-Object { "  - $_" }) -join "`n") + "`nVERSION and the project files already have the new version, so run release.cmd again once it is fixed.")
+    Stop-Release ("The package was not released, because:`n" + (($problems | ForEach-Object { "  - $_" }) -join "`n") + "`n$rerunNote")
 }
 
 $target = Join-Path $releases $version.Release

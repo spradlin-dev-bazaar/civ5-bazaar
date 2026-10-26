@@ -165,7 +165,7 @@ A folder shipped with each host release (also the thing other developers downloa
 - `lib/` the host's import library, `CvGameCore_Expansion2.lib`, and the Firaxis libraries;
 - `CivPlugin.vsprops` the compiler and linker settings of the host build, with paths through the `BAZAAR_SDK` environment variable;
 - `README.md`, the plugin-writing guide (sdk/README.md), and `hand-placed-hooks.md`;
-- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook and one Lua method: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, and a `build.cmd` that builds the DLL, the mod folder and the Workshop package.
+- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook and one Lua method: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, a `build.cmd` that builds the DLL, the mod folder and the Workshop package, and a `release.cmd` that makes its releases, with its `VERSION`, `CHANGES.txt` and Workshop description (see Releasing a plugin or Lua mod).
 
 Not in it yet: plugins cannot reach private and protected members, because the compiler names private functions differently from public ones, so the host would need to export them under their public names too. The list of functions written in headers and the generated reference come with the documentation site.
 
@@ -277,7 +277,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
 
-**P2.5 — releases for plugin and Lua mod authors.** A release script for the plugin template and the Lua mod template, as described under Releasing a plugin or Lua mod. Exit: a plugin and a Lua mod each released twice with the script; the second release of each loads in the game in place of the first, and a save made with the first still loads.
+**P2.5 — releases for plugin and Lua mod authors.** A release script for the plugin template and the Lua mod template, as described under Releasing a plugin or Lua mod. Exit: the script and its tests on main, and a plugin and a Lua mod made from the templates each released with it through the real build.
 
 **P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The first public release, 1.0, of the host and SDK from this repository, the MCP plugin's first release from its own, and the Workshop pages. The layouts and the hook numbers freeze at that release.
 

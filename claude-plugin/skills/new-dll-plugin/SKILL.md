@@ -48,7 +48,7 @@ Then delete the template's example hooks that the plugin does not need, as the g
 
 ## 5. Releases
 
-When the user wants to publish, follow the guide's Publishing section: set the release in `VERSION`, add its notes to the top of `CHANGES.txt` in BBCode, and run `release.cmd` by its full path, as with `build.cmd`. It sets the version, builds, checks the package and keeps it in `Releases\<release>\`. If it refuses, read its message and fix the cause. Never delete or rename anything in `Releases\` to get past a check: it is the record of what was released. Uploading to the Steam Workshop is the user's step, in ModBuddy.
+When the user wants to publish, follow the guide's Publishing section: set the release in `VERSION`, add its notes to the top of `CHANGES.txt` in BBCode, and run `release.cmd` by its full path, as with `build.cmd`. It sets the version, builds, checks the package and keeps it in `Releases\<release>\`. If it refuses, read its message and fix the cause. Never delete or rename anything in `Releases\` to get past a check: it is the record of what was released. Uploading to the Steam Workshop is the user's step, in ModBuddy. If the plugin folder has no `release.cmd`, it was made from an older Bazaar SDK: tell the user that releases need the newest one, and follow that SDK's guide.
 
 ## Porting an existing DLL mod
 

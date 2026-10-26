@@ -1,5 +1,8 @@
 """release.ps1, the release script in the plugin template and the Lua mod template, run on copies of the templates with
-fake_build.py standing in for build.cmd."""
+fake_build.py standing in for build.cmd.
+
+python -m unittest discover -s tests/sdk
+"""
 
 import os
 import re
@@ -15,9 +18,11 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 PLUGIN_TEMPLATE = os.path.join(REPO, "sdk", "plugin-template")
 LUA_TEMPLATE = os.path.join(REPO, "claude-plugin", "skills", "new-lua-mod", "template")
 NEW_LUA_MOD = os.path.join(REPO, "claude-plugin", "skills", "new-lua-mod", "scripts", "new-lua-mod.ps1")
+NEW_DLL_PLUGIN = os.path.join(REPO, "claude-plugin", "skills", "new-dll-plugin", "scripts", "new-dll-plugin.ps1")
 SCRIPT_FILES = ("release.ps1", "release.cmd")
 TEMPLATE_NAMES = ("TemplatePlugin", "Template Plugin", "TemplateLuaMod", "Template Lua Mod")
 NAME = "Score Doubler"
+DLL = "ScoreDoubler.dll"
 PACKAGE = NAME + " (v %d).civ5mod"
 VERSION = "release 1\nbazaar 0.4.0\n"
 WORKSHOP = "[h1]%s[/h1]\nDoubles every player's score.\n\nRequires Bazaar 0.4.0 or newer.\n" % NAME
@@ -88,6 +93,12 @@ class ReleaseScriptTest(unittest.TestCase):
         set_project_value(folder, "Guid", str(uuid.uuid4()))
         set_project_value(folder, "Name", NAME)
         set_project_value(folder, "Authors", "Jane Doe")
+        set_project_value(folder, "Teaser", "Doubles every player's score.")
+        set_project_value(folder, "Description", "Doubles every player's score.")
+        for name in os.listdir(os.path.join(folder, "mod")):
+            if name.endswith(".sql"):
+                sql = os.path.join(folder, "mod", name)
+                write(sql, read(sql).replace("TemplatePlugin.dll", DLL))
         write(os.path.join(folder, "VERSION"), VERSION)
         write(os.path.join(folder, "workshop-description.txt"), WORKSHOP)
         self.use_fake_build(folder)
@@ -230,6 +241,20 @@ class ReleaseScriptTest(unittest.TestCase):
         self.set_version(folder, "release 2.0.0\nmod 4\nbazaar 0.4.0\n")
         self.assert_released(self.release(folder), folder, "2.0.0", 4)
 
+    def test_a_semantic_release_below_a_released_one_is_refused(self):
+        folder = self.project()
+        self.set_version(folder, "release 1.10.0\nbazaar 0.4.0\n")
+        self.release(folder)
+        self.set_version(folder, "release 1.9.0\nmod 1\nbazaar 0.4.0\n")
+        self.assert_refused_before_build(folder, "1.9.0 is below 1.10.0, which is already released")
+
+    def test_a_release_without_its_label_may_follow_the_labelled_one(self):
+        folder = self.project()
+        self.set_version(folder, "release 1.0.0-beta.1\nbazaar 0.4.0\n")
+        self.release(folder)
+        self.set_version(folder, "release 1.0.0\nmod 1\nbazaar 0.4.0\n")
+        self.assert_released(self.release(folder), folder, "1.0.0", 2)
+
     def test_a_semantic_version_with_a_label_is_released(self):
         folder = self.project()
         self.set_version(folder, "release 1.0.0-beta.1\nbazaar 0.4.0\n")
@@ -247,7 +272,7 @@ class ReleaseScriptTest(unittest.TestCase):
             ("release 1\nbazaar 4\n", ["not a Bazaar release number"]),
             ("release 1\nmod 1\nbazaar 0.4.0\n", ["Remove the 'mod' line"]),
             ("release 1.0.0\nmod 0\nbazaar 0.4.0\n", ["not a whole number above 0"]),
-            ("version 1\n", ["is not 'release', 'mod' or 'bazaar'"]),
+            ("version 1\n", ["should look like 'release 2', 'mod 3' or 'bazaar 0.4.0'"]),
             ("release 1.0.0-beta.\nbazaar 0.4.0\n", ["neither a whole number"]),
         ):
             with self.subTest(text=text):
@@ -286,12 +311,20 @@ class ReleaseScriptTest(unittest.TestCase):
                 ("Guid", ["template's mod ID"]),
                 ("Name", ["the template's name"]),
                 ("Authors", ["'Your name'"]),
+                ("Teaser", ["<Teaser> or <Description> still has the template's text"]),
+                ("Description", ["<Teaser> or <Description> still has the template's text"]),
             ):
                 with self.subTest(template=template, element=element):
                     folder = self.project(template)
                     set_project_value(folder, element, project_value(template, element))
                     self.assert_refused_before_build(folder, *words)
                     shutil.rmtree(folder)
+
+    def test_the_templates_dll_is_refused(self):
+        folder = self.project()
+        sql = os.path.join(folder, "mod", "TemplatePlugin.sql")
+        write(sql, read(sql).replace(DLL, "TemplatePlugin.dll"))
+        self.assert_refused_before_build(folder, "still adds the template's DLL, TemplatePlugin.dll")
 
     def test_the_templates_workshop_text_is_refused(self):
         for template in (PLUGIN_TEMPLATE, LUA_TEMPLATE):
@@ -310,6 +343,10 @@ class ReleaseScriptTest(unittest.TestCase):
                 ["says 'Requires Bazaar 0.3.0 or newer.'", "VERSION names Bazaar 0.4.0"],
             ),
             ("Needs Bazaar.", ["does not say 'Requires Bazaar 0.4.0 or newer.'"]),
+            (
+                "Requires Bazaar 0.4.0 or newer. Really: Requires Bazaar 0.3.0 or newer.",
+                ["says 'Requires Bazaar 0.3.0 or newer.'"],
+            ),
             (None, ["There is no workshop-description.txt"]),
         ):
             with self.subTest(text=text):
@@ -330,6 +367,11 @@ class ReleaseScriptTest(unittest.TestCase):
         folder = self.project()
         self.set_sdk_api(1, 0)
         self.assert_refused_before_build(folder, "API 1.0, which Bazaar 0.4.0 refuses")
+
+    def test_api_versions_are_compared_as_numbers(self):
+        folder = self.project()
+        self.set_sdk_api(0, 10)
+        self.assert_refused_before_build(folder, "API 0.10, which Bazaar 0.4.0 refuses")
 
     def test_an_sdk_for_an_older_bazaar_is_allowed(self):
         folder = self.project()
@@ -385,12 +427,12 @@ class ReleaseScriptTest(unittest.TestCase):
 
     def test_what_is_wrong_with_the_package_is_listed_and_nothing_released(self):
         for fake, words in (
-            ({"FAKE_API": "0.3"}, ["TemplatePlugin.dll declares API 0.3, but this SDK's is 0.4"]),
+            ({"FAKE_API": "0.3"}, [DLL + " declares API 0.3, but this SDK's is 0.4"]),
             ({"FAKE_API": "none"}, ["declares no API version"]),
             ({"FAKE_64BIT": "1"}, ["could not be read as a 32-bit Windows DLL"]),
             ({"FAKE_AFFECTS_SAVES": "0"}, ["does not affect saved games"]),
             ({"FAKE_NO_ROW": "1"}, ["DllPlugins table"]),
-            ({"FAKE_SKIP_DLL": "TemplatePlugin.dll"}, ["it has no TemplatePlugin.dll"]),
+            ({"FAKE_SKIP_DLL": DLL}, ["it has no " + DLL]),
             ({"FAKE_MODINFO_VERSION": "7"}, ["mod version is 7, not 1"]),
             ({"FAKE_TWO_MODINFO": "1"}, ["2 mod descriptions"]),
             ({"FAKE_API": "0.3", "FAKE_AFFECTS_SAVES": "0"}, ["declares API 0.3", "does not affect saved games"]),
@@ -405,14 +447,24 @@ class ReleaseScriptTest(unittest.TestCase):
         self.set_sql(
             folder,
             "CREATE TABLE IF NOT EXISTS DllPlugins (File TEXT NOT NULL);\n"
-            "INSERT OR IGNORE INTO DllPlugins (File) VALUES ('TemplatePlugin.dll'), ('Second.dll');\n",
+            "INSERT OR IGNORE INTO DllPlugins (File) VALUES ('%s'), ('Second.dll');\n" % DLL,
         )
         self.assert_refused_after_build(folder, "it has no Second.dll", FAKE_SKIP_DLL="Second.dll")
 
-    def test_a_commented_out_row_is_ignored(self):
+    def test_a_row_added_with_replace_is_read(self):
+        folder = self.project()
+        self.set_sql(folder, "REPLACE INTO DllPlugins (File) VALUES ('%s');\n" % DLL)
+        self.assert_released(self.release(folder), folder, "1", 1)
+
+    def test_commented_out_rows_are_ignored(self):
         folder = self.project()
         sql = os.path.join(folder, "mod", "TemplatePlugin.sql")
-        self.set_sql(folder, read(sql) + "-- INSERT INTO DllPlugins (File) VALUES ('Old.dll');\n")
+        self.set_sql(
+            folder,
+            read(sql)
+            + "-- INSERT INTO DllPlugins (File) VALUES ('Old.dll');\n"
+            + "/* INSERT INTO DllPlugins (File) VALUES ('Older.dll'); */\n",
+        )
         self.assert_released(self.release(folder), folder, "1", 1)
 
     def test_a_plugin_dll_in_a_project_without_a_vcproj_is_refused(self):
@@ -451,6 +503,33 @@ class ReleaseScriptTest(unittest.TestCase):
         done = self.release(folder)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue(os.path.isfile(os.path.join(folder, "Releases", "1", "Turn Logger (v 1).civ5mod")))
+
+    def test_a_plugin_made_by_the_scaffold_script_is_released(self):
+        shutil.copytree(PLUGIN_TEMPLATE, os.path.join(self.sdk, "plugin-template"))
+        made = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", NEW_DLL_PLUGIN]
+            + ["-DisplayName", NAME, "-Sdk", self.sdk, "-Destination", self.root]
+            + ["-Description", "Doubles every player's score.", "-Author", "Jane Doe"],
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(made.returncode, 0, made.stderr)
+        folder = os.path.join(self.root, "ScoreDoubler")
+        self.use_fake_build(folder)
+        self.assert_released(self.release(folder), folder, "1", 1)
+
+    def test_the_plugin_templates_own_version_and_workshop_text_release(self):
+        folder = self.project()
+        shutil.copy(os.path.join(PLUGIN_TEMPLATE, "VERSION"), folder)
+        teaser = project_value(PLUGIN_TEMPLATE, "Teaser")
+        workshop = read(os.path.join(PLUGIN_TEMPLATE, "workshop-description.txt")).replace("Template Plugin", NAME)
+        write(
+            os.path.join(folder, "workshop-description.txt"), workshop.replace(teaser, "Doubles every player's score.")
+        )
+        bazaar = re.search(r"^bazaar +(\d+)\.(\d+)\.", read(os.path.join(folder, "VERSION")), re.M)
+        self.set_sdk_api(int(bazaar[1]), int(bazaar[2]))
+        self.assert_released(self.release(folder), folder, "1", 1)
 
 
 class TemplateFilesTest(unittest.TestCase):

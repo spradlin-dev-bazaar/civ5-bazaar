@@ -487,7 +487,7 @@ class StepRecorder:
 class PrepareTest(unittest.TestCase):
     LISTS = (["0\tCvCity_init"], ["DllGetGameContext"])
 
-    def prepare(self, failing=None):
+    def prepare(self, failing=None, planned=version.Version("0.4.0", 2)):
         steps = StepRecorder(failing)
         replaced = [
             (release, "require_main", steps.step("require_main")),
@@ -495,7 +495,7 @@ class PrepareTest(unittest.TestCase):
             (release, "last_release", steps.step("last_release", "v0.3.0")),
             (release, "run", steps.step("run")),
             (release, "current_lists", steps.step("lists", self.LISTS)),
-            (release, "plan", steps.step("plan", version.Version("0.4.0", 2))),
+            (release, "plan", steps.step("plan", planned)),
             (release.version, "write", steps.step("VERSION")),
             (release.layouts, "set_api_version", steps.step("API version")),
             (release.version, "set_plugin_version", steps.step("plugin version")),
@@ -531,6 +531,10 @@ class PrepareTest(unittest.TestCase):
         written = [args for args, _ in steps.arguments("write list")]
         expected = [(release.HOOKS_LIST, "0.4.0", self.LISTS[0]), (release.EXPORTS_LIST, "0.4.0", self.LISTS[1])]
         self.assertEqual(written, expected)
+
+    def test_a_patch_release_leaves_the_plugin_template_at_the_first_release_of_its_api(self):
+        steps, _ = self.prepare(planned=version.Version("0.4.1", 3))
+        self.assertEqual(steps.arguments("template bazaar"), [(("0.4.0",), {})])
 
     def test_a_stop_part_way_says_how_to_start_again(self):
         steps, message = self.prepare(failing="docs")

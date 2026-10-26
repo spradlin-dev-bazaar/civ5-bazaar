@@ -74,14 +74,14 @@ For example, to make every player's score count double, you add an after-hook to
 
    No other mod may ship a DLL with the same name as yours: Bazaar finds each plugin by searching the MODS folder for its file name.
 4. Give your mod its own ID: replace the GUID on the `.civ5proj`'s `<Guid>` line with a new one (PowerShell's `New-Guid` makes one). It becomes the mod's ID in the `.modinfo`. Leave the `<ProjectGuid>` line above it alone: that one is ModBuddy's ID for the project. Every mod needs its own ID, so the game can tell yours apart from the template.
-5. In the `.civ5proj`, set the teaser, description and authors. In `workshop-description.txt`, replace the template's sentence with a description of your plugin for its Steam Workshop page. Leave the version alone: `release.cmd` sets it for each release (see [Publishing](#publishing)).
+5. In the `.civ5proj`, set the teaser, description and authors. In `workshop-description.txt`, replace the template's sentence with a description of your plugin for its Steam Workshop page. Leave the version in the `.civ5proj` and in `src\PluginVersion.h` alone: `release.cmd` writes both from `VERSION` for each release (see [Publishing](#publishing)).
 6. Delete the template's examples you do not want, with their `Check(...)` lines in `CivPluginEntry`:
    - `BeforeDoTurn` logs the start of each of your turns;
    - `NotificationAdded` logs each notification;
    - `Hello` and `AfterRegisterGame` add `Game.TemplateHello()` to Lua.
 7. Run `build.cmd` again. The `Build` folder now holds a folder with your display name.
 
-Your code goes in the `.cpp` file. Its first `#include`, `CvGameCoreDLLPCH.h`, brings in most of the game's headers; the next two are Bazaar's, and the last, `PluginVersion.h`, holds your plugin's version. A new `.cpp` file needs the first three, and an entry in the `.vcproj`'s file list (copy the existing `<File>` entry).
+Your code goes in the `.cpp` file. Its first `#include`, `CvGameCoreDLLPCH.h`, brings in most of the game's headers; the next two are Bazaar's, and the fourth, `PluginVersion.h`, holds your plugin's version. A new `.cpp` file needs the first three, and an entry in the `.vcproj`'s file list (copy the existing `<File>` entry).
 
 ## How Bazaar loads your plugin
 
@@ -400,9 +400,9 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
 
 ## Publishing
 
-Make each release with `release.cmd`, in your plugin's folder. It needs nothing beyond what building does: no git and no website.
+Make each release with `release.cmd`, in your plugin's folder. Besides what building needs, it needs only Windows 10 version 1803 or later, for the `tar` that comes with it: no git and no website.
 
-1. In `VERSION`, set the release. Its `release` line is a whole number, such as `2`, or a semantic version, such as `1.2.0`. A whole number is also the mod's version, which the game and the package's name use (`(v 2)`), so raise it for each release. With a semantic version, the script keeps a `mod` line for the mod's version and raises it itself. The `bazaar` line names the oldest Bazaar release your plugin needs; the template already names the oldest one that can run a plugin built with this SDK. `workshop-description.txt` must say the same, in its "Requires Bazaar … or newer." sentence.
+1. In `VERSION`, set the release. Its `release` line is a whole number, such as `2`, or a semantic version, such as `1.2.0`. A whole number is also the mod's version, which the game and the package's name use (`(v 2)`), so raise it for each release. With a semantic version, the script keeps a `mod` line for the mod's version and raises it itself. The `bazaar` line names the oldest Bazaar release your plugin needs; the template already names the oldest one that can run a plugin built with this SDK. `workshop-description.txt` must say the same, in its "Requires Bazaar … or newer." sentence. Before 1.0, a new Bazaar may change the API in a way that needs your plugin rebuilt (see [Bazaar versions](#bazaar-versions)); when that happens, rebuild it with the new SDK and make a new release.
 2. Add a section for the release to the top of `CHANGES.txt`, starting with the line `[b]<release>[/b]` and saying what changed. It is written in the Steam Workshop's BBCode, ready to paste. Without one, the script warns.
 3. Run `release.cmd` from a Command Prompt. It writes the version into the `.civ5proj` and `src\PluginVersion.h`, builds the plugin, checks the package and copies it into `Releases\<release>\`. If something is wrong, it stops before releasing anything and says what to fix. Keep `Releases\`: it is how the script knows which mod versions are already out, so that none is used twice.
 4. In ModBuddy, choose **Tools > Upload to Steam Workshop > Upload new Mod...**, and accept the terms. Click **[...]** and select the package in `Releases\<release>\`, such as `Releases\1\Score Doubler (v 1).civ5mod`. Paste `workshop-description.txt` as the description, and your `CHANGES.txt` section as the change note. For a later release, update your existing Workshop item with the new package instead of uploading a new mod.

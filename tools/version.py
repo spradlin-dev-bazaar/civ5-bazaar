@@ -100,9 +100,8 @@ def set_template_bazaar(bazaar, version_path=TEMPLATE_VERSION, workshop_path=TEM
             f.write(text)
 
 
-def disagreements(version, api, plugin, template):
-    """api is CivPluginApi.h's (major, minor), plugin the Claude plugin's version, template what template_bazaar
-    returns."""
+def disagreements(version, api, plugin):
+    """api is CivPluginApi.h's (major, minor), plugin the Claude plugin's version."""
     major, minor, _ = numbers(version.release)
     found = []
     if api != (major, minor):
@@ -114,8 +113,14 @@ def disagreements(version, api, plugin, template):
         found.append(
             "the Claude plugin's version in %s is %s, not %s" % (common.shown(PLUGIN_JSON), plugin, version.release)
         )
-    needed = oldest_bazaar(version.release)
+    return found
+
+
+def template_disagreements(release, template):
+    """template is what template_bazaar returns."""
+    needed = oldest_bazaar(release)
     named, required = template
+    found = []
     if named != needed:
         found.append(
             "the Bazaar release the plugin template needs, in %s, is %s, not %s"
@@ -131,7 +136,8 @@ def disagreements(version, api, plugin, template):
 
 def check():
     version = read()
-    return version, disagreements(version, layouts.api_version(), plugin_version(), template_bazaar())
+    found = disagreements(version, layouts.api_version(), plugin_version())
+    return version, found + template_disagreements(version.release, template_bazaar())
 
 
 def main():
