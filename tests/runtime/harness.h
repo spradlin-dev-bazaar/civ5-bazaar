@@ -45,3 +45,6 @@ FARPROC ToyExport(const char* fileName, const char* function);
 // A toy's export, looked up as the type toy_api.h gives it; null when the toy is not loaded.
 #define TOY_FUNCTION(fileName, name) (reinterpret_cast<name##Fn*>(ToyExport(fileName, #name)))
 int Call(int (*fn)(), int fallback);
+
+// A mod description as ModBuddy writes one, with a byte order mark and a dependency on another mod.
+std::string ModDescription(const char* id, int version, const char* properties, const char* files);

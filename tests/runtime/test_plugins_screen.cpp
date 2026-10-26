@@ -37,14 +37,6 @@ namespace
 		return text;
 	}
 
-	std::string ModInfo(const char* id, int version, const char* files)
-	{
-		char head[256];
-		_snprintf_s(head, sizeof(head), _TRUNCATE, "\xEF\xBB\xBF<?xml version=\"1.0\"?>\r\n<Mod id=\"%s\" version=\"%d\">\r\n", id, version);
-		return std::string(head) + "  <Dependencies>\r\n    <Mod id=\"dependency\" minversion=\"0\" maxversion=\"999\" title=\"Other\" />\r\n"
-			"  </Dependencies>\r\n  <Files>\r\n" + files + "  </Files>\r\n</Mod>\r\n";
-	}
-
 	CivActiveMod Active(const char* id, int version)
 	{
 		CivActiveMod mod;
@@ -174,21 +166,10 @@ void TestOrder()
 
 void TestReplacedSetup()
 {
-	const std::string ras = ModInfo("ras-id", 15,
+	const std::string ras = ModDescription("ras-id", 15, "",
 		"    <File md5=\"1\" import=\"0\">Unused/AdvancedSetup.xml</File>\r\n"
 		"    <File md5=\"2\" import=\"1\">UI Overrides/AdvancedSetup.xml</File>\r\n"
 		"    <File import=\"1\" md5=\"3\">UI Overrides/AdvancedSetup.lua</File>\r\n");
-	std::string id;
-	int version = 0;
-	Check(CivModIdentity(ras, &id, &version) && id == "ras-id", "a mod description gives its ID, not a dependency's");
-	Check(version == 15, "a mod description gives its version");
-	Check(CivImportedFile(ras, "advancedsetup.XML") == "UI Overrides/AdvancedSetup.xml", "it finds a file the mod imports into the game, by name in any case");
-	Check(CivImportedFile(ModInfo("x", 1, "    <File import=\"0\">AdvancedSetup.xml</File>\r\n"), "AdvancedSetup.xml").empty(),
-		"a file the mod does not import is not counted");
-	Check(CivImportedFile(ModInfo("x", 1, "    <File import=\"1\">Fish &amp; Chips/AdvancedSetup.lua</File>\r\n"), "AdvancedSetup.lua")
-			== "Fish & Chips/AdvancedSetup.lua",
-		"an escaped character in a path is read back");
-
 	// The folder name has Cyrillic letters, which no Western code page has.
 	const std::string root = OutFile("setup_test \xD0\x9C\xD0\xBE\xD0\xB4\xD1\x8B");
 	const std::string mods = root + "\\MODS";
@@ -198,8 +179,9 @@ void TestReplacedSetup()
 	WriteText(mods + "\\RAS (v 15)\\RAS (v 15).modinfo", ras);
 	WriteText(rasXml, "ras xml");
 	WriteText(mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua", "ras lua");
-	WriteText(mods + "\\Other (v 1)\\Other (v 1).modinfo", ModInfo("other-id", 1, "    <File import=\"1\">Other.lua</File>\r\n"));
-	WriteText(own + "\\Bazaar (v 1).modinfo", ModInfo("bazaar-id", 1, "    <File import=\"1\">frontend/AdvancedSetup.xml</File>\r\n"));
+	WriteText(mods + "\\Other (v 1)\\Other (v 1).modinfo", ModDescription("other-id", 1, "", "    <File import=\"1\">Other.lua</File>\r\n"));
+	WriteText(mods + "\\Broken (v 1)\\Broken (v 1).modinfo", "<Mod id=\"broken\" version=\"1\"><Files></Mod>");
+	WriteText(own + "\\Bazaar (v 1).modinfo", ModDescription("bazaar-id", 1, "", "    <File import=\"1\">frontend/AdvancedSetup.xml</File>\r\n"));
 	WriteText(own + "\\frontend\\AdvancedSetup.xml", "bazaar xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "game xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.lua", "game lua");
@@ -215,6 +197,8 @@ void TestReplacedSetup()
 	Check(ReadText(copy + ".xml") == "ras xml", "its layout is that mod's, and Bazaar's own is passed over");
 	Check(ReadText(copy + ".lua") == "ras lua", "the copied script is that mod's too");
 	Check(first.xmlSource == rasXml, "it says which file it copied");
+	Check(first.unreadable.size() == 1 && first.unreadable[0] == mods + "\\Broken (v 1)\\Broken (v 1).modinfo",
+		"a mod description that cannot be read is named, and the other mods are still found");
 
 	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_READONLY);
 	// This copy is read-only too, and the next copy must still overwrite it.

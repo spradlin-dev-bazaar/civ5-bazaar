@@ -427,6 +427,8 @@ namespace
 		setup.problem = "Bazaar could not find its own folder or the game's.";
 		if (!own.empty() && !game.empty())
 			setup = CivCopyReplacedSetup(UserFolder() + "\\MODS", game, own, ActiveMods(L, 2), lua_toboolean(L, 3) != 0);
+		for (size_t i = 0; i < setup.unreadable.size(); ++i)
+			LogLine(("Could not read the mod description " + setup.unreadable[i] + ", so Bazaar did not check that mod for a replaced Advanced Setup screen.").c_str());
 		if (setup.copy.empty())
 		{
 			LogLine(("Could not open the Advanced Setup screen that Bazaar replaced: " + setup.problem).c_str());
