@@ -127,10 +127,12 @@ class ReadTest(unittest.TestCase):
             self.read("struct Unit { Missing m_x; };")
         self.assertIn("shapes.h line 1", str(stop.exception))
 
-    def test_a_known_error_or_one_outside_the_folders_does_not_stop(self):
-        known = {("shapes.h", "unknown type name 'Missing'")}
+    def test_a_known_error_or_one_outside_the_folders_does_not_stop_but_the_same_error_on_another_line_does(self):
+        known = {("shapes.h", "unknown type name 'Missing'", "struct Unit { Missing m_x; };")}
         with mock.patch.object(layout_types.common, "known_errors", lambda: known):
             self.read("struct Unit { Missing m_x; };")
+            with self.assertRaises(RuntimeError):
+                self.read("struct Unit { Missing m_x; };\nstruct Other { Missing m_y; };")
         self.read("struct Unit { Missing m_x; };", folders=[os.path.join(self.folder, "other")])
 
     def test_a_header_that_is_not_found_stops_wherever_it_is(self):

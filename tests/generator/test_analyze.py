@@ -19,17 +19,27 @@ import common  # noqa: E402
 
 class ProjectErrorsTest(unittest.TestCase):
     def test_only_a_new_error_outside_a_body_in_the_project_stops_the_build(self):
-        root = os.path.join(tempfile.gettempdir(), "engine")
-        header = os.path.join(root, "CvUnit.h")
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root)
+        header, utility = os.path.join(root, "CvUnit.h"), os.path.join(root, "CvDatabaseUtility.h")
+        with open(header, "w") as f:
+            f.write("int a\n")
+        with open(utility, "w") as f:
+            f.write("int x = ;\nint y = ;\n")
         errors = [
             (os.path.join(root, "CvUnit.cpp"), 3, "use of undeclared identifier", True),
-            (header, 5, "expected ';'", False),
-            (os.path.join(root, "CvDatabaseUtility.h"), 7, "expected expression", False),
+            (header, 1, "expected ';'", False),
+            (utility, 1, "expected expression", False),
+            (utility, 2, "expected expression", False),
             (os.path.join(tempfile.gettempdir(), "sdk", "windows.h"), 1, "unknown type name", False),
         ]
         project = types.SimpleNamespace(contains=lambda path: path.startswith(root + os.sep))
-        with mock.patch.object(common, "known_errors", lambda: {("CvDatabaseUtility.h", "expected expression")}):
-            self.assertEqual(analyze.project_errors(project, [{"errors": errors}]), {(header, 5, "expected ';'")})
+        known = {("CvDatabaseUtility.h", "expected expression", "int x = ;")}
+        with mock.patch.object(common, "known_errors", lambda: known):
+            self.assertEqual(
+                analyze.project_errors(project, [{"errors": errors}]),
+                {(header, 1, "expected ';'"), (utility, 2, "expected expression")},
+            )
 
 
 class CanonicalParametersTest(unittest.TestCase):
@@ -68,9 +78,12 @@ class CheckPluginHeaderTest(unittest.TestCase):
         header = self.write(self.sdk, "CivHooks.h", '#include "Engine.h"\n')
         with self.assertRaises(RuntimeError):
             analyze.check_plugin_header(self.project, header)
-        known = {("Engine.h", "expected expression")}
+        known = {("Engine.h", "expected expression", "int broken = ;")}
         with mock.patch.object(common, "known_errors", lambda: known):
             self.assertEqual(analyze.check_plugin_header(self.project, header), (set(), {}))
+            self.write(self.engine, "Engine.h", "int broken = ;\nint other = ;\n")
+            with self.assertRaises(RuntimeError):
+                analyze.check_plugin_header(self.project, header)
 
     def test_each_original_typedef_gives_its_types_and_an_error_gives_its_line(self):
         self.write(self.engine, "Engine.h", "struct Unit { enum Mood { CALM }; };\n")

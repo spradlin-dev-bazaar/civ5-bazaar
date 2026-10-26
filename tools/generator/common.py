@@ -119,8 +119,36 @@ def clang_arguments(defines, include_dirs):
 
 
 def known_errors(path=os.path.join(HERE, "known-parse-errors.txt")):
+    """(file name, message, line text) of each parse error known to be harmless."""
+    entries = set()
     with open(path, encoding="utf-8") as f:
-        return set(tuple(line.rstrip("\n").split("\t", 1)) for line in f if line.strip() and not line.startswith("#"))
+        for line in f:
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t", 2)
+            if len(fields) != 3:
+                raise RuntimeError("%s: %r needs a file name, a message and a line's text between tabs" % (path, line))
+            entries.add((fields[0], fields[1], even_spaces(fields[2])))
+    return entries
+
+
+def even_spaces(text):
+    return re.sub(r"[ \t]+", " ", text).strip(" ")
+
+
+def source_line(path, number):
+    """A line of a file, numbered as clang numbers it, with its spaces evened out; empty past the end."""
+    with open(path, "rb") as f:
+        # Not str.splitlines, which also breaks at form feeds and other characters clang does not count as line ends.
+        lines = re.split(rb"\r\n|\r|\n", f.read())
+    if not 0 < number <= len(lines):
+        return ""
+    return even_spaces(lines[number - 1].decode("cp1252", errors="replace"))
+
+
+def known_error(known, path, number, message):
+    """Whether known lists this error: its file's name, its message and the text of its line."""
+    return (os.path.basename(path), message, source_line(path, number)) in known
 
 
 def shown(path):

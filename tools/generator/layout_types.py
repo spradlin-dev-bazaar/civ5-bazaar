@@ -51,8 +51,11 @@ def check_errors(tu, folders):
     known = common.known_errors()
     for d in tu.diagnostics:
         path = d.location.file.name if d.location.file else ""
-        new = common.under(path, folders) and (os.path.basename(path), d.spelling) not in known
-        if d.severity == ci.Diagnostic.Fatal or (d.severity >= ci.Diagnostic.Error and new):
+        if d.severity == ci.Diagnostic.Fatal or (
+            d.severity >= ci.Diagnostic.Error
+            and common.under(path, folders)
+            and not common.known_error(known, path, d.location.line, d.spelling)
+        ):
             where = "%s line %d: " % (common.shown(path), d.location.line) if path else ""
             raise RuntimeError("libclang could not read the headers as a plugin does: " + where + d.spelling)
 

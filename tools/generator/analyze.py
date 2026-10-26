@@ -407,7 +407,7 @@ def check_plugin_header(project, header):
         if d.severity == ci.Diagnostic.Fatal or (
             d.severity >= ci.Diagnostic.Error
             and project.contains(path)
-            and (os.path.basename(path), d.spelling) not in known
+            and not common.known_error(known, path, d.location.line, d.spelling)
         ):
             # Types the game's headers no longer declare would leave hook points untyped without a word.
             where = "%s:%d " % (common.shown(path), d.location.line) if path else ""
@@ -436,7 +436,7 @@ def project_errors(project, results):
         (e[0], e[1], e[2])
         for r in results
         for e in r["errors"]
-        if project.contains(e[0]) and not e[3] and (os.path.basename(e[0]), e[2]) not in known
+        if project.contains(e[0]) and not e[3] and not common.known_error(known, e[0], e[1], e[2])
     }
 
 
