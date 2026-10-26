@@ -293,6 +293,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 - #20 and #38: the layout check also catches a field that changes type and a virtual function whose parameters change, and its advice for a changed class works with the release script, since 0.5 freezes the layouts;
 - #1: Bazaar loads each plugin from the folder of the mod that is turned on, not the first file of that name it finds in MODS;
 - #52: Bazaar refuses a plugin whose mod doesn't affect saved games, since the plugin would not load in a game loaded from a save;
+- #53: Bazaar, the release script and a docs tool read mods' XML files with an XML parser, not by matching text;
 - #10: `CivHooks.h` declares the exact shape of each hook function, so a wrong one fails to compile instead of crashing the game;
 - #22: plugins' Lua functions run inside the crash guard;
 - #4: a plugin crash shows a pop-up in the middle of the screen;
