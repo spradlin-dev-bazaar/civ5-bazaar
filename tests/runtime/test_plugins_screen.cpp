@@ -1,5 +1,7 @@
-// The Plugins screen's host logic, which needs no plugins: the player's order and the Advanced Setup screen it replaced.
+// The Plugins screen's host logic, which needs no plugins: the player's order, Bazaar's notes and notices, and the
+// Advanced Setup screen it replaced.
 #include "harness.h"
+#include "CivHostNotices.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
 #include "CivHostSetup.h"
@@ -112,23 +114,33 @@ namespace
 		entries.push_back(Entry("missing.dll", false, ""));
 		entries.push_back(Entry("last.dll", false, ""));
 		entries.push_back(Entry("ghost.dll", false, ""));
-		const std::vector<std::string> missing(1, "MISSING.dll");
+		entries.push_back(Entry("unsaved.dll", false, ""));
+		const char* const files[] = {"MISSING.dll", "unsaved.dll", "skipped.dll"};
+		const char* const reasons[] = {CIV_REPORT_FILE_NOT_FOUND, CIV_REPORT_NOT_IN_SAVES, CIV_REPORT_FILE_NOT_FOUND};
+		std::vector<CivNotLoaded> notLoaded(3);
+		for (int i = 0; i < 3; ++i)
+		{
+			notLoaded[i].file = files[i];
+			notLoaded[i].reason = reasons[i];
+		}
 		std::vector<CivPluginReportRow> loaded(2);
 		loaded[0].name = "Toy Last";
 		loaded[0].file = "last.dll";
 		loaded[1].name = "Toy First";
 		loaded[1].file = "FIRST.DLL";
-		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(entries, missing, loaded);
-		Check(rows.size() == 5, "the Plugins screen gets one row per plugin in the order");
-		if (rows.size() != 5)
+		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(entries, notLoaded, loaded);
+		Check(rows.size() == 6, "the Plugins screen gets one row per plugin in the order");
+		if (rows.size() != 6)
 			return;
 		Check(rows[0].name == "Toy First" && rows[3].name == "Toy Last",
-			"each loaded plugin's row is matched by its file name and keeps its place among skipped and missing ones");
-		Check(rows[1].skipped && !rows[1].failed && rows[1].status == "Skipped", "a skipped plugin is listed as Skipped, not as a failure");
+			"each loaded plugin's row is matched by its file name and keeps its place among skipped ones and ones not loaded");
+		Check(rows[1].skipped && !rows[1].failed && rows[1].status == "Skipped" && rows[1].problems.empty(),
+			"a skipped plugin is listed as Skipped, not as a failure, even with a reason not to load it");
 		Check(rows[1].name == "Toy Skipped", "a skipped plugin is listed by its saved name");
-		Check(rows[2].failed && rows[2].status == "Not loaded", "a missing file is listed in its place as Not loaded");
-		Check(rows[2].problems == CIV_REPORT_FILE_NOT_FOUND, "a missing plugin's row says no mod lists the file");
-		Check(rows[2].name == "missing.dll", "a missing plugin is listed by its file name");
+		Check(rows[2].failed && rows[2].status == "Not loaded", "a plugin Bazaar did not load is listed in its place as Not loaded");
+		Check(rows[2].problems == CIV_REPORT_FILE_NOT_FOUND && rows[5].problems == CIV_REPORT_NOT_IN_SAVES,
+			"each plugin not loaded gives its own reason");
+		Check(rows[2].name == "missing.dll", "a plugin not loaded is listed by its file name");
 		Check(rows[4].failed && rows[4].status == "Not loaded", "a plugin with no loaded row is listed as Not loaded, not as blank");
 		Check(rows[0].file == "first.dll", "each row carries the file name as listed, which the screen sends back");
 	}
@@ -151,16 +163,54 @@ namespace
 		const CivFilePairs pairs = CivUseBothPairs(order);
 		Check(pairs.size() == 2 && pairs[0] == CivFilePair("b.dll", "a.dll") && pairs[1] == CivFilePair("b.dll", "c.dll"),
 			"each choice pairs the plugin with the one it is used with");
-		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(order, std::vector<std::string>(), std::vector<CivPluginReportRow>());
+		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(order, std::vector<CivNotLoaded>(), std::vector<CivPluginReportRow>());
 		Check(rows.size() == 2 && rows[1].useBothWith == order[1].useBothWith, "the Plugins screen gets each plugin's choices");
 		Check(rows.size() == 2 && rows[0].useBothWith == std::vector<std::string>(1, "b.dll"), "a choice saved on one plugin's line also shows on the other plugin's row");
 		std::vector<CivOrderEntry> bothLines = order;
 		bothLines[0].useBothWith.push_back("B.DLL");
-		const std::vector<CivPluginReportRow> bothRows = CivOrderReportRows(bothLines, std::vector<std::string>(), std::vector<CivPluginReportRow>());
+		const std::vector<CivPluginReportRow> bothRows = CivOrderReportRows(bothLines, std::vector<CivNotLoaded>(), std::vector<CivPluginReportRow>());
 		Check(bothRows.size() == 2 && bothRows[0].useBothWith.size() == 1 && bothRows[1].useBothWith.size() == 2,
 			"a choice saved on both plugins' lines is listed once on each row");
 		const std::vector<CivOrderEntry> kept = CivKeepUnlisted(std::vector<CivOrderEntry>(1, order[0]), order);
 		Check(kept.size() == 2 && kept[1].useBothWith == order[1].useBothWith, "a plugin whose mod is off keeps its choices when the order is saved");
+	}
+
+	void TestNotes()
+	{
+		const std::vector<CivPluginReportRow> plugins(1);
+		const std::vector<CivPluginReportRow> rows = CivWithNote("outer", CivWithNote("inner", plugins));
+		Check(rows.size() == 3 && rows[0].problems == "outer" && rows[1].problems == "inner" && rows[0].file.empty(),
+			"Bazaar's notes come before the plugins, the last one added first");
+		Check(CivWithNote(NULL, plugins).size() == 1, "no warning adds no note");
+
+		CivTakeNotices();
+		CivQueueNotice("Plugin not loaded", "a.dll: old");
+		CivQueueNotice("Plugin disabled", "b.dll crashed");
+		CivQueueNotice("Plugin not loaded", "c.dll: old");
+		CivReplaceNotices("Plugin not loaded", std::vector<std::string>(1, "a.dll: new"));
+		Check(CivNoticesWaiting(), "queued notices wait for a game");
+		const std::vector<CivNotice> taken = CivTakeNotices();
+		Check(taken.size() == 2 && taken[0].message == "b.dll crashed" && taken[1].message == "a.dll: new",
+			"new notices of one kind replace the waiting ones of that kind and leave the others");
+		Check(!CivNoticesWaiting(), "taking the notices empties the queue");
+
+		std::vector<std::string> both;
+		both.push_back("a.dll: x");
+		both.push_back("b.dll: y");
+		const std::vector<std::string> swapped(both.rbegin(), both.rend());
+		CivForgetNamedNotices();
+		Check(CivReplaceNoticesOnce("Plugin not loaded", both) && CivTakeNotices().size() == 2, "plugins not loaded are named");
+		Check(!CivReplaceNoticesOnce("Plugin not loaded", swapped) && !CivNoticesWaiting(),
+			"plugins still not loaded are not named again, in whatever order they come");
+		Check(CivReplaceNoticesOnce("Plugin not loaded", std::vector<std::string>(1, "a.dll: z")) && CivNoticesWaiting(),
+			"a plugin not loaded for another reason is named again");
+		Check(CivReplaceNoticesOnce("Plugin not loaded", std::vector<std::string>()) && !CivNoticesWaiting(),
+			"a waiting notice goes once its plugin loads");
+		CivReplaceNoticesOnce("Plugin not loaded", both);
+		CivTakeNotices();
+		CivForgetNamedNotices();
+		Check(CivReplaceNoticesOnce("Plugin not loaded", both), "once forgotten, as when the game restarts its core, the same plugins are named again");
+		CivTakeNotices();
 	}
 }
 
@@ -170,6 +220,7 @@ void TestOrder()
 	TestOrderText();
 	TestOrderRows();
 	TestUseBoth();
+	TestNotes();
 }
 
 void TestReplacedSetup()

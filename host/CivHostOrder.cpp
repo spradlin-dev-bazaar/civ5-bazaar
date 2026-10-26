@@ -59,6 +59,14 @@ namespace
 		return partners;
 	}
 
+	const CivNotLoaded* FindNotLoaded(const std::vector<CivNotLoaded>& notLoaded, const std::string& file)
+	{
+		for (size_t i = 0; i < notLoaded.size(); ++i)
+			if (CivSameText(notLoaded[i].file, file))
+				return &notLoaded[i];
+		return 0;
+	}
+
 	bool TakeLoadedRow(const std::vector<CivPluginReportRow>& loaded, const std::string& file, std::vector<bool>* taken,
 		CivPluginReportRow* row)
 	{
@@ -165,7 +173,7 @@ CivFilePairs CivUseBothPairs(const std::vector<CivOrderEntry>& order)
 	return pairs;
 }
 
-std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEntry>& order, const std::vector<std::string>& missing,
+std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEntry>& order, const std::vector<CivNotLoaded>& notLoaded,
 	const std::vector<CivPluginReportRow>& loaded)
 {
 	std::vector<CivPluginReportRow> rows;
@@ -173,6 +181,7 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 	for (size_t i = 0; i < order.size(); ++i)
 	{
 		const CivOrderEntry& e = order[i];
+		const CivNotLoaded* notLoadedEntry = FindNotLoaded(notLoaded, e.file);
 		CivPluginReportRow row;
 		row.name = e.name.empty() ? e.file : e.name;
 		row.version = e.version;
@@ -181,10 +190,10 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 			row.status = "Skipped";
 			row.skipped = true;
 		}
-		else if (Contains(missing, e.file))
+		else if (notLoadedEntry)
 		{
 			row.status = CIV_REPORT_NOT_LOADED;
-			row.problems = CIV_REPORT_FILE_NOT_FOUND;
+			row.problems = notLoadedEntry->reason;
 			row.failed = true;
 		}
 		else if (!TakeLoadedRow(loaded, e.file, &taken, &row))
@@ -197,4 +206,19 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 		rows.push_back(row);
 	}
 	return rows;
+}
+
+std::vector<CivPluginReportRow> CivWithNote(const char* warning, const std::vector<CivPluginReportRow>& rows)
+{
+	std::vector<CivPluginReportRow> noted;
+	if (warning)
+	{
+		CivPluginReportRow note;
+		note.name = "Bazaar";
+		note.status = "Warning";
+		note.problems = warning;
+		noted.push_back(note);
+	}
+	noted.insert(noted.end(), rows.begin(), rows.end());
+	return noted;
 }

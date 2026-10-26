@@ -149,7 +149,7 @@ The host's DLL GUID is what saves record. From 0.5, Bazaar keeps each plugin's o
 
 A plugin can also give players, cities, units and plots values of its own, since it cannot add fields to the engine's classes. It declares each value once, such as a whole number called Kills on every unit, and reads and sets it through Bazaar for any object. Bazaar saves and loads the values with the plugin's data, drops an object's values when the object is gone, and carries them over when the game replaces an object with a new one, as it does for a captured city or an upgraded unit. The plugin chooses, for each value, whether it carries over.
 
-Which saves need which plugins is left to the game's own mod settings. A plugin mod that keeps data in saves sets AffectsSavedGames, so a save made with it cannot be loaded without it, and MinCompatibleSaveVersion, the oldest version of the mod whose saves it can still load.
+Which saves need which plugins is left to the game's own mod settings. Every plugin mod sets AffectsSavedGames, so a save made with it cannot be loaded without it; Bazaar refuses a plugin whose mod does not, since a game loaded from a save would lack the plugin's `DllPlugins` row. A plugin that keeps data in saves also sets MinCompatibleSaveVersion, the oldest version of the mod whose saves it can still load.
 
 Lua mods keep data in a save through the game's own store, `Modding.OpenSaveData()`, as Firaxis's scenarios do. A plugin can use it too, through a Lua part of its own, but nothing in Lua runs just before a save: the data has to be written each time it changes, and after a load the plugin's C++ part has no data until its Lua part hands it back. It suits plugins with little data that changes at moments Lua sees.
 
@@ -255,7 +255,7 @@ Plugin and Lua mod authors get a release script of their own, `release.ps1`, in 
 
 - `VERSION` holds the release number in the author's own scheme: either a whole number, which is also the mod's version, or semantic versioning, with a second line for the mod's version, which the script raises by one each release because the game takes only a whole number. Another line names the oldest Bazaar release the mod needs.
 - Before building, the script writes the version from `VERSION` into the `.civ5proj` and, for a plugin, into a small header the DLL is built with, so the author changes it in one place. It checks that the mod's version is higher than every released one; that nothing of the template is left, such as its mod ID or its name; and, for a plugin, that the SDK is not newer than the Bazaar release `VERSION` names.
-- It builds with the template's `build.cmd`, then checks the package: a mod that changes the game's database must affect saved games, and a plugin's DLL must be named in a `DllPlugins` row and declare the API version it was built for.
+- It builds with the template's `build.cmd`, then checks the package: a mod that changes the game's database must affect saved games, and a plugin's DLL must be named in a `DllPlugins` row, be among the mod's files and declare the API version it was built for.
 - It keeps each release's package in `Releases\<version>\` and never overwrites one.
 - `CHANGES.txt` holds the change notes in BBCode, newest first, to paste into the Workshop update; the script warns when the new version has no section.
 - Each template also has a Workshop description in BBCode, `workshop-description.txt`, to paste into ModBuddy. It says "Requires Bazaar X or newer.", and the script stops when that differs from the Bazaar release `VERSION` names.

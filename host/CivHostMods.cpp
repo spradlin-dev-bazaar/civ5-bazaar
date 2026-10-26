@@ -26,6 +26,14 @@ namespace
 				found = WindowsPath(mod.files[i].path);
 		return found;
 	}
+
+	CivNotLoaded NotLoaded(const std::string& file, const char* reason)
+	{
+		CivNotLoaded notLoaded;
+		notLoaded.file = file;
+		notLoaded.reason = reason;
+		return notLoaded;
+	}
 }
 
 void CivAddModRow(std::vector<CivActiveMod>* mods, const std::string& id, int version, const std::string& affectsSavedGames,
@@ -58,18 +66,24 @@ std::string CivModImportedFilePath(const CivActiveMod& mod, const std::string& f
 }
 
 std::vector<std::string> CivPluginPaths(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
-	std::vector<std::string>* missing)
+	std::vector<CivNotLoaded>* notLoaded)
 {
 	std::vector<std::string> paths;
 	for (size_t f = 0; f < files.size(); ++f)
 	{
+		bool listed = false;
 		std::string path;
 		for (size_t m = 0; m < mods.size() && path.empty(); ++m)
-			path = CivModFilePath(mods[m], files[f]);
-		if (path.empty())
-			missing->push_back(files[f]);
-		else
+		{
+			const std::string found = CivModFilePath(mods[m], files[f]);
+			listed = listed || !found.empty();
+			if (mods[m].affectsSavedGames)
+				path = found;
+		}
+		if (!path.empty())
 			paths.push_back(path);
+		else
+			notLoaded->push_back(NotLoaded(files[f], listed ? CIV_REPORT_NOT_IN_SAVES : CIV_REPORT_FILE_NOT_FOUND));
 	}
 	return paths;
 }

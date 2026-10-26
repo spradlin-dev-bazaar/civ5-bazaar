@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+#define CIV_REPORT_FILE_NOT_FOUND "No mod that is turned on lists this file."
+#define CIV_REPORT_NOT_IN_SAVES "This plugin's mod is not marked as affecting saved games, so Bazaar does not load it: it would be missing from games loaded from a save. Ask the plugin's author to fix this."
+
 struct CivModFile
 {
 	// Full for a mod in MODS, but relative to the game's folder for the game's own scenarios.
@@ -31,6 +34,12 @@ std::string CivModFilePath(const CivActiveMod& mod, const std::string& fileName)
 // The same, among only the files the game loads into its file system.
 std::string CivModImportedFilePath(const CivActiveMod& mod, const std::string& fileName);
 
-// Two mods should never list one plugin file, so taking it from the first only keeps the choice stable.
+struct CivNotLoaded
+{
+	std::string file;
+	std::string reason;
+};
+
+// A game loaded from a save keeps the DllPlugins rows of only the mods that affect saved games.
 std::vector<std::string> CivPluginPaths(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
-	std::vector<std::string>* missing);
+	std::vector<CivNotLoaded>* notLoaded);

@@ -3,6 +3,7 @@
 
 #include "CivHostEngine.h"
 #include "CivHostMods.h"
+#include "CivHostNotices.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
@@ -20,8 +21,6 @@ namespace
 	const int kCsidlPersonal = 0x0005;
 
 	std::string s_userFolder;
-	std::vector<std::string> s_reportedMissing;
-	std::vector<std::pair<std::string, std::string> > s_pendingNotices;
 
 	std::string UserFolder()
 	{
@@ -53,28 +52,16 @@ namespace
 		}
 	}
 
-	void Notify(const std::string& summary, const std::string& message)
-	{
-		s_pendingNotices.push_back(std::make_pair(summary, message));
-	}
-
-	void DropNotices(const std::string& summary)
-	{
-		for (size_t i = s_pendingNotices.size(); i-- > 0;)
-			if (s_pendingNotices[i].first == summary)
-				s_pendingNotices.erase(s_pendingNotices.begin() + i);
-	}
-
 	void OnFault(int, const char* name, int hookId, unsigned int)
 	{
 		if (hookId < 0)
-			Notify("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\Bazaar.log.");
+			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\Bazaar.log.");
 		else
-			Notify("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
+			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
 	}
 
 	const char* const kPluginProblem = "Plugin problem";
-	const char* const kPluginMissing = "Plugin missing";
+	const char* const kPluginNotLoaded = "Plugin not loaded";
 	const char* const kListUnreadable = "Bazaar could not read the list of plugins, so any plugins already loaded were left as they were.";
 	const char* const kModsUnreadable = "Bazaar could not read the game's list of mods, so any plugins already loaded were left as they were.";
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
@@ -86,22 +73,6 @@ namespace
 		for (size_t i = 0; i < lines.size(); ++i)
 			text += (i ? "\n" : "") + lines[i];
 		return text;
-	}
-
-	// A row with no file is Bazaar's own note, which the Plugins screen keeps at the top.
-	std::vector<CivPluginReportRow> WithNote(const char* warning, const std::vector<CivPluginReportRow>& plugins)
-	{
-		std::vector<CivPluginReportRow> rows;
-		if (warning)
-		{
-			CivPluginReportRow note;
-			note.name = "Bazaar";
-			note.status = "Warning";
-			note.problems = warning;
-			rows.push_back(note);
-		}
-		rows.insert(rows.end(), plugins.begin(), plugins.end());
-		return rows;
 	}
 
 	bool InsertPluginRows(const std::vector<CivPluginReportRow>& rows)
@@ -203,19 +174,14 @@ namespace
 		return saved;
 	}
 
-	// Waiting notices about files that were missing before are replaced, so a file still missing is named once.
-	void NotifyMissing(const std::vector<std::string>& missing)
+	void NotifyNotLoaded(const std::vector<CivNotLoaded>& notLoaded)
 	{
-		if (missing == s_reportedMissing)
-			return;
-		DropNotices(kPluginMissing);
-		for (size_t i = 0; i < missing.size(); ++i)
-		{
-			const std::string line = missing[i] + ": " + CIV_REPORT_FILE_NOT_FOUND;
-			LogLine(line.c_str());
-			Notify(kPluginMissing, line);
-		}
-		s_reportedMissing = missing;
+		std::vector<std::string> lines;
+		for (size_t i = 0; i < notLoaded.size(); ++i)
+			lines.push_back(notLoaded[i].file + ": " + notLoaded[i].reason);
+		if (CivReplaceNoticesOnce(kPluginNotLoaded, lines))
+			for (size_t i = 0; i < lines.size(); ++i)
+				LogLine(lines[i].c_str());
 	}
 
 	std::string Text(Database::Results& rows, int column)
@@ -241,11 +207,12 @@ namespace
 
 	void NotifyPluginProblems()
 	{
-		DropNotices(kPluginProblem);
+		std::vector<std::string> lines;
 		const std::vector<CivPluginRecord>& plugins = CivHostPlugins();
 		for (size_t i = 0; i < plugins.size(); ++i)
 			for (size_t j = 0; j < plugins[i].problems.size(); ++j)
-				Notify(kPluginProblem, plugins[i].name + ": " + plugins[i].problems[j]);
+				lines.push_back(plugins[i].name + ": " + plugins[i].problems[j]);
+		CivReplaceNotices(kPluginProblem, lines);
 	}
 
 	// False when the plugins were left as they were; the Plugins screen's report says why. A warning, if any, heads the
@@ -256,7 +223,7 @@ namespace
 		if (!ListedPluginFiles(&files))
 		{
 			LogLine("Could not read the DllPlugins table, so the plugins were left as they were.");
-			WritePluginReport(WithNote(kListUnreadable, WithNote(warning, CivHostReportRows())));
+			WritePluginReport(CivWithNote(kListUnreadable, CivWithNote(warning, CivHostReportRows())));
 			return false;
 		}
 
@@ -269,23 +236,23 @@ namespace
 		if (!loading.empty() && !ActiveMods(&mods))
 		{
 			LogLine("Could not read the game's list of mods, so the plugins were left as they were.");
-			WritePluginReport(WithNote(kModsUnreadable, WithNote(warning, CivHostReportRows())));
+			WritePluginReport(CivWithNote(kModsUnreadable, CivWithNote(warning, CivHostReportRows())));
 			return false;
 		}
-		std::vector<std::string> missing;
-		const std::vector<std::string> paths = CivPluginPaths(loading, mods, &missing);
-		NotifyMissing(missing);
+		std::vector<CivNotLoaded> notLoaded;
+		const std::vector<std::string> paths = CivPluginPaths(loading, mods, &notLoaded);
 
 		CivHostSetLogSink(&LogLine);
 		CivHostSetFaultSink(&OnFault);
 		const CivPluginListResult result = CivHostSetPlugins(paths, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{
-			Notify("Plugins not changed", kBusy);
-			WritePluginReport(WithNote(kBusy, WithNote(warning, CivHostReportRows())));
+			CivQueueNotice("Plugins not changed", kBusy);
+			WritePluginReport(CivWithNote(kBusy, CivWithNote(warning, CivHostReportRows())));
 			return false;
 		}
-		WritePluginReport(WithNote(warning, CivOrderReportRows(order, missing, CivHostReportRows())));
+		NotifyNotLoaded(notLoaded);
+		WritePluginReport(CivWithNote(warning, CivOrderReportRows(order, notLoaded, CivHostReportRows())));
 		if (result == CIV_PLUGINS_CHANGED)
 			NotifyPluginProblems();
 		return true;
@@ -444,7 +411,7 @@ bool CivHostOnFrontEndCall(lua_State* L, int* results)
 
 void CivHostOnGameUpdate()
 {
-	if (s_pendingNotices.empty())
+	if (!CivNoticesWaiting())
 		return;
 	const PlayerTypes active = GC.getGame().getActivePlayer();
 	if (active == NO_PLAYER)
@@ -453,10 +420,9 @@ void CivHostOnGameUpdate()
 	if (!notifications)
 		return;
 	// A plugin's notification hook can crash here, and the crash's own notice must not move the strings being sent.
-	std::vector<std::pair<std::string, std::string> > sending;
-	sending.swap(s_pendingNotices);
+	const std::vector<CivNotice> sending = CivTakeNotices();
 	for (size_t i = 0; i < sending.size(); ++i)
-		notifications->Add(NOTIFICATION_GENERIC, sending[i].second.c_str(), sending[i].first.c_str(), -1, -1, -1);
+		notifications->Add(NOTIFICATION_GENERIC, sending[i].message.c_str(), sending[i].summary.c_str(), -1, -1, -1);
 }
 
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.
@@ -464,5 +430,5 @@ void CivHostOnEngineShutdown()
 {
 	if (!CivHostUnloadPlugins())
 		LogLine("Plugins were not unloaded because one of them was still running.");
-	s_reportedMissing.clear();
+	CivForgetNamedNotices();
 }
