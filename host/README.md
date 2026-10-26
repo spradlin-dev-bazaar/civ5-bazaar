@@ -5,9 +5,9 @@ The host's own code, compiled into the host DLL. Every `.cpp` file here is built
 - `CivHostCrash`: what Bazaar.log says about a plugin's crash: where it happened, what memory it touched, and its call stack, with function names from the plugin's `.pdb` when it has one.
 - `CivHostHand`: the hand-placed hooks: the engine's calls from inside its functions, and how each one reaches the plugins.
 - `CivHostOrder`: the plugin order the player sets on the Plugins screen: the text it is saved as, matching it to the listed plugins, and the screen's rows.
-- `CivHostMods`: the installed mods' descriptions (`.modinfo` files), read with an XML parser: each mod's ID, version and files, and whether it affects saved games.
+- `CivHostMods`: the mods the game has switched on, as its own mod database lists them: finding a plugin's DLL or a screen's file among their files.
 - `CivHostSetup`: finding the Advanced Setup screen that the Plugins screen replaced, so Continue can open it.
 - `CivHostPath`: file names and paths. Bazaar keeps them in UTF-8 and gives them to Windows as wide characters, so names in any language work.
-- `CivHostEngine`: the link to the game: the plugin list from the database, the saved order file, the Plugins screen's calls, the log file and in-game notices.
+- `CivHostEngine`: the link to the game: the plugin list and the switched-on mods from its databases, the saved order file, the Plugins screen's calls, the log file and in-game notices.
 - `CivHostHooks.h`: what the generated hook wrappers need from the runtime.
 - `CivTurnBench.h`: a turn timer used only in benchmark builds.

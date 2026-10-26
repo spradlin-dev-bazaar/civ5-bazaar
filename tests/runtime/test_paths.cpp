@@ -22,10 +22,6 @@ void TestPaths()
 	const std::string copy = folder + "\\toy_basic.dll";
 	CreateDirectoryW(CivWide(folder).c_str(), NULL);
 	Check(CopyFileW(CivWide(OutFile("toy_basic.dll")).c_str(), CivWide(copy).c_str(), FALSE) != 0, "a toy plugin is copied into a folder outside the system's code page");
-	const std::vector<CivFolderEntry> entries = CivFolderEntries(folder, "*.dll");
-	Check(entries.size() == 1 && entries[0].name == "toy_basic.dll" && !entries[0].folder, "a folder outside the system's code page is listed");
-	const std::vector<CivFolderEntry> all = CivFolderEntries(folder, "*");
-	Check(all.size() == 1, "a folder's listing leaves out . and ..");
 	std::string text;
 	Check(CivReadFile(copy, &text) && text.compare(0, 2, "MZ") == 0, "a file in such a folder can be read");
 	CivHostSetPlugins(std::vector<std::string>(1, copy));

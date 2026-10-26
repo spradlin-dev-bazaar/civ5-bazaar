@@ -436,6 +436,7 @@ class ReleaseScriptTest(unittest.TestCase):
             ({"FAKE_AFFECTS_SAVES": "0"}, ["does not affect saved games"]),
             ({"FAKE_NO_ROW": "1"}, ["DllPlugins table"]),
             ({"FAKE_SKIP_DLL": DLL}, ["it has no " + DLL]),
+            ({"FAKE_UNLISTED_DLL": DLL}, ["does not list " + DLL + " among the mod's files"]),
             ({"FAKE_MODINFO_VERSION": "7"}, ["mod version is 7, not 1"]),
             ({"FAKE_TWO_MODINFO": "1"}, ["2 mod descriptions"]),
             ({"FAKE_COMMENTED_SAVES": "1"}, ["does not affect saved games"]),

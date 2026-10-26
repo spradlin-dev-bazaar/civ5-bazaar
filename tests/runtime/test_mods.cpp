@@ -1,79 +1,63 @@
-// Mod descriptions (.modinfo files): a mod's ID, version and files, and whether it affects saved games.
+// Finding a file among the mods the game has switched on, as the game's own mod database lists them.
 #include "harness.h"
 #include "CivHostMods.h"
 
 namespace
 {
-	CivModInfo Read(const std::string& text, const char* what)
+	CivActiveMod Mod(const char* id)
 	{
-		CivModInfo mod;
-		Check(CivReadModInfo(text, &mod), what);
+		CivActiveMod mod;
+		mod.id = id;
+		mod.version = 1;
 		return mod;
 	}
 
-	CivModInfo WithProperties(const char* properties, const char* what)
+	void Add(CivActiveMod* mod, const char* path, bool imported)
 	{
-		return Read(ModDescription("mod-id", 3, properties, ""), what);
-	}
-
-	CivModInfo WithFiles(const char* files, const char* what)
-	{
-		return Read(ModDescription("mod-id", 3, "", files), what);
+		CivModFile file;
+		file.path = path;
+		file.imported = imported;
+		mod->files.push_back(file);
 	}
 }
 
-void TestModDescriptions()
+void TestActiveMods()
 {
-	const CivModInfo saves = WithProperties("    <AffectsSavedGames>1</AffectsSavedGames>\r\n", "a mod description is read");
-	Check(saves.id == "mod-id" && saves.version == 3, "it gives the mod's own ID and version, not a dependency's");
-	Check(saves.affectsSavedGames, "a mod that affects saved games says so");
-	Check(!WithProperties("    <AffectsSavedGames>\r\n      1\r\n    </AffectsSavedGames>\r\n", "a setting across lines is read").affectsSavedGames,
-		"only exactly 1 counts, as ModBuddy writes it");
-	Check(!WithProperties("    <AffectsSavedGames>0</AffectsSavedGames>\r\n", "a setting of 0 is read").affectsSavedGames,
-		"0 does not affect saved games");
-	Check(!WithProperties("    <AffectsSavedGames>true</AffectsSavedGames>\r\n", "a setting of true is read").affectsSavedGames,
-		"only 1 counts, as in the game's own Mods screen");
-	Check(!WithProperties("    <!-- <AffectsSavedGames>1</AffectsSavedGames> -->\r\n", "a commented-out setting is read past").affectsSavedGames,
-		"a commented-out setting does not count");
-	Check(!Read(ModDescription("mod-id", 3, "", "    <AffectsSavedGames>1</AffectsSavedGames>\r\n"), "a setting in the wrong place is read past")
-			.affectsSavedGames,
-		"the setting counts only among the mod's properties");
+	CivActiveMod first = Mod("first");
+	Add(&first, "C:\\MODS\\First (v 1)\\Plugin.dll", false);
+	Add(&first, "C:\\MODS\\First (v 1)\\UI/Screen.lua", true);
+	Add(&first, "C:\\MODS\\First (v 1)\\Older/same.lua", true);
+	Add(&first, "C:\\MODS\\First (v 1)\\Newer/SAME.lua", true);
+	Check(CivModFilePath(first, "plugin.DLL") == "C:\\MODS\\First (v 1)\\Plugin.dll", "a file is found by name in any case, imported or not");
+	Check(CivModImportedFilePath(first, "Plugin.dll").empty(), "a file the game does not import is left out of the imported ones");
+	Check(CivModImportedFilePath(first, "Screen.lua") == "C:\\MODS\\First (v 1)\\UI\\Screen.lua", "a path comes back with Windows slashes");
+	Check(CivModFilePath(first, "Same.lua") == "C:\\MODS\\First (v 1)\\Newer\\SAME.lua", "of two files with one name, the last listed is found");
+	Check(CivModFilePath(first, "Absent.dll").empty(), "a file the mod does not have is not found");
 
-	const CivModInfo files = WithFiles(
-		"    <File md5=\"1\" import=\"0\">Plugin.dll</File>\r\n"
-		"    <!-- <File import=\"1\">Old.lua</File> -->\r\n"
-		"    <File import=\"1\"><![CDATA[Fish & Chips/Screen.lua]]></File>\r\n"
-		"    <File import=\"1\">  First/Same.lua  </File>\r\n"
-		"    <File>Unflagged.lua</File>\r\n"
-		"    <File import=\"1\">Second/SAME.lua</File>\r\n"
-		"    <File import=\"1\">\xD0\x9C\xD0\xBE\xD0\xB4/Screen.xml</File>\r\n",
-		"a description listing files is read");
-	Check(files.files.size() == 6, "each listed file is read once, and a commented-out one is not");
-	Check(CivModFilePath(files, "plugin.DLL") == "Plugin.dll", "a file is found by name in any case, imported or not");
-	Check(CivModImportedFilePath(files, "Plugin.dll").empty(), "a file the game does not import is left out of the imported ones");
-	Check(CivModImportedFilePath(files, "Unflagged.lua").empty(), "a file with no import flag is not imported");
-	Check(CivModImportedFilePath(files, "Screen.lua") == "Fish & Chips\\Screen.lua", "a path written as character data is read");
-	Check(CivModImportedFilePath(files, "Old.lua").empty(), "a commented-out file is not found");
-	Check(CivModImportedFilePath(files, "same.lua") == "Second\\SAME.lua", "of two files with one name, the last listed is found");
-	Check(files.files[2].path == "First/Same.lua", "spaces around a path are left out");
-	Check(CivModImportedFilePath(files, "Screen.xml") == "\xD0\x9C\xD0\xBE\xD0\xB4\\Screen.xml", "a path in any language is read as UTF-8");
+	CivActiveMod second = Mod("second");
+	Add(&second, "C:\\MODS\\Second\\Plugin.dll", false);
+	Add(&second, "C:\\MODS\\Second\\Own.dll", false);
+	std::vector<CivActiveMod> mods;
+	mods.push_back(first);
+	mods.push_back(second);
+	std::vector<std::string> files;
+	files.push_back("Own.dll");
+	files.push_back("Gone.dll");
+	files.push_back("Plugin.dll");
+	std::vector<std::string> missing;
+	const std::vector<std::string> paths = CivPluginPaths(files, mods, &missing);
+	Check(paths.size() == 2 && paths[0] == "C:\\MODS\\Second\\Own.dll", "each plugin is found in the mod that has it, in the order given");
+	Check(paths.size() == 2 && paths[1] == "C:\\MODS\\First (v 1)\\Plugin.dll", "a file two mods have is taken from the first");
+	Check(missing.size() == 1 && missing[0] == "Gone.dll", "a file no active mod has is named as missing");
 
-	const CivModInfo plain = Read("<Mod id=\"plain\" version=\"2\"><Properties><Description>Caf\xE9</Description></Properties></Mod>",
-		"a description with no byte order mark or declaration, and a byte from the system's code page, is read");
-	Check(plain.id == "plain" && plain.version == 2, "it gives its ID and version");
-	const CivModInfo declared = Read("<?xml version=\"1.0\" encoding=\"windows-1252\"?><Mod id=\"x\" version=\"1\"><Files><File>Caf\xE9.lua</File></Files></Mod>",
-		"a description declaring another encoding is read");
-	if (GetACP() == 1252)
-		Check(declared.files.size() == 1 && declared.files[0].path == "Caf\xC3\xA9.lua", "its letters from the system's code page are read right");
-	const std::wstring utf16 = L"\xFEFF<Mod id=\"wide\" version=\"4\"></Mod>";
-	Check(Read(std::string((const char*)utf16.data(), utf16.size() * sizeof(wchar_t)), "a description saved as UTF-16 is read").id == "wide",
-		"it gives its ID");
-
-	CivModInfo broken;
-	broken.id = "left over";
-	Check(!CivReadModInfo("<Mod id=\"x\" version=\"1\"><Files></Mod>", &broken), "a description that is not valid XML is refused");
-	Check(broken.id.empty(), "a refused description leaves nothing behind");
-	Check(!CivReadModInfo("<Mod id=\"x\"></Mod>", &broken), "a description without a version is refused");
-	Check(!CivReadModInfo("<Mod id=\"\" version=\"1\"></Mod>", &broken), "a description without an ID is refused");
-	Check(!CivReadModInfo("<Other id=\"x\" version=\"1\"></Other>", &broken), "a file that is not a mod description is refused");
+	std::vector<CivActiveMod> rows;
+	CivAddModRow(&rows, "a", 1, "1", "C:\\MODS\\A\\One.dll", false);
+	CivAddModRow(&rows, "a", 1, "1", "C:\\MODS\\A\\Two.lua", true);
+	CivAddModRow(&rows, "a", 2, "true", "C:\\MODS\\A (v 2)\\One.dll", false);
+	CivAddModRow(&rows, "b", 1, "", "", false);
+	Check(rows.size() == 3 && rows[0].files.size() == 2 && rows[0].files[1].imported, "a mod's rows become one mod with all its files");
+	Check(rows.size() == 3 && rows[1].version == 2, "another version of the same mod is a mod of its own");
+	Check(rows.size() == 3 && rows[0].affectsSavedGames && !rows[1].affectsSavedGames && !rows[2].affectsSavedGames,
+		"only the value 1 marks a mod as affecting saved games, as the game's own Mods screen reads it");
+	Check(rows.size() == 3 && rows[2].files.empty(), "a row with no path adds no file");
 }

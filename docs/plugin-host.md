@@ -32,7 +32,7 @@ Plugin DLLs  (ordinary mods: one folder each, with <Name>.dll at its top level)
   <other>.dll            anything else that needs C++; Lua mods use VMC hooks instead
 ```
 
-The host finds plugins through the game's own mod system: each plugin mod inserts one row, its file name, into a `DllPlugins` table, which the host's own mod creates. At the point where VMC reads its own `CustomModOptions` table, the host reads `DllPlugins`, finds each file under the MODS folder, loads it in the order the Plugins screen saved, and runs the handshake below.
+The host finds plugins through the game's own mod system: each plugin mod inserts one row, its file name, into a `DllPlugins` table, which the host's own mod creates. At the point where VMC reads its own `CustomModOptions` table, the host reads `DllPlugins`, finds each file among the files of the mods that are turned on, as the game's own mod database lists them, loads it in the order the Plugins screen saved, and runs the handshake below.
 
 ## Why VMC as the host base
 
@@ -293,11 +293,11 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 - #20 and #38: the layout check also catches a field that changes type and a virtual function whose parameters change, and its advice for a changed class works with the release script, since 0.5 freezes the layouts;
 - #1: Bazaar loads each plugin from the folder of the mod that is turned on, not the first file of that name it finds in MODS;
 - #52: Bazaar refuses a plugin whose mod doesn't affect saved games, since the plugin would not load in a game loaded from a save;
-- #53: Bazaar, the release script and a docs tool read mods' XML files with an XML parser, not by matching text;
+- #53: the release script and a docs tool read mods' XML files with an XML parser, not by matching text; Bazaar asks the game's own mod database instead;
 - #10: `CivHooks.h` declares the exact shape of each hook function, so a wrong one fails to compile instead of crashing the game;
 - #22: plugins' Lua functions run inside the crash guard;
 - #4: a plugin crash shows a pop-up in the middle of the screen;
-- #33: Bazaar finds the MODS folder and its plugins whatever characters their paths hold;
+- #33: Bazaar loads plugins whatever characters their paths hold;
 - #9: `Bazaar.log` starts afresh each time the game starts;
 - #19: the small bugs in the Claude Code plugin's scripts, event list and evals are fixed;
 - #46: the docs home page names the site once in its title.

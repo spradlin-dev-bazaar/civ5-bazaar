@@ -2,6 +2,7 @@
 #include "CvNotifications.h"
 
 #include "CivHostEngine.h"
+#include "CivHostMods.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
@@ -52,26 +53,6 @@ namespace
 		}
 	}
 
-	bool FindFile(const std::string& dir, const std::string& name, int depth, std::string* found)
-	{
-		const std::vector<CivFolderEntry> entries = CivFolderEntries(dir, "*");
-		for (size_t i = 0; i < entries.size(); ++i)
-		{
-			const std::string path = dir + "\\" + entries[i].name;
-			if (entries[i].folder)
-			{
-				if (depth > 0 && FindFile(path, name, depth - 1, found))
-					return true;
-			}
-			else if (CivSameText(entries[i].name, name))
-			{
-				*found = path;
-				return true;
-			}
-		}
-		return false;
-	}
-
 	void Notify(const std::string& summary, const std::string& message)
 	{
 		s_pendingNotices.push_back(std::make_pair(summary, message));
@@ -94,8 +75,8 @@ namespace
 
 	const char* const kPluginProblem = "Plugin problem";
 	const char* const kPluginMissing = "Plugin missing";
-	const char* const kNoDocuments = "Bazaar could not find your Documents folder, so it could not look for plugins.";
 	const char* const kListUnreadable = "Bazaar could not read the list of plugins, so any plugins already loaded were left as they were.";
+	const char* const kModsUnreadable = "Bazaar could not read the game's list of mods, so any plugins already loaded were left as they were.";
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
 	const char* const kNotSaved = "Bazaar could not save your plugin order, so the old order comes back when a game starts. Details are in Logs\\Bazaar.log.";
 
@@ -237,18 +218,25 @@ namespace
 		s_reportedMissing = missing;
 	}
 
-	void ResolvePaths(const std::vector<CivOrderEntry>& order, std::vector<std::string>* paths, std::vector<std::string>* missing)
+	std::string Text(Database::Results& rows, int column)
 	{
-		for (size_t i = 0; i < order.size(); ++i)
-		{
-			std::string path;
-			if (order[i].skip)
-				continue;
-			if (FindFile(UserFolder() + "\\MODS", order[i].file, 3, &path))
-				paths->push_back(path);
-			else
-				missing->push_back(order[i].file);
-		}
+		const char* text = rows.GetText(column);
+		return text ? text : "";
+	}
+
+	// Only the game's mod database knows which of a mod's installed versions is switched on.
+	bool ActiveMods(std::vector<CivActiveMod>* mods)
+	{
+		Database::Connection* modding = gDLL->GetModsDatabase();
+		Database::Results rows;
+		if (!modding || !modding->Execute(rows,
+			"SELECT m.ModID, m.Version, f.EvaluatedPath, f.Import, (SELECT p.Value FROM ModProperties p WHERE p.ModID = m.ModID "
+			"AND p.Version = m.Version AND p.Name = 'AffectsSavedGames') FROM Mods m JOIN ModFiles f ON f.ModID = m.ModID "
+			"AND f.Version = m.Version WHERE m.Activated = 1 ORDER BY m.RowID, f.rowid"))
+			return false;
+		while (rows.Step())
+			CivAddModRow(mods, Text(rows, 0), rows.GetInt(1), Text(rows, 4), CivUtf8(CivWide(Text(rows, 2))), rows.GetInt(3) != 0);
+		return true;
 	}
 
 	void NotifyPluginProblems()
@@ -271,17 +259,21 @@ namespace
 			WritePluginReport(WithNote(kListUnreadable, WithNote(warning, CivHostReportRows())));
 			return false;
 		}
-		if (!files.empty() && UserFolder().empty())
-		{
-			Notify("Plugins not loaded", kNoDocuments);
-			WritePluginReport(WithNote(kNoDocuments, CivHostReportRows()));
-			return false;
-		}
 
 		const std::vector<CivOrderEntry> order = CivOrderListedFiles(files, wanted);
-		std::vector<std::string> paths;
+		std::vector<std::string> loading;
+		for (size_t i = 0; i < order.size(); ++i)
+			if (!order[i].skip)
+				loading.push_back(order[i].file);
+		std::vector<CivActiveMod> mods;
+		if (!loading.empty() && !ActiveMods(&mods))
+		{
+			LogLine("Could not read the game's list of mods, so the plugins were left as they were.");
+			WritePluginReport(WithNote(kModsUnreadable, WithNote(warning, CivHostReportRows())));
+			return false;
+		}
 		std::vector<std::string> missing;
-		ResolvePaths(order, &paths, &missing);
+		const std::vector<std::string> paths = CivPluginPaths(loading, mods, &missing);
 		NotifyMissing(missing);
 
 		CivHostSetLogSink(&LogLine);
@@ -316,15 +308,6 @@ namespace
 		const bool flag = lua_toboolean(L, -1) != 0;
 		lua_pop(L, 1);
 		return flag;
-	}
-
-	int LuaNumber(lua_State* L, int table, const char* key)
-	{
-		lua_pushstring(L, key);
-		lua_rawget(L, table);
-		const int number = lua_type(L, -1) == LUA_TNUMBER ? (int)lua_tonumber(L, -1) : 0;
-		lua_pop(L, 1);
-		return number;
 	}
 
 	std::vector<std::string> LuaTexts(lua_State* L, int table, const char* key)
@@ -378,27 +361,6 @@ namespace
 		return UseListedPlugins(requested, saved ? NULL : kNotSaved);
 	}
 
-	// The screen sends Modding.GetActivatedMods(): { { ID = ..., Version = ... }, ... }, in the order the game switched them on.
-	std::vector<CivActiveMod> ActiveMods(lua_State* L, int arg)
-	{
-		std::vector<CivActiveMod> mods;
-		const int count = (int)lua_objlen(L, arg);
-		for (int i = 1; i <= count; ++i)
-		{
-			lua_rawgeti(L, arg, i);
-			const int row = lua_gettop(L);
-			if (lua_type(L, row) == LUA_TTABLE)
-			{
-				CivActiveMod mod;
-				mod.id = LuaText(L, row, "ID");
-				mod.version = LuaNumber(L, row, "Version");
-				mods.push_back(mod);
-			}
-			lua_pop(L, 1);
-		}
-		return mods;
-	}
-
 	std::string FolderOf(const std::string& path)
 	{
 		return path.empty() ? path : path.substr(0, path.find_last_of("\\/"));
@@ -423,12 +385,13 @@ namespace
 	{
 		const std::string own = OwnFolder();
 		const std::string game = GameFolder();
+		std::vector<CivActiveMod> mods;
+		if (!ActiveMods(&mods))
+			LogLine("Could not read the game's list of mods, so Continue looks only for the game's own Advanced Setup screen.");
 		CivReplacedSetup setup;
 		setup.problem = "Bazaar could not find its own folder or the game's.";
 		if (!own.empty() && !game.empty())
-			setup = CivCopyReplacedSetup(UserFolder() + "\\MODS", game, own, ActiveMods(L, 2), lua_toboolean(L, 3) != 0);
-		for (size_t i = 0; i < setup.unreadable.size(); ++i)
-			LogLine(("Could not read the mod description " + setup.unreadable[i] + ", so Bazaar did not check that mod for a replaced Advanced Setup screen.").c_str());
+			setup = CivCopyReplacedSetup(game, own, mods, lua_toboolean(L, 2) != 0);
 		if (setup.copy.empty())
 		{
 			LogLine(("Could not open the Advanced Setup screen that Bazaar replaced: " + setup.problem).c_str());
@@ -469,7 +432,7 @@ bool CivHostOnFrontEndCall(lua_State* L, int* results)
 	}
 	if (request == "bazaar:apply" && lua_type(L, 2) == LUA_TTABLE)
 		lua_pushboolean(L, SaveAndReloadFromScreen(L));
-	else if (request == "bazaar:nextsetup" && lua_type(L, 2) == LUA_TTABLE)
+	else if (request == "bazaar:nextsetup")
 		PushReplacedSetup(L);
 	else
 	{

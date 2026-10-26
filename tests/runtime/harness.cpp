@@ -31,7 +31,7 @@ void TestHandHookFaults();
 void TestPossibleConflicts();
 void TestSkippedOriginal();
 void TestPaths();
-void TestModDescriptions();
+void TestActiveMods();
 
 namespace
 {
@@ -83,7 +83,7 @@ namespace
 		{"possible conflicts", &TestPossibleConflicts},
 		{"skipped original", &TestSkippedOriginal},
 		{"paths", &TestPaths},
-		{"mod descriptions", &TestModDescriptions},
+		{"active mods", &TestActiveMods},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 
@@ -236,16 +236,6 @@ FARPROC ToyExport(const char* fileName, const char* function)
 {
 	HMODULE module = GetModuleHandleW(CivWide(OutFile(fileName)).c_str());
 	return module ? GetProcAddress(module, function) : 0;
-}
-
-std::string ModDescription(const char* id, int version, const char* properties, const char* files)
-{
-	char number[16];
-	_snprintf_s(number, sizeof(number), _TRUNCATE, "%d", version);
-	return std::string("\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Mod id=\"") + id + "\" version=\"" + number + "\">\r\n"
-		"  <Properties>\r\n" + properties + "  </Properties>\r\n"
-		"  <Dependencies>\r\n    <Mod id=\"dependency\" version=\"9\" minversion=\"0\" maxversion=\"999\" title=\"Other\" />\r\n"
-		"  </Dependencies>\r\n  <Files>\r\n" + files + "  </Files>\r\n</Mod>\r\n";
 }
 
 int Call(int (*fn)(), int fallback)

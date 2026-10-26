@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#define CIV_REPORT_FILE_NOT_FOUND "The file was not found in the MODS folder."
+#define CIV_REPORT_FILE_NOT_FOUND "No mod that is turned on lists this file."
 
 // One plugin in the order the player set on the Plugins screen.
 struct CivOrderEntry

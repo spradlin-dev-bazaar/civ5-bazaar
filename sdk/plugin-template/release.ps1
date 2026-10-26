@@ -496,6 +496,7 @@ function Get-UnpackedModProblems([string] $folder, [int] $modVersion, [bool] $is
         }
         return $problems
     }
+    $listed = @($mod.SelectNodes('Files/File') | ForEach-Object { ($_.InnerText.Trim() -split '[\\/]')[-1] })
     if (-not $dlls.Count) {
         $problems.Add('no database update in it adds the plugin''s DLL to the DllPlugins table, so Bazaar would never load it (the script reads rows written as INSERT INTO DllPlugins (File) VALUES (''Name.dll''), as the template does)')
     }
@@ -504,6 +505,9 @@ function Get-UnpackedModProblems([string] $folder, [int] $modVersion, [bool] $is
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             $problems.Add("it has no $dll, which its DllPlugins row names")
             continue
+        }
+        if ($listed -notcontains $dll) {
+            $problems.Add("its mod description does not list $dll among the mod's files, so Bazaar would not find it. Keep the DLL's <Content> entry in the .civ5proj")
         }
         try {
             $api = Get-ExportedApiVersion ([IO.File]::ReadAllBytes($path))

@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <vector>
 
 namespace
 {
@@ -83,25 +84,4 @@ std::string CivModuleFile(const void* module)
 	wchar_t path[MAX_PATH];
 	const DWORD length = GetModuleFileNameW((HMODULE)module, path, MAX_PATH);
 	return (length > 0 && length < MAX_PATH) ? CivUtf8(std::wstring(path, length)) : std::string();
-}
-
-std::vector<CivFolderEntry> CivFolderEntries(const std::string& folder, const char* pattern)
-{
-	std::vector<CivFolderEntry> entries;
-	WIN32_FIND_DATAW data;
-	HANDLE h = FindFirstFileW(CivWide(folder + "\\" + pattern).c_str(), &data);
-	if (h == INVALID_HANDLE_VALUE)
-		return entries;
-	do
-	{
-		const std::wstring name = data.cFileName;
-		if (name == L"." || name == L"..")
-			continue;
-		CivFolderEntry entry;
-		entry.name = CivUtf8(name);
-		entry.folder = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-		entries.push_back(entry);
-	} while (FindNextFileW(h, &data));
-	FindClose(h);
-	return entries;
 }

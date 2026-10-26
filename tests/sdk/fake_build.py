@@ -6,7 +6,7 @@ usage: fake_build.py PROJECT_FOLDER
 Environment variables make it go wrong on purpose: FAKE_BUILD_FAIL, FAKE_NO_PACKAGE, FAKE_API ("major.minor", or
 "none" for no API version), FAKE_64BIT, FAKE_SKIP_DLL (a DLL name to leave out), FAKE_AFFECTS_SAVES ("0"),
 FAKE_COMMENTED_SAVES (the setting commented out), FAKE_BROKEN_MODINFO, FAKE_NO_ROW, FAKE_MODINFO_VERSION,
-FAKE_TWO_MODINFO and FAKE_PACKAGE_NAME.
+FAKE_TWO_MODINFO, FAKE_UNLISTED_DLL (a DLL name to leave out of the mod's file list) and FAKE_PACKAGE_NAME.
 """
 
 import glob
@@ -97,24 +97,29 @@ def project_property(civ5proj, name):
 
 def stage_mod(project, stage, mod):
     updates = []
+    files = []
     for sql in glob.glob(os.path.join(project, "mod", "*.sql")):
         text = read(sql)
         if os.environ.get("FAKE_NO_ROW"):
             text = re.sub(r"(?i)INSERT\s+INTO\s+DllPlugins[^;]*;", "", text)
         write(os.path.join(stage, os.path.basename(sql)), text)
         updates.append(os.path.basename(sql))
+        files.append(os.path.basename(sql))
         for dll in dll_plugin_rows(text):
             if dll != os.environ.get("FAKE_SKIP_DLL"):
                 write_dll(os.path.join(stage, dll))
+            if dll != os.environ.get("FAKE_UNLISTED_DLL"):
+                files.append(dll)
     saves = "<AffectsSavedGames>%s</AffectsSavedGames>" % os.environ.get("FAKE_AFFECTS_SAVES", "1")
     if os.environ.get("FAKE_COMMENTED_SAVES"):
         saves = "<!-- %s -->" % saves
     modinfo = (
-        '<Mod id="x" version="%s"><Properties>%s</Properties>'
+        '<Mod id="x" version="%s"><Properties>%s</Properties><Files>%s</Files>'
         "<Actions><OnModActivated>%s</OnModActivated></Actions></Mod>"
         % (
             os.environ.get("FAKE_MODINFO_VERSION", mod),
             saves,
+            "".join('<File md5="0" import="0">%s</File>' % name for name in files),
             "".join("<UpdateDatabase>%s</UpdateDatabase>" % u for u in updates),
         )
     )

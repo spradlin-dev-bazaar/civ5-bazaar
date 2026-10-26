@@ -37,12 +37,20 @@ namespace
 		return text;
 	}
 
-	CivActiveMod Active(const char* id, int version)
+	CivActiveMod Mod(const char* id, int version)
 	{
 		CivActiveMod mod;
 		mod.id = id;
 		mod.version = version;
 		return mod;
+	}
+
+	CivModFile File(const std::string& path, bool imported)
+	{
+		CivModFile file;
+		file.path = path;
+		file.imported = imported;
+		return file;
 	}
 
 	void TestOrderListedFiles()
@@ -119,7 +127,7 @@ namespace
 		Check(rows[1].skipped && !rows[1].failed && rows[1].status == "Skipped", "a skipped plugin is listed as Skipped, not as a failure");
 		Check(rows[1].name == "Toy Skipped", "a skipped plugin is listed by its saved name");
 		Check(rows[2].failed && rows[2].status == "Not loaded", "a missing file is listed in its place as Not loaded");
-		Check(rows[2].problems == CIV_REPORT_FILE_NOT_FOUND, "a missing plugin's row says the file was not found");
+		Check(rows[2].problems == CIV_REPORT_FILE_NOT_FOUND, "a missing plugin's row says no mod lists the file");
 		Check(rows[2].name == "missing.dll", "a missing plugin is listed by its file name");
 		Check(rows[4].failed && rows[4].status == "Not loaded", "a plugin with no loaded row is listed as Not loaded, not as blank");
 		Check(rows[0].file == "first.dll", "each row carries the file name as listed, which the screen sends back");
@@ -166,58 +174,59 @@ void TestOrder()
 
 void TestReplacedSetup()
 {
-	const std::string ras = ModDescription("ras-id", 15, "",
-		"    <File md5=\"1\" import=\"0\">Unused/AdvancedSetup.xml</File>\r\n"
-		"    <File md5=\"2\" import=\"1\">UI Overrides/AdvancedSetup.xml</File>\r\n"
-		"    <File import=\"1\" md5=\"3\">UI Overrides/AdvancedSetup.lua</File>\r\n");
 	// The folder name has Cyrillic letters, which no Western code page has.
 	const std::string root = OutFile("setup_test \xD0\x9C\xD0\xBE\xD0\xB4\xD1\x8B");
 	const std::string mods = root + "\\MODS";
 	const std::string own = mods + "\\Bazaar (v 1)";
 	const std::string game = root + "\\Game";
 	const std::string rasXml = mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.xml";
-	WriteText(mods + "\\RAS (v 15)\\RAS (v 15).modinfo", ras);
 	WriteText(rasXml, "ras xml");
 	WriteText(mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua", "ras lua");
-	WriteText(mods + "\\Other (v 1)\\Other (v 1).modinfo", ModDescription("other-id", 1, "", "    <File import=\"1\">Other.lua</File>\r\n"));
-	WriteText(mods + "\\Broken (v 1)\\Broken (v 1).modinfo", "<Mod id=\"broken\" version=\"1\"><Files></Mod>");
-	WriteText(own + "\\Bazaar (v 1).modinfo", ModDescription("bazaar-id", 1, "", "    <File import=\"1\">frontend/AdvancedSetup.xml</File>\r\n"));
 	WriteText(own + "\\frontend\\AdvancedSetup.xml", "bazaar xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "game xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.lua", "game lua");
 	WriteText(game + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "expansion xml");
 
-	std::vector<CivActiveMod> withRas;
-	withRas.push_back(Active("ras-id", 15));
-	withRas.push_back(Active("other-id", 1));
-	withRas.push_back(Active("bazaar-id", 1));
-	const CivReplacedSetup first = CivCopyReplacedSetup(mods, game, own, withRas, true);
+	// Mixed slashes, as the game's mod database gives them.
+	std::vector<CivActiveMod> active;
+	active.push_back(Mod("ras-id", 15));
+	active.back().files.push_back(File(mods + "\\RAS (v 15)\\Unused/AdvancedSetup.xml", false));
+	active.back().files.push_back(File(mods + "\\RAS (v 15)\\UI Overrides/AdvancedSetup.xml", true));
+	active.back().files.push_back(File(mods + "\\RAS (v 15)\\UI Overrides/AdvancedSetup.lua", true));
+	active.push_back(Mod("other-id", 1));
+	active.back().files.push_back(File(mods + "\\Other (v 1)\\Other.lua", true));
+	active.push_back(Mod("bazaar-id", 1));
+	active.back().files.push_back(File(own + "\\frontend/AdvancedSetup.xml", true));
+
+	const CivReplacedSetup first = CivCopyReplacedSetup(game, own, active, true);
 	const std::string copy = own + "\\BazaarNextSetup";
 	Check(first.copy == copy, "another active mod's screen is copied beside Bazaar under a name of its own");
 	Check(ReadText(copy + ".xml") == "ras xml", "its layout is that mod's, and Bazaar's own is passed over");
 	Check(ReadText(copy + ".lua") == "ras lua", "the copied script is that mod's too");
-	Check(first.xmlSource == rasXml, "it says which file it copied");
-	Check(first.unreadable.size() == 1 && first.unreadable[0] == mods + "\\Broken (v 1)\\Broken (v 1).modinfo",
-		"a mod description that cannot be read is named, and the other mods are still found");
+	Check(first.xmlSource == rasXml, "it says which file it copied, with Windows slashes");
 
 	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_READONLY);
 	// This copy is read-only too, and the next copy must still overwrite it.
-	CivCopyReplacedSetup(mods, game, own, withRas, true);
-	Check(!CivCopyReplacedSetup(mods, game, own, withRas, true).copy.empty(), "a read-only source does not stop the next copy");
+	CivCopyReplacedSetup(game, own, active, true);
+	Check(!CivCopyReplacedSetup(game, own, active, true).copy.empty(), "a read-only source does not stop the next copy");
 	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_NORMAL);
 
-	std::vector<CivActiveMod> withoutRas(withRas.begin() + 1, withRas.end());
-	CivCopyReplacedSetup(mods, game, own, withoutRas, true);
+	std::vector<CivActiveMod> late(active);
+	late.push_back(Mod("late-id", 2));
+	late.back().files.push_back(File(mods + "\\Late (v 2)\\AdvancedSetup.xml", true));
+	WriteText(mods + "\\Late (v 2)\\AdvancedSetup.xml", "late xml");
+	const CivReplacedSetup lastWins = CivCopyReplacedSetup(game, own, late, true);
+	Check(ReadText(copy + ".xml") == "late xml" && lastWins.luaSource == mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua",
+		"of two mods replacing one file, the later one is copied");
+
+	std::vector<CivActiveMod> withoutRas(active.begin() + 1, active.end());
+	CivCopyReplacedSetup(game, own, withoutRas, true);
 	Check(ReadText(copy + ".xml") == "expansion xml", "with no such mod active, the game's own layout is copied");
 	Check(ReadText(copy + ".lua") == "game lua", "with no such mod active, the game's own script is copied");
-	CivCopyReplacedSetup(mods, game, own, withoutRas, false);
+	CivCopyReplacedSetup(game, own, withoutRas, false);
 	Check(ReadText(copy + ".xml") == "game xml", "the game's base layout is used when Gods and Kings is off");
-	withoutRas.push_back(Active("ras-id", 14));
-	const CivReplacedSetup otherVersion = CivCopyReplacedSetup(mods, game, own, withoutRas, false);
-	Check(otherVersion.xmlSource == game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml",
-		"an installed mod counts only in the version that is active");
 
-	const CivReplacedSetup failed = CivCopyReplacedSetup(mods, root + "\\NoGame", own, withoutRas, false);
+	const CivReplacedSetup failed = CivCopyReplacedSetup(root + "\\NoGame", own, withoutRas, false);
 	Check(failed.copy.empty(), "a screen that cannot be copied gives no path");
 	Check(failed.problem.find("Could not copy") == 0, "a screen that cannot be copied gives a reason");
 }

@@ -10,35 +10,32 @@ namespace
 	const char* const kLua = "AdvancedSetup.lua";
 	const char* const kCopyName = "BazaarNextSetup";
 
-	// The last active mod, other than the one in ownFolder, importing fileName; empty when none does.
-	std::string ImportedByActiveMod(const std::vector<CivInstalledMod>& installed, const std::string& ownFolder,
-		const std::vector<CivActiveMod>& active, const std::string& fileName)
+	bool Inside(const std::string& path, const std::string& folder)
+	{
+		const std::string prefix = folder + "\\";
+		return path.size() > prefix.size() && CivSameText(path.substr(0, prefix.size()), prefix);
+	}
+
+	std::string ImportedByActiveMod(const std::vector<CivActiveMod>& mods, const std::string& ownFolder, const std::string& fileName)
 	{
 		const std::string own = CivFullPath(ownFolder);
 		std::string source;
-		for (size_t a = 0; a < active.size(); ++a)
+		for (size_t m = 0; m < mods.size(); ++m)
 		{
-			for (size_t i = 0; i < installed.size(); ++i)
-			{
-				const CivInstalledMod& mod = installed[i];
-				if (!CivSameText(mod.info.id, active[a].id) || mod.info.version != active[a].version || CivSameText(CivFullPath(mod.folder), own))
-					continue;
-				const std::string file = CivModImportedFilePath(mod.info, fileName);
-				if (!file.empty())
-					source = mod.folder + "\\" + file;
-			}
+			const std::string file = CivModImportedFilePath(mods[m], fileName);
+			if (!file.empty() && !Inside(CivFullPath(file), own))
+				source = file;
 		}
 		return source;
 	}
 }
 
-CivReplacedSetup CivCopyReplacedSetup(const std::string& modsFolder, const std::string& gameFolder, const std::string& ownFolder,
-	const std::vector<CivActiveMod>& active, bool expansion1)
+CivReplacedSetup CivCopyReplacedSetup(const std::string& gameFolder, const std::string& ownFolder, const std::vector<CivActiveMod>& mods,
+	bool expansion1)
 {
 	CivReplacedSetup result;
-	const std::vector<CivInstalledMod> installed = CivInstalledMods(modsFolder, &result.unreadable);
-	result.xmlSource = ImportedByActiveMod(installed, ownFolder, active, kXml);
-	result.luaSource = ImportedByActiveMod(installed, ownFolder, active, kLua);
+	result.xmlSource = ImportedByActiveMod(mods, ownFolder, kXml);
+	result.luaSource = ImportedByActiveMod(mods, ownFolder, kLua);
 	const std::string gameSetup = gameFolder + "\\Assets\\UI\\FrontEnd\\GameSetup\\";
 	const std::string expansionSetup = gameFolder + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\";
 	if (result.xmlSource.empty())

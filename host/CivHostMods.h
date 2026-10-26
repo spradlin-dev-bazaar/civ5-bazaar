@@ -3,23 +3,17 @@
 #include <string>
 #include <vector>
 
-struct CivActiveMod
-{
-	std::string id;
-	int version;
-};
-
 struct CivModFile
 {
-	// Inside the mod's folder, as the description writes it.
+	// Full for a mod in MODS, but relative to the game's folder for the game's own scenarios.
 	std::string path;
 	// The game loads the file into its own file system, where screens and scripts are found by name.
 	bool imported;
 };
 
-struct CivModInfo
+struct CivActiveMod
 {
-	CivModInfo() : version(0), affectsSavedGames(false) {}
+	CivActiveMod() : version(0), affectsSavedGames(false) {}
 
 	std::string id;
 	int version;
@@ -27,22 +21,16 @@ struct CivModInfo
 	std::vector<CivModFile> files;
 };
 
-// False, with mod left empty, when the text is not a mod description with an ID and a version. Text with a UTF-16 byte
-// order mark is read as UTF-16, and any other text as CivWide decodes it, whatever encoding the description declares.
-bool CivReadModInfo(const std::string& text, CivModInfo* mod);
+// The rows must keep each mod's rows together, its files in the order the mod lists them. Only exactly "1" affects
+// saved games, as on the game's own Mods screen.
+void CivAddModRow(std::vector<CivActiveMod>* mods, const std::string& id, int version, const std::string& affectsSavedGames,
+	const std::string& path, bool imported);
 
-// The path, inside the mod's folder and with Windows slashes, of the last file the mod lists with this name, in any
-// case; empty when there is none.
-std::string CivModFilePath(const CivModInfo& mod, const std::string& fileName);
+// The last file the mod lists with this name, in any case, with Windows slashes; empty when there is none.
+std::string CivModFilePath(const CivActiveMod& mod, const std::string& fileName);
 // The same, among only the files the game loads into its file system.
-std::string CivModImportedFilePath(const CivModInfo& mod, const std::string& fileName);
+std::string CivModImportedFilePath(const CivActiveMod& mod, const std::string& fileName);
 
-struct CivInstalledMod
-{
-	std::string folder;
-	CivModInfo info;
-};
-
-// Every mod description directly inside a folder of the MODS folder. The game also finds descriptions in subfolders,
-// which this does not look in. The paths of descriptions that cannot be read are added to unreadable.
-std::vector<CivInstalledMod> CivInstalledMods(const std::string& modsFolder, std::vector<std::string>* unreadable);
+// Two mods should never list one plugin file, so taking it from the first only keeps the choice stable.
+std::vector<std::string> CivPluginPaths(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
+	std::vector<std::string>* missing);
