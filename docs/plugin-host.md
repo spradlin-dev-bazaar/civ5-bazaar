@@ -120,16 +120,18 @@ Rules fixes currently inside the DLL that are **not** MCP:
 
 ### 4. Failure containment
 
-C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
+C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded, and so is every call from Lua into a function a plugin added, which the host pushes for the plugin so that Lua calls the host first. A Lua error the plugin raises passes through the guard: Lua raises errors with longjmp, not as an exception, so the guard never sees one. When a plugin faults (access violation, divide by zero, illegal instruction):
 
 - the host logs the plugin, the function, what memory the fault touched and the call stack;
-- the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
+- the plugin is quarantined until the player returns to the main menu: none of its hooks run again, and its Lua functions raise a Lua error instead of running. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
 - an in-game notification names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable and that any save should go to a new slot, and says the details are in Logs\Bazaar.log. A pop-up in the middle of the screen is planned instead (issue #4);
 - the game keeps running.
 
 Before unloading any plugin, the host checks that none of its threads is still running inside its DLL. A plugin that left one running, or whose shutdown function crashed, stays in memory and is refused until Civilization V restarts, because unloading it could crash the game.
 
 Known limit: a plugin that faulted halfway through a replace may already have changed some state, and the original then runs on top of it. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
+
+Known limit: a crash caught below a protected Lua call (`lua_pcall`, which the game also uses to fire Lua events) leaves that Lua state's error handling pointing at a call that no longer exists, because the guard unwinds past Lua's own clean-up. The next Lua error in that state may then crash the game; for a crash in a plugin's Lua function, that is the error the host raises at once to report it. The host cannot repair it, since that part of the Lua state is Lua's own; the notice already warns that the game may be unstable.
 
 ### 5. The Plugins screen
 

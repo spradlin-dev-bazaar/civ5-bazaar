@@ -101,11 +101,25 @@ static void AfterDoTurn(CvPlayer* self)
 	}
 }
 
+// For the tester to call from FireTuner, so the crash comes from Lua rather than from a turn.
+static int CrashFromLua(lua_State* L)
+{
+	int* volatile nowhere = 0;
+	return *nowhere;
+}
+
+static void AfterRegisterGame(lua_State* L)
+{
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &CrashFromLua);
+	lua_setfield(L, -2, "ToyCrashLua");
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Crash");
 	LogRegistered(CivRegisterAfter<CivHooks::CvPlayer_doTurn>(s_host, &AfterDoTurn), "after CvPlayer::doTurn");
+	LogRegistered(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(s_host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	return true;
 }
 
@@ -170,11 +184,18 @@ static int Ping(lua_State* L)
 	return 1;
 }
 
+static int Raise(lua_State* L)
+{
+	return luaL_error(L, "Toy Hand raised this Lua error on purpose");
+}
+
 // The Game table is on top of the stack while its methods are registered.
 static void AfterRegisterGame(lua_State* L)
 {
-	lua_pushcclosure(L, &Ping, 0);
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Ping);
 	lua_setfield(L, -2, "ToyHandPing");
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Raise);
+	lua_setfield(L, -2, "ToyHandRaise");
 }
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)

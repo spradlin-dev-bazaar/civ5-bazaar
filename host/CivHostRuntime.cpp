@@ -45,6 +45,8 @@ namespace
 	bool* s_originalCalled = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
+	CivHostLuaPusher s_luaPusher = 0;
+	unsigned int s_lastSerial = 0;
 
 	void Log(const char* format, ...)
 	{
@@ -169,7 +171,7 @@ namespace
 	}
 
 	// The player hears about a plugin's first fault only; later ones are logged.
-	void Quarantine(int plugin, int hookId, const char* where, const unsigned int* code)
+	void Quarantine(int plugin, bool shuttingDown, const char* where, const unsigned int* code)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
 		char problem[512];
@@ -181,7 +183,7 @@ namespace
 		rec.quarantined = true;
 		rec.problems.push_back(problem);
 		if (s_faultSink)
-			s_faultSink(plugin, rec.name.c_str(), hookId, *code);
+			s_faultSink(plugin, rec.name.c_str(), shuttingDown, *code);
 	}
 
 	bool CallPlugin(const CivHookEntry* e, int hookId, CivHookThunk thunk, void* ctx)
@@ -190,7 +192,7 @@ namespace
 		unsigned int code = 0;
 		if (GuardedCall(thunk, ctx, &code))
 			return true;
-		Quarantine(e->plugin, hookId, HookName(hookId), &code);
+		Quarantine(e->plugin, false, HookName(hookId), &code);
 		return false;
 	}
 
@@ -393,6 +395,28 @@ namespace
 		Log("[%s] %s", DisplayName(plugin), message ? message : "");
 	}
 
+	// Serial 0 belongs to no plugin, so a function pushed with a wrong index refuses to run rather than unbalancing the
+	// plugin's Lua stack.
+	const char* PluginWithCode(const void* address)
+	{
+		HMODULE module = 0;
+		GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)address, &module);
+		for (size_t i = 0; i < s_plugins.size(); ++i)
+			if (module && s_plugins[i].module == module)
+				return DisplayName((int)i);
+		return "?";
+	}
+
+	void PushLuaFunction(int plugin, lua_State* L, CivLuaFunction fn)
+	{
+		const bool known = plugin >= 0 && plugin < (int)s_plugins.size();
+		if (!known)
+			Log("Plugin %s pushed a Lua function with plugin index %d, which no plugin has, so calling it raises a Lua error.",
+				PluginWithCode((const void*)fn), plugin);
+		if (s_luaPusher)
+			s_luaPusher(L, known ? s_plugins[plugin].serial : 0, fn);
+	}
+
 	struct EntryCall
 	{
 		CivPluginEntryFn entry;
@@ -455,7 +479,7 @@ namespace
 		unsigned int code = 0;
 		if (!shutdown || GuardedCall(&ShutdownThunk, &shutdown, &code))
 			return true;
-		Quarantine(plugin, -1, "its shutdown function", &code);
+		Quarantine(plugin, true, "its shutdown function", &code);
 		return false;
 	}
 
@@ -720,6 +744,7 @@ namespace
 		CivPluginRecord blank;
 		blank.path = path;
 		blank.name = FileName(path);
+		blank.serial = ++s_lastSerial;
 		const bool duplicate = AlreadyListed(path);
 		s_plugins.push_back(blank);
 		if (duplicate)
@@ -760,6 +785,7 @@ namespace
 		host->RegisterHook = &RegisterHook;
 		host->Log = &PluginLog;
 		host->RegisterHandHook = &RegisterHandHook;
+		host->PushLuaFunction = &PushLuaFunction;
 		s_plugins[index].module = module;
 		s_plugins[index].host = host;
 		CivPluginInfo info = { 0, 0 };
@@ -917,6 +943,67 @@ void CivHostSetLogSink(CivHostLogSink sink)
 void CivHostSetFaultSink(CivHostFaultSink sink)
 {
 	s_faultSink = sink;
+}
+
+void CivHostSetLuaPusher(CivHostLuaPusher pusher)
+{
+	s_luaPusher = pusher;
+}
+
+namespace
+{
+	struct LuaCall
+	{
+		CivLuaFunction fn;
+		lua_State* L;
+		int results;
+	};
+
+	void LuaThunk(void* p)
+	{
+		LuaCall& c = *static_cast<LuaCall*>(p);
+		c.results = c.fn(c.L);
+	}
+
+	int PluginWithSerial(unsigned int serial)
+	{
+		for (size_t i = 0; i < s_plugins.size(); ++i)
+			if (s_plugins[i].serial == serial && s_plugins[i].module)
+				return (int)i;
+		return -1;
+	}
+}
+
+// No C++ objects may live in this frame: a Lua error the plugin raises jumps out of it.
+bool CivHostCallLuaFunction(unsigned int serial, CivLuaFunction fn, lua_State* L, int* results, char* why, size_t whySize)
+{
+	if (!serial)
+	{
+		_snprintf_s(why, whySize, _TRUNCATE, "This Lua function was pushed with a wrong plugin index, so it cannot run.");
+		return false;
+	}
+	const int plugin = PluginWithSerial(serial);
+	if (plugin < 0)
+	{
+		_snprintf_s(why, whySize, _TRUNCATE, "The plugin that added this Lua function is no longer loaded.");
+		return false;
+	}
+	if (!Alive(plugin))
+	{
+		_snprintf_s(why, whySize, _TRUNCATE, "%s was turned off after a crash, so its Lua functions no longer run.",
+			s_plugins[plugin].name.c_str());
+		return false;
+	}
+	LuaCall call = { fn, L, 0 };
+	unsigned int code = 0;
+	if (GuardedCall(&LuaThunk, &call, &code))
+	{
+		*results = call.results;
+		return true;
+	}
+	Quarantine(plugin, false, "a Lua function", &code);
+	_snprintf_s(why, whySize, _TRUNCATE, "%s stopped working in a Lua function and was turned off.", s_plugins[plugin].name.c_str());
+	return false;
 }
 
 const std::vector<CivPluginRecord>& CivHostPlugins()

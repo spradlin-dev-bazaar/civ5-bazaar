@@ -52,9 +52,9 @@ namespace
 		}
 	}
 
-	void OnFault(int, const char* name, int hookId, unsigned int)
+	void OnFault(int, const char* name, bool shuttingDown, unsigned int)
 	{
-		if (hookId < 0)
+		if (shuttingDown)
 			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\Bazaar.log.");
 		else
 			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
@@ -205,6 +205,28 @@ namespace
 		return true;
 	}
 
+	// No C++ objects may live in this frame: luaL_error, and any Lua error the plugin raises, jump out of it.
+	int CallPluginLuaFunction(lua_State* L)
+	{
+		char why[256] = "";
+		int results = 0;
+		const unsigned int serial = (unsigned int)lua_tointeger(L, lua_upvalueindex(1));
+		CivLuaFunction fn = (CivLuaFunction)lua_touserdata(L, lua_upvalueindex(2));
+		if (!CivHostCallLuaFunction(serial, fn, L, &results, why, sizeof(why)))
+			return luaL_error(L, "%s", why);
+		// Lua takes any negative count for a yield.
+		if (results < 0 && lua_status(L) != LUA_YIELD)
+			return luaL_error(L, "A plugin's Lua function returned %d, which only lua_yield may return.", results);
+		return results;
+	}
+
+	void PushPluginLuaFunction(lua_State* L, unsigned int serial, CivLuaFunction fn)
+	{
+		lua_pushinteger(L, (lua_Integer)serial);
+		lua_pushlightuserdata(L, (void*)fn);
+		lua_pushcclosure(L, &CallPluginLuaFunction, 2);
+	}
+
 	void NotifyPluginProblems()
 	{
 		std::vector<std::string> lines;
@@ -244,6 +266,7 @@ namespace
 
 		CivHostSetLogSink(&LogLine);
 		CivHostSetFaultSink(&OnFault);
+		CivHostSetLuaPusher(&PushPluginLuaFunction);
 		const CivPluginListResult result = CivHostSetPlugins(paths, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{

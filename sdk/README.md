@@ -118,7 +118,7 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 ```
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
-- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook` and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
+- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)) and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
 - **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version. Bazaar copies them when `CivPluginEntry` returns, so point both at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
 - **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
 - **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration. `CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn)` registers `BeforeDoTurn` as a before-hook on `CvPlayer::doTurn`; [Registering a hook](#registering-a-hook) explains it. Hooks can only be registered from `CivPluginEntry`.
@@ -333,7 +333,7 @@ static int Hello(lua_State* L)
 
 static void AfterRegisterGame(lua_State* L)
 {
-	lua_pushcclosure(L, &Hello, 0);
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello);
 	lua_setfield(L, -2, "TemplateHello");
 }
 
@@ -341,7 +341,7 @@ static void AfterRegisterGame(lua_State* L)
 Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 ```
 
-Lua and C++ exchange values on the Lua stack. `L` (`lua_State* L`, a pointer to the Lua state) is passed to every `lua_...` call. While `AfterRegisterGame` runs, the `Game` table is on top of the stack. `lua_pushcclosure(L, &Hello, 0)` pushes `Hello` as a Lua function, so the table is now second from the top. `lua_setfield(L, -2, "TemplateHello")` pops the function and stores it in the table at index `-2` (second from the top) as `TemplateHello`. Use the same two lines for each function you add.
+Lua and C++ exchange values on the Lua stack. `L` (`lua_State* L`, a pointer to the Lua state) is passed to every `lua_...` call. While `AfterRegisterGame` runs, the `Game` table is on top of the stack. `s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello)` pushes `Hello` as a Lua function, so the table is now second from the top. `lua_setfield(L, -2, "TemplateHello")` pops the function and stores it in the table at index `-2` (second from the top) as `TemplateHello`. Use the same two lines for each function you add.
 
 `AfterRegisterGame` has no `self` and no `result`, because `RegisterMembers` is static and returns `void`.
 
@@ -358,7 +358,11 @@ static int CountMyCities(lua_State* L)
 
 Add it in `AfterRegisterGame` the same way, and Lua code can call `Game.CountMyCities()`.
 
-Bazaar's crash protection covers your hooks, not your Lua functions. A crash in a Lua function crashes the game, and a plugin Bazaar has turned off after a crash in a hook keeps its Lua functions, which Lua can still call. Keep them short, and don't let them rely on state a crashed hook may have left half-changed.
+Bazaar runs your Lua functions inside the same crash protection as your hooks. A crash in one turns your plugin off, as a crash in a hook does, and the Lua code that called it gets a Lua error instead of the game crashing. Once your plugin is off, or unloaded, its Lua functions raise a Lua error saying so. Push each one with `PushLuaFunction`, not with Lua's own `lua_pushcclosure`, `lua_pushcfunction` or `lua_register`: Bazaar cannot protect a function that Lua calls directly. A function pushed this way has no upvalues of its own (values Lua keeps with a function): `lua_upvalueindex` reads Bazaar's, so keep what a function needs between calls in a variable of your plugin's.
+
+A Lua error is not a crash: your function raises one with `luaL_error`, and Lua raises one for you when an argument check such as `luaL_checkinteger` fails or Lua code you run with `lua_call` fails. It leaves your function at once, and C++ may skip the clean-up of objects your function holds, such as the memory of a `std::string`. So check the arguments and run Lua code before you create such objects.
+
+The protection has one gap: if your function runs Lua code in protected mode (with `lua_pcall`, or through the game, as when it fires a Lua event) and the game's own code crashes underneath, Lua's record of where to go after an error is left out of date. Bazaar's own Lua error about the crash is then the first to use it, so the game will most likely crash at that point.
 
 ## Using VMC's events and options
 
@@ -408,7 +412,7 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
   - Not loaded, with the reason: for example "Declined to load.", a newer Bazaar is needed, no mod that is turned on lists the DLL among its files, the mod does not affect saved games (see [Publishing](#publishing)), or a clash with another plugin;
   - Turned off after a crash;
   - Skipped: the player unchecked it.
-- **If your plugin crashes inside a hook,** the game carries on. Bazaar turns your plugin off until the player goes back to the main menu, and shows a "Plugin disabled" notice. A common cause is a hook whose parameters do not match the game's function. `Bazaar.log` then says where it crashed: what memory it touched, and the call stack, innermost first. Each line gives the DLL and an offset into it, such as `MyPlugin.dll+0x00001A2B`. On the machine you built the plugin on, while the `.pdb` file the build wrote is still where the build put it, the line also names the function and the source line, such as `(BeforeDoTurn, MyPlugin.cpp line 42)`. Without the `.pdb`, as on a player's machine, the call stack may skip some calls, but its first line is always where the crash happened.
+- **If your plugin crashes inside a hook or a Lua function,** the game carries on. Bazaar turns your plugin off until the player goes back to the main menu, and shows a "Plugin disabled" notice. A common cause is a hook whose parameters do not match the game's function. `Bazaar.log` then says where it crashed: what memory it touched, and the call stack, innermost first. Each line gives the DLL and an offset into it, such as `MyPlugin.dll+0x00001A2B`. On the machine you built the plugin on, while the `.pdb` file the build wrote is still where the build put it, the line also names the function and the source line, such as `(BeforeDoTurn, MyPlugin.cpp line 42)`. Without the `.pdb`, as on a player's machine, the call stack may skip some calls, but its first line is always where the crash happened.
 
 ## Publishing
 

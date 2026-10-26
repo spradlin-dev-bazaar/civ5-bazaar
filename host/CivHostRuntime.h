@@ -25,7 +25,8 @@ enum CivPluginStatus
 struct CivPluginRecord
 {
 	CivPluginRecord()
-		: builtApiMajor(0), builtApiMinor(0), status(CIV_PLUGIN_FILE_NOT_LOADED), quarantined(false), module(0), host(0)
+		: builtApiMajor(0), builtApiMinor(0), status(CIV_PLUGIN_FILE_NOT_LOADED), quarantined(false), module(0), host(0),
+		  serial(0)
 	{
 	}
 
@@ -44,6 +45,8 @@ struct CivPluginRecord
 	std::vector<std::string> conflictsWith;
 	void* module;
 	CivHostInfo* host;
+	// Never reused, so a Lua function a plugin pushed before an unload or reload can tell its plugin is gone.
+	unsigned int serial;
 };
 
 #define CIV_REPORT_NOT_LOADED "Not loaded"
@@ -77,11 +80,18 @@ typedef std::pair<std::string, std::string> CivFilePair;
 typedef std::vector<CivFilePair> CivFilePairs;
 
 typedef void (*CivHostLogSink)(const char* line);
-// hookId is -1 when the fault was outside any hook, such as in the plugin's shutdown function.
-typedef void (*CivHostFaultSink)(int pluginIndex, const char* pluginName, int hookId, unsigned int code);
+typedef void (*CivHostFaultSink)(int pluginIndex, const char* pluginName, bool shuttingDown, unsigned int code);
+// Pushes a Lua function that hands serial, fn and its own lua_State to CivHostCallLuaFunction.
+typedef void (*CivHostLuaPusher)(lua_State* L, unsigned int serial, CivLuaFunction fn);
 
 void CivHostSetLogSink(CivHostLogSink sink);
 void CivHostSetFaultSink(CivHostFaultSink sink);
+// Set before plugins load: without a pusher, PushLuaFunction pushes nothing.
+void CivHostSetLuaPusher(CivHostLuaPusher pusher);
+// Runs a plugin's Lua function through the crash guard and gives back what it returned, a negative yield included.
+// False, with why, when its plugin is off or unloaded, it was pushed with a wrong index, or it crashed. A Lua error the
+// function raises passes straight through.
+bool CivHostCallLuaFunction(unsigned int serial, CivLuaFunction fn, lua_State* L, int* results, char* why, size_t whySize);
 
 // Adds plugins without unloading any; CivHostSetPlugins is the way to change the list.
 void CivHostLoadPlugins(const std::vector<std::string>& paths);

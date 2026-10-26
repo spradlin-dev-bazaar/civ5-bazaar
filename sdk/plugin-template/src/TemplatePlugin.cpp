@@ -52,7 +52,7 @@ static int Hello(lua_State* L)
 // The Game table is on top of the Lua stack while its methods are registered.
 static void AfterRegisterGame(lua_State* L)
 {
-	lua_pushcclosure(L, &Hello, 0);
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello);
 	lua_setfield(L, -2, "TemplateHello");
 }
 

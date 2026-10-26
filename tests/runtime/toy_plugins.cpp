@@ -853,6 +853,47 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
+#elif defined(TOY_LUA)
+
+#include <setjmp.h>
+
+static int LuaTwo(lua_State*)
+{
+	return 2;
+}
+
+static int LuaMinusOne(lua_State*)
+{
+	return -1;
+}
+
+static int LuaCrash(lua_State*)
+{
+	int* volatile nowhere = 0;
+	return *nowhere;
+}
+
+// The tests pass a jmp_buf as the lua_State, so this leaves as a Lua error does: by longjmp, past the crash guard.
+static int LuaError(lua_State* L)
+{
+	longjmp(*reinterpret_cast<jmp_buf*>(L), 1);
+	return 0;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Lua");
+	// In the order test_lua.cpp names them.
+	host->PushLuaFunction(host->pluginIndex, 0, &LuaTwo);
+	host->PushLuaFunction(host->pluginIndex, 0, &LuaMinusOne);
+	host->PushLuaFunction(host->pluginIndex, 0, &LuaCrash);
+	host->PushLuaFunction(host->pluginIndex, 0, &LuaError);
+	host->PushLuaFunction(host->pluginIndex + 100, 0, &LuaTwo);
+	host->PushLuaFunction(-1, 0, &LuaTwo);
+	return true;
+}
+
 #elif defined(TOY_NO_ENTRY)
 
 TOY_EXPORT int NotAPlugin()

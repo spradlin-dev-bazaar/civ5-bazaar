@@ -1,4 +1,4 @@
-api 0.3
+api 0.4
 
 ?$CLLNode@H::$vftable@:
 	| &?$CLLNode@H_meta
@@ -27703,12 +27703,13 @@ class CivApiVersion	size(8):
  4	| minor
 	+---
 
-class CivHostInfo	size(16):
+class CivHostInfo	size(20):
 	+---
  0	| pluginIndex
  4	| RegisterHook
  8	| Log
 12	| RegisterHandHook
+16	| PushLuaFunction
 	+---
 
 class CivPluginInfo	size(8):

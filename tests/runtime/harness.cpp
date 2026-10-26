@@ -32,12 +32,14 @@ void TestPossibleConflicts();
 void TestSkippedOriginal();
 void TestPaths();
 void TestActiveMods();
+void TestLuaFunctions();
 
 namespace
 {
 	int s_failures = 0;
 	std::vector<std::string> s_log;
 	int s_faults = 0;
+	bool s_lastFaultShuttingDown = false;
 	std::string s_dir;
 
 	void LogSink(const char* line)
@@ -46,10 +48,11 @@ namespace
 		printf("      log: %s\n", line);
 	}
 
-	void FaultSink(int, const char* name, int hookId, unsigned int code)
+	void FaultSink(int, const char* name, bool shuttingDown, unsigned int code)
 	{
 		++s_faults;
-		printf("      fault sink: %s, hook %d, code 0x%08X\n", name, hookId, code);
+		s_lastFaultShuttingDown = shuttingDown;
+		printf("      fault sink: %s%s, code 0x%08X\n", name, shuttingDown ? ", shutting down" : "", code);
 	}
 
 	struct Section
@@ -84,6 +87,7 @@ namespace
 		{"skipped original", &TestSkippedOriginal},
 		{"paths", &TestPaths},
 		{"active mods", &TestActiveMods},
+		{"lua functions", &TestLuaFunctions},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 
@@ -230,6 +234,11 @@ bool LogHas(const char* text)
 int FaultCount()
 {
 	return s_faults;
+}
+
+bool LastFaultWhileShuttingDown()
+{
+	return s_lastFaultShuttingDown;
 }
 
 FARPROC ToyExport(const char* fileName, const char* function)

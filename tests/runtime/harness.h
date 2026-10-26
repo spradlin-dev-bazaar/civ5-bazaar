@@ -40,6 +40,7 @@ int LogIndex(const char* text, int from = 0);
 std::string LogLine(int index);
 bool LogHas(const char* text);
 int FaultCount();
+bool LastFaultWhileShuttingDown();
 
 FARPROC ToyExport(const char* fileName, const char* function);
 // A toy's export, looked up as the type toy_api.h gives it; null when the toy is not loaded.

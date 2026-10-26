@@ -58,6 +58,6 @@ When the user is turning a modified core DLL into a plugin:
 2. Map each edit to a hook:
    - code at the start or end of a function becomes a before-hook or an after-hook;
    - code in the middle becomes a hand-placed hook if one exists, and otherwise a request for one or, as a last resort, a replacement;
-   - `Game.*` Lua methods added in `CvLuaGame.cpp` become an after-hook on `CvLuaGame::RegisterMembers`.
+   - `Game.*` Lua methods added in `CvLuaGame.cpp` become an after-hook on `CvLuaGame::RegisterMembers`, which pushes each one with `host->PushLuaFunction` so that it runs inside Bazaar's crash protection.
 3. Flag code that reads or writes private or protected members: a plugin cannot reach them yet, so it needs another route.
 4. Show the user the list of edits and the hook each one becomes before writing code. That list is the port's design.

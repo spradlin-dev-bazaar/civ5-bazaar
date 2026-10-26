@@ -70,6 +70,9 @@ typedef void (*CivNotificationAddedFn)(int player, int notificationType, const c
 typedef void (*CivDealResolvedFn)(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);
 typedef void (*CivUnitOrdersCancelledFn)(CvUnit* unit, int reason);
 
+struct lua_State;
+typedef int (*CivLuaFunction)(lua_State* L);
+
 struct CivHostInfo
 {
 	int pluginIndex;
@@ -78,6 +81,9 @@ struct CivHostInfo
 	int (*RegisterHook)(int pluginIndex, int hookId, int kind, void* fn);
 	void (*Log)(int pluginIndex, const char* message);
 	int (*RegisterHandHook)(int pluginIndex, int handHook, void* fn);
+	// Pushes exactly one value onto L's stack: fn as a Lua function that runs inside Bazaar's crash guard. Once the
+	// plugin is off, or unloaded, calling it raises a Lua error instead.
+	void (*PushLuaFunction)(int pluginIndex, lua_State* L, CivLuaFunction fn);
 };
 
 // The result parameter of a before-hook or after-hook on a function returning R: a reference to the value the caller
