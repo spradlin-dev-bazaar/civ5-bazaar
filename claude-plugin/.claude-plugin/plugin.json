@@ -1,6 +1,6 @@
 {
   "name": "civ5-bazaar",
   "description": "Skills for writing plugins and mods for Bazaar, the multi-DLL mod loader for Civilization V.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": { "name": "spradlin-dev" }
 }
