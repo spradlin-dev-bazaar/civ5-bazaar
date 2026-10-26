@@ -33,13 +33,20 @@ namespace
 		return s_userFolder;
 	}
 
+	// The game unloads and reloads this DLL at the main menu, which resets a static flag but not the process's environment,
+	// so the log is emptied once per run of the game rather than before each game.
+	const char* const kLogStarted = "BAZAAR_LOG_STARTED";
+
 	void LogLine(const char* line)
 	{
 		if (UserFolder().empty())
 			return;
+		const bool fresh = GetEnvironmentVariableA(kLogStarted, NULL, 0) == 0;
 		FILE* f = 0;
-		if (fopen_s(&f, (UserFolder() + "\\Logs\\Bazaar.log").c_str(), "a") == 0 && f)
+		if (fopen_s(&f, (UserFolder() + "\\Logs\\Bazaar.log").c_str(), fresh ? "w" : "a") == 0 && f)
 		{
+			if (fresh)
+				SetEnvironmentVariableA(kLogStarted, "1");
 			fprintf(f, "%s\n", line);
 			fclose(f);
 		}

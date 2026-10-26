@@ -390,7 +390,7 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
 
 ## When something goes wrong
 
-- **`Bazaar.log`**, in `Documents\My Games\Sid Meier's Civilization 5\Logs`, lists each plugin Bazaar loaded or did not load, with the reason, and every crash. The template's `Check` also logs there any hook that could not be registered.
+- **`Bazaar.log`**, in `Documents\My Games\Sid Meier's Civilization 5\Logs`, lists each plugin Bazaar loaded or did not load, with the reason, and every crash. The template's `Check` also logs there any hook that could not be registered. It starts afresh each time Civilization V starts, so copy it before restarting the game if you need the old lines.
 - **The Plugins screen** shows each plugin's status:
   - Loaded;
   - Not loaded, with the reason: for example "Declined to load.", a newer Bazaar is needed, the DLL was not found in the MODS folder, or a clash with another plugin;
