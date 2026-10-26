@@ -1,4 +1,4 @@
 schema_version: "1.1"
 name: building-logger
 expected_outcome: |
-  A plugin that hooks CvCity::CreateBuilding (or an equivalent completion point) with the right parameters, logs the city's and the building's names, guards against a missing building entry, notes that the hook also runs when a building is bought, and builds with build.cmd.
+  A plugin that hooks CvCity::CreateBuilding (or an equivalent completion point) with the right parameters, logs the city's and the building's names, guards against a missing building entry, notes, if buying a building also reaches the hook, that it runs then too, and builds with build.cmd.

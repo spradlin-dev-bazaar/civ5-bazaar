@@ -4,7 +4,7 @@ Makes a new Bazaar plugin folder from the Bazaar SDK's plugin template.
 
 .DESCRIPTION
 Copies the template without its build output, renames its files, puts the new names into its text files, gives the
-mod a new ID on the .civ5proj's <Guid> line (the <ProjectGuid> line stays), and sets the teaser, description and
+mod a new ID in the .civ5proj's <Guid> (its <ProjectGuid> stays), and sets the teaser, description and
 authors. Files are changed byte for byte, so their encoding and line endings stay as the template has them.
 
 .EXAMPLE
@@ -44,8 +44,10 @@ try {
     }
 
     $target = Resolve-UserPath (Join-Path $Destination $FileName)
-    if (($target + '\').StartsWith($Sdk.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
-        Fail "'$target' is inside the SDK folder, which the SDK build deletes and rebuilds. Choose another -Destination."
+    # sdk\build_sdk.py builds the SDK two folders below itself, in sdk\out\Bazaar SDK, and deletes it each time.
+    $repositoryBuild = Test-Path -LiteralPath (Join-Path $Sdk '..\..\build_sdk.py')
+    if ($repositoryBuild -and ($target + '\').StartsWith($Sdk.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        Fail "'$target' is inside the SDK folder that sdk\build_sdk.py deletes and rebuilds. Choose another -Destination."
     }
     if (Test-Path -LiteralPath $target) {
         Fail "'$target' already exists."

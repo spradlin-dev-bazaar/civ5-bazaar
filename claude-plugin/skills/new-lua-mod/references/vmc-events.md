@@ -23,7 +23,7 @@ See also: "Diplomacy - No Pointless Dialogs"
 
 See also: "Diplomacy - No Expansion Dialogs"
 
-- `GameEvents.DiplomacyStfu.Add(function(iAI, iResponseType, iDiploMessage, iDiploUIState, iAction, iExtraData) ... end)`: value. Handlers return GameInfoTypes.STFU_DEFAULT.
+- `GameEvents.DiplomacyStfu.Add(function(iAI, iResponseType, iDiploMessage, iDiploUIState, iAction, iExtraData) ... end)`: value. VMC's example handler returns `GameInfoTypes.STFU_DEFAULT`.
 
 ### EVENTS_TERRAFORMING
 
@@ -87,7 +87,7 @@ See also: "UI - Diary"
 
 Enhanced Diplomacy Modifiers events (v53)
 
-- `GameEvents.GetDiploModifier.Add(function(iEvent, iFromPlayer, iToPlayer) ... end)`: value. Handlers return 0.
+- `GameEvents.GetDiploModifier.Add(function(iEvent, iFromPlayer, iToPlayer) ... end)`: value. VMC's example handler returns `0`.
 
 ### EVENTS_MINORS
 
@@ -108,21 +108,21 @@ Event sent upon a City State giving a gift (v73)
 
 Events sent on interaction with City States (v68)
 
-- `GameEvents.PlayerCanProtect.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanProtect.Add(function(iPlayer, iCS) ... end)`: test-all.
 - `GameEvents.PlayerProtected.Add(function(iPlayer, iCS) ... end)`: hook.
-- `GameEvents.PlayerCanRevoke.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanRevoke.Add(function(iPlayer, iCS) ... end)`: test-all.
 - `GameEvents.PlayerRevoked.Add(function(iPlayer, iCS, bPledgeNowBroken) ... end)`: hook.
-- `GameEvents.PlayerCanBuyOut.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanBuyOut.Add(function(iPlayer, iCS) ... end)`: test-all.
 - `GameEvents.PlayerBoughtOut.Add(function(iPlayer, iCS) ... end)`: hook.
-- `GameEvents.PlayerCanBullyGold.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
-- `GameEvents.PlayerCanBullyUnit.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanBullyGold.Add(function(iPlayer, iCS) ... end)`: test-all.
+- `GameEvents.PlayerCanBullyUnit.Add(function(iPlayer, iCS) ... end)`: test-all.
 - `GameEvents.PlayerBullied.Add(function(iPlayer, iCS, iGold, iUnitType, iPlotX, iPlotY) ... end)`: hook.
-- `GameEvents.PlayerCanGiftGold.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
-- `GameEvents.PlayerCanGiftUnit.Add(function(iPlayer, iCS, iUnit) ... end)`: test-all. Handlers return true.
-- `GameEvents.PlayerCanGiftImprovement.Add(function(iPlayer, iCS) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanGiftGold.Add(function(iPlayer, iCS) ... end)`: test-all.
+- `GameEvents.PlayerCanGiftUnit.Add(function(iPlayer, iCS, iUnit) ... end)`: test-all.
+- `GameEvents.PlayerCanGiftImprovement.Add(function(iPlayer, iCS) ... end)`: test-all.
 - `GameEvents.PlayerGifted.Add(function(iPlayer, iCS, iGold, iUnitType, iPlotX, iPlotY) ... end)`: hook.
-- `GameEvents.PlayerCanTransitMinorCity.Add(function(iPlayer, iCS, iCity, iPlotX, iPlotY) ... end)`: test-all. Handlers return true. Since VMC v74.
-- `GameEvents.UnitCanTransitMinorCity.Add(function(iPlayer, iUnit, iCS, iCity, iPlotX, iPlotY) ... end)`: test-all. Handlers return true. Since VMC v74.
+- `GameEvents.PlayerCanTransitMinorCity.Add(function(iPlayer, iCS, iCity, iPlotX, iPlotY) ... end)`: test-all. Since VMC v74.
+- `GameEvents.UnitCanTransitMinorCity.Add(function(iPlayer, iUnit, iCS, iCity, iPlotX, iPlotY) ... end)`: test-all. Since VMC v74.
 
 ### EVENTS_QUESTS
 
@@ -132,24 +132,24 @@ ASSUMPTION: There is only one active quest of any given MinorCivQuestTypes per m
 
 pMajor:AddQuestNotification(iCS, sMessage, sSummary, iPlotX=-1, iPlotY=-1, bNewQuest=false)
 
-- `GameEvents.QuestIsAvailable.Add(function(iPlayer, iCS, iQuest, bNewQuest, iData1, iData2) ... end)`: test-any. Handlers return false.
-- `GameEvents.QuestIsCompleted.Add(function(iPlayer, iCS, iQuest, bLastTurn) ... end)`: test-any. Handlers return false.
-- `GameEvents.QuestIsRevoked.Add(function(iPlayer, iCS, iQuest) ... end)`: test-any. Handlers return false.
-- `GameEvents.QuestIsExpired.Add(function(iPlayer, iCS, iQuest) ... end)`: test-any. Handlers return false.
+- `GameEvents.QuestIsAvailable.Add(function(iPlayer, iCS, iQuest, bNewQuest, iData1, iData2) ... end)`: test-any.
+- `GameEvents.QuestIsCompleted.Add(function(iPlayer, iCS, iQuest, bLastTurn) ... end)`: test-any.
+- `GameEvents.QuestIsRevoked.Add(function(iPlayer, iCS, iQuest) ... end)`: test-any.
+- `GameEvents.QuestIsExpired.Add(function(iPlayer, iCS, iQuest) ... end)`: test-any.
 - `GameEvents.QuestStart.Add(function(iPlayer, iCS, iQuest, bNewQuest, iStartTurn, iData1, iData2) ... end)`: hook.
-- `GameEvents.QuestGetData.Add(function(iPlayer, iCS, iQuest, bData1) ... end)`: value. Handlers return 0.
+- `GameEvents.QuestGetData.Add(function(iPlayer, iCS, iQuest, bData1) ... end)`: value. VMC's example handler returns `0`.
 - `GameEvents.QuestSendNotification.Add(function(iPlayer, iCS, iQuest, iStartTurn, iEndTurn, iData1, iData2, bStarted, bFinished, sNames) ... end)`: hook.
-- `GameEvents.QuestContestValue.Add(function(iPlayer, iCS, iQuest) ... end)`: value. Handlers return 0.
+- `GameEvents.QuestContestValue.Add(function(iPlayer, iCS, iQuest) ... end)`: value. VMC's example handler returns `0`.
 
 ### EVENTS_BARBARIANS
 
 Events sent by Barbarians (v68)
 
-- `GameEvents.BarbariansCanFoundCamp.Add(function(iPlotX, iPlotY) ... end)`: test-all. Handlers return true.
+- `GameEvents.BarbariansCanFoundCamp.Add(function(iPlotX, iPlotY) ... end)`: test-all.
 - `GameEvents.BarbariansCampFounded.Add(function(iPlotX, iPlotY) ... end)`: hook.
 - `GameEvents.BarbariansCampCleared.Add(function(iPlotX, iPlotY, iPlayer) ... end)`: hook.
-- `GameEvents.BarbariansCampCanSpawnUnit.Add(function(iPlotX, iPlotY) ... end)`: test-all. Handlers return true.
-- `GameEvents.BarbariansCampGetSpawnUnit.Add(function(iPlotX, iPlotY, iPrefUnitType) ... end)`: value. Handlers return iPrefUnitType.
+- `GameEvents.BarbariansCampCanSpawnUnit.Add(function(iPlotX, iPlotY) ... end)`: test-all.
+- `GameEvents.BarbariansCampGetSpawnUnit.Add(function(iPlotX, iPlotY, iPrefUnitType) ... end)`: value. VMC's example handler returns `iPrefUnitType`.
 - `GameEvents.BarbariansSpawnedUnit.Add(function(iPlotX, iPlotY, iUnitType) ... end)`: hook.
 
 ### EVENTS_GOODY_CHOICE
@@ -158,7 +158,7 @@ Event sent when a Goody Hut is entered (v33)
 
 See also: "Goody Huts - No Auto-Mapping"
 
-- `GameEvents.GoodyHutCanNotReceive.Add(function(iPlayer, iUnit, eGoody, bPick) ... end)`: test-any. Handlers return false.
+- `GameEvents.GoodyHutCanNotReceive.Add(function(iPlayer, iUnit, eGoody, bPick) ... end)`: test-any.
 
 ### EVENTS_GOODY_TECH
 
@@ -166,14 +166,14 @@ Events sent if a Goody Hut is giving a tech (v30)
 
 See also: "Goody Huts - Tech Refund"
 
-- `GameEvents.GoodyHutCanResearch.Add(function(iPlayer, eTech) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.GoodyHutCanResearch.Add(function(iPlayer, eTech) ... end)`: test-all. The game ignores the answer at one of the places it asks it (CvPlayer.cpp). **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.GoodyHutTechResearched.Add(function(iPlayer, eTech) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 
 ### EVENTS_AI_OVERRIDE_TECH
 
 Event sent to allow Lua to override the AI's choice of tech (v19)
 
-- `GameEvents.AiOverrideChooseNextTech.Add(function(iPlayer, bFreeTech) ... end)`: value. Handlers return iChoosenTech.
+- `GameEvents.AiOverrideChooseNextTech.Add(function(iPlayer, bFreeTech) ... end)`: value. VMC's example handler returns `iChoosenTech`.
 
 ### EVENTS_GREAT_PEOPLE
 
@@ -187,9 +187,9 @@ Events sent when a player is about to found a religion (v19)
 
 See also: "Religion - Civ Specific Religions"
 
-- `GameEvents.PlayerCanFoundPantheon.Add(function(iPlayer) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.PlayerCanFoundReligion.Add(function(iPlayer, iCity) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.GetReligionToFound.Add(function(iPlayer, iPreferredReligion, bIsAlreadyFounded) ... end)`: value. Handlers return iPreferredReligion. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.PlayerCanFoundPantheon.Add(function(iPlayer) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.PlayerCanFoundReligion.Add(function(iPlayer, iCity) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.GetReligionToFound.Add(function(iPlayer, iPreferredReligion, bIsAlreadyFounded) ... end)`: value. VMC's example handler returns `iPreferredReligion`. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.PantheonFounded.Add(function(iPlayer, iCapitalCity, iReligion, iBelief1) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.ReligionFounded.Add(function(iPlayer, iHolyCity, iReligion, iBelief1, iBelief2, iBelief3, iBelief4, iBelief5) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.ReligionEnhanced.Add(function(iPlayer, iReligion, iBelief1, iBelief2) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
@@ -201,15 +201,15 @@ Events sent when choosing beliefs (v19)
 
 See also: "Religion - Civ Specific Religions"
 
-- `GameEvents.PlayerCanHaveBelief.Add(function(iPlayer, iBelief) ... end)`: test-all. Handlers return true.
-- `GameEvents.ReligionCanHaveBelief.Add(function(iPlayer, iReligion, iBelief) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanHaveBelief.Add(function(iPlayer, iBelief) ... end)`: test-all.
+- `GameEvents.ReligionCanHaveBelief.Add(function(iPlayer, iReligion, iBelief) ... end)`: test-all.
 
 ### EVENTS_RELIGION
 
 Events sent to see if religion missions are valid (v46)
 
-- `GameEvents.PlayerCanSpreadReligion.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-all. Handlers return true.
-- `GameEvents.PlayerCanRemoveHeresy.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanSpreadReligion.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-all.
+- `GameEvents.PlayerCanRemoveHeresy.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-all.
 
 ### EVENTS_ESPIONAGE
 
@@ -224,8 +224,8 @@ Events sent by plots (v30)
 
 See also: "Improvement - Pontoon Bridge"
 
-- `GameEvents.PlayerCanBuild.Add(function(iPlayer, iUnit, iX, iY, iBuild) ... end)`: test-all. Handlers return true.
-- `GameEvents.PlotCanImprove.Add(function(iX, iY, iImprovement) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanBuild.Add(function(iPlayer, iUnit, iX, iY, iBuild) ... end)`: test-all.
+- `GameEvents.PlotCanImprove.Add(function(iX, iY, iImprovement) ... end)`: test-all.
 - `GameEvents.PlayerBuilding.Add(function(iPlayer, iUnit, iX, iY, iBuild, bStarting) ... end)`: hook. Since VMC v46.
 - `GameEvents.PlayerBuilt.Add(function(iPlayer, iUnit, iX, iY, iBuild) ... end)`: hook. Since VMC v46.
 
@@ -264,20 +264,20 @@ Event sent to ascertain if a city can acquire a plot (v20)
 
 See also: "Global - Coastal Waters Only"
 
-- `GameEvents.CityCanAcquirePlot.Add(function(iPlayer, iCity, iPlotX, iPlotY) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CityCanAcquirePlot.Add(function(iPlayer, iCity, iPlotX, iPlotY) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 
 ### EVENTS_CITY_FOUNDING
 
 Event sent about city founding (v68)
 
-- `GameEvents.PlayerCanFoundCity.Add(function(iPlayer, iPlotX, iPlotY) ... end)`: test-all. Handlers return true.
-- `GameEvents.PlayerCanFoundCityRegardless.Add(function(iPlayer, iPlotX, iPlotY) ... end)`: test-any. Handlers return false.
+- `GameEvents.PlayerCanFoundCity.Add(function(iPlayer, iPlotX, iPlotY) ... end)`: test-all.
+- `GameEvents.PlayerCanFoundCityRegardless.Add(function(iPlayer, iPlotX, iPlotY) ... end)`: test-any.
 
 ### EVENTS_LIBERATION
 
 Event sent to ascertain if a player can liberate another player (v68)
 
-- `GameEvents.PlayerCanLiberate.Add(function(iPlayer, iOtherPlayer) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanLiberate.Add(function(iPlayer, iOtherPlayer) ... end)`: test-all.
 - `GameEvents.PlayerLiberated.Add(function(iPlayer, iOtherPlayer, iCity) ... end)`: hook.
 
 ### EVENTS_CITY_RAZING
@@ -286,13 +286,13 @@ Event sent to ascertain if a player can over-ride the standard razing rules for 
 
 See also: "Global - Raze Major Capitals"
 
-- `GameEvents.PlayerCanRaze.Add(function(iPlayer, iCity) ... end)`: test-any. Handlers return false.
+- `GameEvents.PlayerCanRaze.Add(function(iPlayer, iCity) ... end)`: test-any.
 
 ### EVENTS_CITY_AIRLIFT
 
 Event sent to ascertain if a city can perform airlifts (v68)
 
-- `GameEvents.CityCanAirlift.Add(function(iPlayer, iCity) ... end)`: test-any. Handlers return false.
+- `GameEvents.CityCanAirlift.Add(function(iPlayer, iCity) ... end)`: test-any.
 
 ### EVENTS_CITY_BOMBARD
 
@@ -306,7 +306,7 @@ See also: "Global - City Bombard Range"
 
 See also: "Global - City Bombard Range - Buildings"
 
-- `GameEvents.GetBombardRange.Add(function(iPlayer, iCity) ... end)`: value. Handlers return (-1 * GameDefines.CITY_ATTACK_RANGE).
+- `GameEvents.GetBombardRange.Add(function(iPlayer, iCity) ... end)`: value. VMC's example handler returns `(-1 * GameDefines.CITY_ATTACK_RANGE)`.
 
 ### EVENTS_CITY_CONNECTIONS
 
@@ -316,8 +316,8 @@ See also: "Trait - River Connection"
 
 See also: "Global - Air Routes"
 
-- `GameEvents.CityConnections.Add(function(iPlayer, bDirect) ... end)`: test-any. Handlers return false.
-- `GameEvents.CityConnected.Add(function(iPlayer, iCityX, iCityY, iToCityX, iToCityY, bDirect) ... end)`: test-any. Handlers return false.
+- `GameEvents.CityConnections.Add(function(iPlayer, bDirect) ... end)`: test-any.
+- `GameEvents.CityConnected.Add(function(iPlayer, iCityX, iCityY, iToCityX, iToCityY, bDirect) ... end)`: test-any.
 
 ### EVENTS_AREA_RESOURCES
 
@@ -325,15 +325,15 @@ Events sent to ascertain if an area can have civ specific resources and to place
 
 See also: "Global - Spice Islands"
 
-- `GameEvents.AreaCanHaveAnyResource.Add(function(iPlayer, iArea) ... end)`: test-all. Handlers return true.
+- `GameEvents.AreaCanHaveAnyResource.Add(function(iPlayer, iArea) ... end)`: test-all.
 - `GameEvents.PlaceResource.Add(function(iPlayer, iResource, iCount, iPlotX, iPlotY) ... end)`: hook.
 
 ### EVENTS_AIRLIFT
 
 Events sent to ascertain if a unit can airlift from/to a specific plot (v74)
 
-- `GameEvents.CanAirliftFrom.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. Handlers return false.
-- `GameEvents.CanAirliftTo.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. Handlers return false.
+- `GameEvents.CanAirliftFrom.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any.
+- `GameEvents.CanAirliftTo.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any.
 
 ### EVENTS_REBASE
 
@@ -343,9 +343,9 @@ See also: "Improvement - Airbases"
 
 See also: "Global - City State Airbases"
 
-- `GameEvents.CanLoadAt.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. Handlers return false. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.CanRebaseInCity.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. Handlers return false. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.CanRebaseTo.Add(function(iPlayer, iUnit, iPlotX, iPlotY, bIsCity) ... end)`: test-any. Handlers return false. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanLoadAt.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanRebaseInCity.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanRebaseTo.Add(function(iPlayer, iUnit, iPlotX, iPlotY, bIsCity) ... end)`: test-any. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.RebaseTo.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 
 ### EVENTS_PARADROPS
@@ -354,16 +354,16 @@ Events sent before and after a paradrop (v19)
 
 See also: "Units - Paratroop Enhancements"
 
-- `GameEvents.CanParadropFrom.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. Handlers return false. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.CannotParadropFrom.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-all. Handlers return false. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanParadropFrom.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-any. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CannotParadropFrom.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: test-all. **Answer `false` by default**: the game acts only when every handler answers `true`, so answer `false` in every case the mod does not mean to change. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.ParadropAt.Add(function(iPlayer, iUnit, iFromX, iFromY, iToX, iToY) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 
 ### EVENTS_UNIT_RANGEATTACK
 
 Event sent to ascertain if a unit can perform a ranged attack on a tile (v90)
 
-- `GameEvents.UnitCanRangeAttackAt.Add(function(iPlayer, iUnit, iPlotX, iPlotY, bNeedWar) ... end)`: test-any. Handlers return false.
-- `GameEvents.UnitRangeAttackAt.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: value. Handlers return 0.
+- `GameEvents.UnitCanRangeAttackAt.Add(function(iPlayer, iUnit, iPlotX, iPlotY, bNeedWar) ... end)`: test-any.
+- `GameEvents.UnitRangeAttackAt.Add(function(iPlayer, iUnit, iPlotX, iPlotY) ... end)`: value. VMC's example handler returns `0`.
 
 ### EVENTS_UNIT_CREATED
 
@@ -392,38 +392,38 @@ Event sent as a unit is captured (v46)
 iReason - 0=Move, 1=Combat, 2=Trait (barb land), 3=Trait (barb naval), 4=Belief (barb)
 
 - `GameEvents.UnitCaptured.Add(function(iByPlayer, iByUnit, iCapturedPlayer, iCapturedUnit, bWillBeKilled, iReason) ... end)`: hook. Since VMC v69.
-- `GameEvents.UnitCaptureType.Add(function(iPlayer, iUnit, iUnitType, iByCiv) ... end)`: value. Handlers return iCaptureUnitType.
+- `GameEvents.UnitCaptureType.Add(function(iPlayer, iUnit, iUnitType, iByCiv) ... end)`: value. VMC's example handler returns `iCaptureUnitType`.
 
 ### EVENTS_UNIT_ACTIONS
 
 Events sent as units perform actions (v86)
 
-- `GameEvents.UnitCanPillage.Add(function(iPlayer, iUnit, iImprovement, iRoute) ... end)`: test-all. Handlers return true.
-- `GameEvents.UnitPillageGold.Add(function(iPlayer, iUnit, iImprovement, iGold) ... end)`: value. Handlers return iGold.
-- `GameEvents.UnitCanFollowupFrom.Add(function(iPlayer, iUnit, iImprovement, iFromX, iFromY, iToX, iToY) ... end)`: test-all. Handlers return true. Since VMC v87.
+- `GameEvents.UnitCanPillage.Add(function(iPlayer, iUnit, iImprovement, iRoute) ... end)`: test-all.
+- `GameEvents.UnitPillageGold.Add(function(iPlayer, iUnit, iImprovement, iGold) ... end)`: value. VMC's example handler returns `iGold`.
+- `GameEvents.UnitCanFollowupFrom.Add(function(iPlayer, iUnit, iImprovement, iFromX, iFromY, iToX, iToY) ... end)`: test-all. Since VMC v87.
 
 ### EVENTS_UNIT_UPGRADES
 
 Events sent as units are promoted/upgraded (v19)
 
-- `GameEvents.CanHavePromotion.Add(function(iPlayer, iUnit, iPromotionType) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanHavePromotion.Add(function(iPlayer, iUnit, iPromotionType) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.UnitPromoted.Add(function(iPlayer, iUnit, iPromotionType) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.CanHaveAnyUpgrade.Add(function(iPlayer, iUnit) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.CanHaveUpgrade.Add(function(iPlayer, iUnit, iUnitClassType, iUnitType) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanHaveAnyUpgrade.Add(function(iPlayer, iUnit) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.CanHaveUpgrade.Add(function(iPlayer, iUnit, iUnitClassType, iUnitType) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.UnitUpgraded.Add(function(iPlayer, iOldUnit, iNewUnit, bGoodyHut) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 
 ### EVENTS_UNIT_DATA
 
 Events sent as units are created (v51)
 
-- `GameEvents.UnitCanHaveName.Add(function(iPlayer, iUnit, iName) ... end)`: test-all. Handlers return true.
-- `GameEvents.UnitCanHaveGreatWork.Add(function(iPlayer, iUnit, iGreatWork) ... end)`: test-all. Handlers return true.
+- `GameEvents.UnitCanHaveName.Add(function(iPlayer, iUnit, iName) ... end)`: test-all.
+- `GameEvents.UnitCanHaveGreatWork.Add(function(iPlayer, iUnit, iGreatWork) ... end)`: test-all.
 
 ### EVENTS_TRADE_ROUTES
 
 Event sent as ascertain if a trade route can be created (v68)
 
-- `GameEvents.PlayerCanCreateTradeRoute.Add(function(iFromPlayer, iFromCity, iToPlayer, iToCity, iDomain, iConnectionType) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanCreateTradeRoute.Add(function(iFromPlayer, iFromCity, iToPlayer, iToCity, iDomain, iConnectionType) ... end)`: test-all.
 
 ### EVENTS_TRADE_ROUTE_PLUNDERED
 
@@ -435,27 +435,27 @@ Event sent as a trade route is plundered (v52)
 
 Events sent about war and peace (v19)
 
-- `GameEvents.PlayerCanDeclareWar.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all. Handlers return true.
-- `GameEvents.IsAbleToDeclareWar.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all. Handlers return true.
+- `GameEvents.PlayerCanDeclareWar.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all.
+- `GameEvents.IsAbleToDeclareWar.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all.
 - `GameEvents.DeclareWar.Add(function(iPlayer, iAgainstTeam, bAggressor) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
-- `GameEvents.PlayerCanMakePeace.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all. Handlers return true.
-- `GameEvents.IsAbleToMakePeace.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all. Handlers return true. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
+- `GameEvents.PlayerCanMakePeace.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all.
+- `GameEvents.IsAbleToMakePeace.Add(function(iPlayer, iAgainstTeam) ... end)`: test-all. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 - `GameEvents.MakePeace.Add(function(iPlayer, iAgainstTeam, bPacifier) ... end)`: hook. **Always on**: with this option off the base game still fires it, with the arguments listed under the base-game events below.
 
 ### EVENTS_IDEOLOGIES
 
 Events sent about ideologies and tenets (v51)
 
-- `GameEvents.PlayerCanAdopyIdeology.Add(function(iPlayer, iIdeology) ... end)`: **misnamed in VMC's notes, and never fired**: the code's name is `PlayerCanAdoptIdeology`, and nothing fires it. Handlers return true.
-- `GameEvents.PlayerCanAdopyTenet.Add(function(iPlayer, iTenet) ... end)`: **misnamed in VMC's notes**: subscribe to `PlayerCanAdoptTenet`, which is test-all. Handlers return true.
+- `GameEvents.PlayerCanAdopyIdeology.Add(function(iPlayer, iIdeology) ... end)`: **misnamed in VMC's notes, and never fired**: the code's name is `PlayerCanAdoptIdeology`, and nothing fires it. To block an ideology, subscribe to `PlayerCanAdoptTenet`: VMC asks that event about ideologies too, with the ideology's policy branch ID as `iTenet` (CvPolicyClasses.cpp).
+- `GameEvents.PlayerCanAdopyTenet.Add(function(iPlayer, iTenet) ... end)`: **misnamed in VMC's notes**: subscribe to `PlayerCanAdoptTenet`, which is test-all. VMC also fires it to ask whether the player can adopt an ideology, with the ideology's policy branch ID as `iTenet` (CvPolicyClasses.cpp). A handler cannot tell which it is asked, so blocking a tenet by its ID can also block the ideology whose branch has that ID.
 
 ### EVENTS_RESOLUTIONS
 
 Events sent about resolutions (v51)
 
-- `GameEvents.PlayerCanPropose.Add(function(iPlayer, iResolution, iChoice, bEnact) ... end)`: test-all. Handlers return true.
-- `GameEvents.ResolutionProposing.Add(function(iPlayer, iLeague) ... end)`: test-any. Handlers return false. Since VMC v88.
-- `GameEvents.ResolutionVoting.Add(function(iPlayer, iLeague) ... end)`: test-any. Handlers return false. Since VMC v88.
+- `GameEvents.PlayerCanPropose.Add(function(iPlayer, iResolution, iChoice, bEnact) ... end)`: test-all.
+- `GameEvents.ResolutionProposing.Add(function(iPlayer, iLeague) ... end)`: test-any. Since VMC v88.
+- `GameEvents.ResolutionVoting.Add(function(iPlayer, iLeague) ... end)`: test-any. Since VMC v88.
 - `GameEvents.ResolutionResult.Add(function(iResolution, iChoice, bEnact, bPassed) ... end)`: hook.
 
 ### EVENTS_NUCLEAR_DETONATION
@@ -468,7 +468,7 @@ Event sent when a nuke is fired (v19)
 
 Event sent to see if a command is valid (v46)
 
-- `GameEvents.PlayerCanDoCommand.Add(function(iPlayer, iUnit, iCommand, iData1, iData2, iPlotX, iPlotY, bTestVisible) ... end)`: **misnamed in VMC's notes**: subscribe to `CanDoCommand`, which is test-all. Handlers return true.
+- `GameEvents.PlayerCanDoCommand.Add(function(iPlayer, iUnit, iCommand, iData1, iData2, iPlotX, iPlotY, bTestVisible) ... end)`: **misnamed in VMC's notes**: subscribe to `CanDoCommand`, which is test-all.
 
 ### EVENTS_CUSTOM_MISSIONS
 
@@ -484,14 +484,14 @@ CUSTOM_MISSION_ACTION_AND_DONE = 3
 
 See also: "Civilization - Morindim"
 
-- `GameEvents.CustomMissionPossible.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags=0, iTurn=-1, iPlotX, iPlotY, bTestVisible) ... end)`: test-any. Handlers return false.
-- `GameEvents.CustomMissionStart.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. Handlers return CUSTOM_MISSION_ACTION.
-- `GameEvents.CustomMissionSetActivity.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. Handlers return CUSTOM_MISSION_ACTION_AND_DONE.
-- `GameEvents.CustomMissionDoStep.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. Handlers return CUSTOM_MISSION_ACTION_AND_DONE.
-- `GameEvents.CustomMissionCompleted.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: test-any. Handlers return false.
-- `GameEvents.CustomMissionTargetPlot.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. Handlers return iPlotIndex.
-- `GameEvents.CustomMissionCycleTime.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: **misnamed in VMC's notes**: subscribe to `CustomMissionCameraTime`, which is value. Handlers return iCameraTime.
-- `GameEvents.CustomMissionTimerInc.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. Handlers return iTimerInc.
+- `GameEvents.CustomMissionPossible.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn, iPlotX, iPlotY, bTestVisible) ... end)`: test-any.
+- `GameEvents.CustomMissionStart.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. VMC's example handler returns `CUSTOM_MISSION_ACTION`.
+- `GameEvents.CustomMissionSetActivity.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. VMC's example handler returns `CUSTOM_MISSION_ACTION_AND_DONE`.
+- `GameEvents.CustomMissionDoStep.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. VMC's example handler returns `CUSTOM_MISSION_ACTION_AND_DONE`.
+- `GameEvents.CustomMissionCompleted.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: test-any.
+- `GameEvents.CustomMissionTargetPlot.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. VMC's example handler returns `iPlotIndex`.
+- `GameEvents.CustomMissionCycleTime.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: **misnamed in VMC's notes**: subscribe to `CustomMissionCameraTime`, which is value. VMC's example handler returns `iCameraTime`.
+- `GameEvents.CustomMissionTimerInc.Add(function(iPlayer, iUnit, iMission, iData1, iData2, iFlags, iTurn) ... end)`: value. VMC's example handler returns `iTimerInc`.
 
 ### EVENTS_BATTLES
 
@@ -503,7 +503,7 @@ Events sent during combat (v68)
 
 ### EVENTS_BATTLES_DAMAGE
 
-- `GameEvents.BattleDamageDelta.Add(function(iRole, iBaseDamage) ... end)`: value. Handlers return 0. Where CvUnitCombat.cpp fires it, only when `EVENTS_BATTLES` is on.
+- `GameEvents.BattleDamageDelta.Add(function(iRole, iBaseDamage) ... end)`: value. VMC's example handler returns `0`. Where CvUnitCombat.cpp fires it, only when `EVENTS_BATTLES` is on.
 
 ### EVENTS_CAN_MOVE_INTO
 
@@ -515,7 +515,7 @@ See also: "Units - Railroad Artillery"
 
 See also: "Civilization - Morindim"
 
-- `GameEvents.CanMoveInto.Add(function(iPlayer, iUnit, iPlotX, iPlotY, bAttack, bDeclareWar) ... end)`: test-all. Handlers return true.
+- `GameEvents.CanMoveInto.Add(function(iPlayer, iUnit, iPlotX, iPlotY, bAttack, bDeclareWar) ... end)`: test-all.
 
 ## VMC events that VMC's notes leave out
 
@@ -532,97 +532,95 @@ The code fires these, but VMC's notes do not list them, so only the types of the
 
 The arguments are the expressions the engine pushes, in order; read the named file for their meaning.
 
-- `BuildFinished` (hook), fired in CvPlot.cpp. Arguments: `ePlayer`, `getX()`, `getY()`, `eImprovement`
-- `CanDeclareWar` (test-all), fired in CvTeam.cpp. Arguments: `GetID()`, `eTeam`
-- `CanDisplaceCivilian` (test-any), fired in CvUnit.cpp. Arguments: `pLoopUnit->getOwner()`, `pLoopUnit->GetID()`
-- `CanHaveAnyUpgrade` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`
-- `CanHavePromotion` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `ePromotion`
-- `CanHaveUpgrade` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `iI`, `eUpgradeUnitType`
-- `CanLoadAt` (test-any), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `targetPlot.getX()`, `targetPlot.getY()`
-- `CanParadropFrom` (test-any), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `pPlot->getX()`, `pPlot->getY()`
-- `CanRaze` (test-all), fired in CvPlayer.cpp. Arguments: `pCity->getOwner()`, `pCity->GetID()`
-- `CanRazeOverride` (test-all), fired in CvPlayer.cpp. Arguments: `pCity->getOwner()`, `pCity->GetID()`
-- `CanRebaseInCity` (test-any), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `iX`, `iY`
-- `CanRebaseTo` (test-any), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `iX`, `iY`
-- `CanSaveUnit` (test-all), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`
-- `CanStartMission` (test-all), fired in CvUnitMission.cpp. Arguments: `hUnit->getOwner()`, `hUnit->GetID()`, `iMission`
-- `CannotParadropFrom` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `pPlot->getX()`, `pPlot->getY()`
-- `CircumnavigatedGlobe` (hook), fired in CvTeam.cpp. Arguments: `eTeamID`
-- `CityBoughtPlot` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `pPlotToAcquire->getX()`, `pPlotToAcquire->getY()`, `false`, `true`
-- `CityBuildingsIsBuildingSellable` (test-all), fired in CvBuildingClasses.cpp. Arguments: `m_pCity->getOwner()`, `kBuilding.GetID()`
-- `CityCanAcquirePlot` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `pLoopPlot->getX()`, `pLoopPlot->getY()`
-- `CityCanBuyAnyPlot` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`
-- `CityCanBuyPlot` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `iPlotX`, `iPlotY`
-- `CityCanConstruct` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eBuilding`
-- `CityCanCreate` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eProject`
-- `CityCanMaintain` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eProcess`
-- `CityCanPrepare` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eSpecialist`
-- `CityCanTrain` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eUnit`
-- `CityCaptureComplete` (hook), fired in CvPlayer.cpp. Arguments: `eOldOwner`, `bCapital`, `pNewCity->getX()`, `pNewCity->getY()`, `GetID()`, `iOldPopulation`, `bConquest`, `(int)paGreatWorkData.size()`, `iCaptureGreatWorks`
-- `CityConstructed` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eConstructBuilding`, `false`, `false`
-- `CityConvertsReligion` (hook), fired in CvReligionClasses.cpp. Arguments: `m_pCity->getOwner()`, `eMajority`, `m_pCity->getX()`, `m_pCity->getY()`
-- `CityCreated` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eCreateProject`, `false`, `false`
-- `CitySoldBuilding` (hook), fired in CvDllNetMessageHandler.cpp. Arguments: `ePlayer`, `iCityID`, `eBuilding`
-- `CityStrategyCanActivate` (test-all), fired in CvCityStrategyAI.cpp. Arguments: `iCityStrategiesLoop`, `GetCity()->getOwner()`, `GetCity()->GetID()`
-- `CityTrained` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `GET_PLAYER(getOwner()).getUnit(iResult)->GetID()`, `false`, `false`
-- `DeclareWar` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `eTeam`
-- `EconomicStrategyCanActivate` (test-all), fired in CvEconomicAI.cpp. Arguments: `iStrategiesLoop`, `m_pPlayer->GetID()`
-- `GameCoreTestVictory` (hook), fired in CvGame.cpp. Arguments: none
-- `GameCoreUpdateBegin` (hook), fired in CvGame.cpp. Arguments: none
-- `GameCoreUpdateEnd` (hook), fired in CvGame.cpp. Arguments: none
-- `GatherPerTurnReplayStats` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`
-- `GetFounderBenefitsReligion` (value), fired in CvReligionClasses.cpp. Arguments: `ePlayer`
-- `GetReligionToFound` (value), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `eCivReligion`, `HasBeenFounded(eCivReligion)`
-- `GetReligionToSpread` (value), fired in CvReligionClasses.cpp. Arguments: `m_pPlayer->GetID()`
-- `GetScenarioDiploModifier1` (value), fired in CvDiplomacyAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`
-- `GetScenarioDiploModifier2` (value), fired in CvDiplomacyAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`
-- `GetScenarioDiploModifier3` (value), fired in CvDiplomacyAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`
-- `GoodyHutCanResearch` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eTech`
-- `GoodyHutTechResearched` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `eBestTech`
-- `GreatPersonExpended` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `eGreatPersonUnit`
-- `IsAbleToMakePeace` (test-all), fired in CvDealClasses.cpp. Arguments: `ePlayer`, `eToTeam`
-- `MakePeace` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `eTeam`
-- `MilitaryStrategyCanActivate` (test-all), fired in CvMilitaryAI.cpp. Arguments: `iStrategiesLoop`, `m_pPlayer->GetID()`
-- `MinorAlliesChanged` (hook), fired in CvMinorCivAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`, `true`, `iOldFriendship`, `iNewFriendship`
-- `MinorFriendsChanged` (hook), fired in CvMinorCivAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`, `true`, `iOldFriendship`, `iNewFriendship`
-- `NaturalWonderDiscovered` (hook), fired in CvPlot.cpp. Arguments: `eTeam`, `getFeatureType()`, `getX()`, `getY()`, `(getNumMajorCivsRevealed() == 0)`
-- `NuclearDetonation` (hook), fired in CvUnitCombat.cpp. Arguments: `kAttacker.getOwner()`, `plot.getX()`, `plot.getY()`, `bWar`, `bBystander`
-- `PantheonFounded` (hook), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `GET_PLAYER(ePlayer).getCapitalCity()->GetID()`, `RELIGION_PANTHEON`, `eBelief`
-- `ParadropAt` (hook), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `fromPlot->getX()`, `fromPlot->getY()`, `pPlot->getX()`, `pPlot->getY()`
-- `PlayerAdoptPolicy` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `ePolicy`
-- `PlayerAdoptPolicyBranch` (hook), fired in CvPolicyAI.cpp, CvPolicyClasses.cpp. Arguments: `pPlayer->GetID()`, `eChosenBranch`
-- `PlayerCanAdoptPolicy` (test-all), fired in CvPolicyClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eIndex`
-- `PlayerCanAdoptPolicyBranch` (test-all), fired in CvPolicyClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eBranchType`
-- `PlayerCanConstruct` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eBuilding`
-- `PlayerCanCreate` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eProject`
-- `PlayerCanEverResearch` (test-all), fired in CvTechClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eTech`
-- `PlayerCanFoundPantheon` (test-all), fired in CvReligionClasses.cpp. Arguments: `ePlayer`
-- `PlayerCanFoundReligion` (test-all), fired in CvUnit.cpp. Arguments: `getOwner()`, `pCity->GetID()`
-- `PlayerCanMaintain` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eProcess`
-- `PlayerCanPrepare` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eSpecialist`
-- `PlayerCanResearch` (test-all), fired in CvTechClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eTech`
-- `PlayerCanTrain` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eUnit`
-- `PlayerCityFounded` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `pCity->getX()`, `pCity->getY()`
-- `PlayerDoTurn` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`
-- `PlayerPreAIUnitUpdate` (hook), fired in CvPlayerAI.cpp. Arguments: `GetID()`
-- `RebaseTo` (hook), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `iX`, `iY`
-- `ReligionEnhanced` (hook), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `eReligion`, `eBelief1`, `eBelief2`
-- `ReligionFounded` (hook), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `pkHolyCity->GetID()`, `eReligion`, `eBelief`, `eBelief1`, `eBelief2`, `eBelief3`, `eBelief4`
-- `SetAlly` (hook), fired in CvMinorCivAI.cpp. Arguments: `m_pPlayer->GetID()`, `eOldAlly`, `eNewAlly`
-- `SetPopulation` (hook), fired in CvCity.cpp. Arguments: `getX()`, `getY()`, `iOldPopulation`, `iNewValue`
-- `TeamMeet` (hook), fired in CvTeam.cpp. Arguments: `eTeam`, `GetID()`
-- `TeamSetEra` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `GetCurrentEra()`
-- `TeamSetHasTech` (hook), fired in CvTechClasses.cpp. Arguments: `m_pTeam->GetID()`, `eIndex`, `bNewValue`
-- `TeamTechResearched` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `eTech`, `iChange`
-- `TestAccumulator` (value), fired in CvLuaGame.cpp. Arguments: `-1`, `-1`, `-1`, `-1`. Probably only when `API_LUA_EXTENSIONS` is on (on by default)
-- `TestEvent` (hook), fired in CvLuaGame.cpp. Arguments: `-1`, `-1`, `-1`, `-1`. Probably only when `API_LUA_EXTENSIONS` is on (on by default)
-- `UiDiploEvent` (hook), fired in CvGame.cpp. Arguments: `eEvent`, `eAIPlayer`, `iArg1`, `iArg2`
-- `UnitGetSpecialExploreTarget` (hook), fired in CvHomelandAI.cpp. Arguments: `pUnit->getOwner()`, `pUnit->GetID()`
-- `UnitKilledInCombat` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `eKilledPlayer`, `eUnitType`, `pKillingUnit ? pKillingUnit->GetID() : -1`
-- `UnitPrekill` (hook), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `getUnitType()`, `getX()`, `getY()`, `bDelay`, `ePlayer`
-- `UnitPromoted` (hook), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `ePromotion`
-- `UnitSetXY` (hook), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `getX()`, `getY()`
-- `UnitUpgraded` (hook), fired in CvPlayer.cpp, CvUnit.cpp. Arguments: `GetID()`, `pUnit->GetID()`, `pNewUnit->GetID()`, `true`
+- `BuildFinished` (hook), fired in CvPlot.cpp. Arguments: `ePlayer`, `getX()`, `getY()`, `eImprovement`.
+- `CanDeclareWar` (test-all), fired in CvTeam.cpp. Arguments: `GetID()`, `eTeam`.
+- `CanDisplaceCivilian` (test-any), fired in CvUnit.cpp. Arguments: `pLoopUnit->getOwner()`, `pLoopUnit->GetID()`.
+- `CanHaveAnyUpgrade` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`.
+- `CanHavePromotion` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `ePromotion`.
+- `CanHaveUpgrade` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `iI`, `eUpgradeUnitType`.
+- `CanLoadAt` (test-any), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `targetPlot.getX()`, `targetPlot.getY()`.
+- `CanParadropFrom` (test-any), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `pPlot->getX()`, `pPlot->getY()`.
+- `CanRaze` (test-all), fired in CvPlayer.cpp. Arguments: `pCity->getOwner()`, `pCity->GetID()`.
+- `CanRazeOverride` (test-all), fired in CvPlayer.cpp. Arguments: `pCity->getOwner()`, `pCity->GetID()`. **Answer `false` by default**: the game acts only when every handler answers `true`, so answer `false` in every case the mod does not mean to change.
+- `CanRebaseInCity` (test-any), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `iX`, `iY`.
+- `CanRebaseTo` (test-any), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `iX`, `iY`.
+- `CanSaveUnit` (test-all), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`. **Answer `false` by default**: the game acts only when every handler answers `true`, so answer `false` in every case the mod does not mean to change.
+- `CanStartMission` (test-all), fired in CvUnitMission.cpp. Arguments: `hUnit->getOwner()`, `hUnit->GetID()`, `iMission`.
+- `CannotParadropFrom` (test-all), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `pPlot->getX()`, `pPlot->getY()`. **Answer `false` by default**: the game acts only when every handler answers `true`, so answer `false` in every case the mod does not mean to change.
+- `CircumnavigatedGlobe` (hook), fired in CvTeam.cpp. Arguments: `eTeamID`.
+- `CityBoughtPlot` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `pPlotToAcquire->getX()`, `pPlotToAcquire->getY()`, `false`, `true`.
+- `CityBuildingsIsBuildingSellable` (test-all), fired in CvBuildingClasses.cpp. Arguments: `m_pCity->getOwner()`, `kBuilding.GetID()`.
+- `CityCanAcquirePlot` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `pLoopPlot->getX()`, `pLoopPlot->getY()`.
+- `CityCanBuyAnyPlot` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`.
+- `CityCanBuyPlot` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `iPlotX`, `iPlotY`.
+- `CityCanConstruct` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eBuilding`.
+- `CityCanCreate` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eProject`.
+- `CityCanMaintain` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eProcess`.
+- `CityCanPrepare` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eSpecialist`.
+- `CityCanTrain` (test-all), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eUnit`.
+- `CityCaptureComplete` (hook), fired in CvPlayer.cpp. Arguments: `eOldOwner`, `bCapital`, `pNewCity->getX()`, `pNewCity->getY()`, `GetID()`, `iOldPopulation`, `bConquest`, `(int)paGreatWorkData.size()`, `iCaptureGreatWorks`.
+- `CityConstructed` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eConstructBuilding`, `false`, `false`.
+- `CityConvertsReligion` (hook), fired in CvReligionClasses.cpp. Arguments: `m_pCity->getOwner()`, `eMajority`, `m_pCity->getX()`, `m_pCity->getY()`.
+- `CityCreated` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `eCreateProject`, `false`, `false`.
+- `CitySoldBuilding` (hook), fired in CvDllNetMessageHandler.cpp. Arguments: `ePlayer`, `iCityID`, `eBuilding`.
+- `CityStrategyCanActivate` (test-all), fired in CvCityStrategyAI.cpp. Arguments: `iCityStrategiesLoop`, `GetCity()->getOwner()`, `GetCity()->GetID()`.
+- `CityTrained` (hook), fired in CvCity.cpp. Arguments: `getOwner()`, `GetID()`, `GET_PLAYER(getOwner()).getUnit(iResult)->GetID()`, `false`, `false`.
+- `DeclareWar` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `eTeam`.
+- `EconomicStrategyCanActivate` (test-all), fired in CvEconomicAI.cpp. Arguments: `iStrategiesLoop`, `m_pPlayer->GetID()`.
+- `GameCoreTestVictory` (hook), fired in CvGame.cpp. Arguments: none.
+- `GameCoreUpdateBegin` (hook), fired in CvGame.cpp. Arguments: none.
+- `GameCoreUpdateEnd` (hook), fired in CvGame.cpp. Arguments: none.
+- `GatherPerTurnReplayStats` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`.
+- `GetFounderBenefitsReligion` (value), fired in CvReligionClasses.cpp. Arguments: `ePlayer`.
+- `GetReligionToFound` (value), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `eCivReligion`, `HasBeenFounded(eCivReligion)`.
+- `GetReligionToSpread` (value), fired in CvReligionClasses.cpp. Arguments: `m_pPlayer->GetID()`.
+- `GetScenarioDiploModifier1` (value), fired in CvDiplomacyAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`.
+- `GetScenarioDiploModifier2` (value), fired in CvDiplomacyAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`.
+- `GetScenarioDiploModifier3` (value), fired in CvDiplomacyAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`.
+- `GoodyHutCanResearch` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eTech`. The game ignores the answer at one of the places it asks it (CvPlayer.cpp).
+- `GoodyHutTechResearched` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `eBestTech`.
+- `GreatPersonExpended` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `eGreatPersonUnit`.
+- `IsAbleToMakePeace` (test-all), fired in CvDealClasses.cpp. Arguments: `ePlayer`, `eToTeam`.
+- `MakePeace` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `eTeam`.
+- `MilitaryStrategyCanActivate` (test-all), fired in CvMilitaryAI.cpp. Arguments: `iStrategiesLoop`, `m_pPlayer->GetID()`.
+- `MinorAlliesChanged` (hook), fired in CvMinorCivAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`, `true`, `iOldFriendship`, `iNewFriendship`.
+- `MinorFriendsChanged` (hook), fired in CvMinorCivAI.cpp. Arguments: `m_pPlayer->GetID()`, `ePlayer`, `true`, `iOldFriendship`, `iNewFriendship`.
+- `NaturalWonderDiscovered` (hook), fired in CvPlot.cpp. Arguments: `eTeam`, `getFeatureType()`, `getX()`, `getY()`, `(getNumMajorCivsRevealed() == 0)`.
+- `NuclearDetonation` (hook), fired in CvUnitCombat.cpp. Arguments: `kAttacker.getOwner()`, `plot.getX()`, `plot.getY()`, `bWar`, `bBystander`.
+- `PantheonFounded` (hook), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `GET_PLAYER(ePlayer).getCapitalCity()->GetID()`, `RELIGION_PANTHEON`, `eBelief`.
+- `ParadropAt` (hook), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `fromPlot->getX()`, `fromPlot->getY()`, `pPlot->getX()`, `pPlot->getY()`.
+- `PlayerAdoptPolicy` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `ePolicy`.
+- `PlayerAdoptPolicyBranch` (hook), fired in CvPolicyAI.cpp, CvPolicyClasses.cpp. Arguments: `pPlayer->GetID()`, `eChosenBranch`.
+- `PlayerCanAdoptPolicy` (test-all), fired in CvPolicyClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eIndex`.
+- `PlayerCanAdoptPolicyBranch` (test-all), fired in CvPolicyClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eBranchType`.
+- `PlayerCanConstruct` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eBuilding`.
+- `PlayerCanCreate` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eProject`.
+- `PlayerCanEverResearch` (test-all), fired in CvTechClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eTech`.
+- `PlayerCanFoundPantheon` (test-all), fired in CvReligionClasses.cpp. Arguments: `ePlayer`.
+- `PlayerCanFoundReligion` (test-all), fired in CvUnit.cpp. Arguments: `getOwner()`, `pCity->GetID()`.
+- `PlayerCanMaintain` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eProcess`.
+- `PlayerCanPrepare` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eSpecialist`.
+- `PlayerCanResearch` (test-all), fired in CvTechClasses.cpp. Arguments: `m_pPlayer->GetID()`, `eTech`.
+- `PlayerCanTrain` (test-all), fired in CvPlayer.cpp. Arguments: `GetID()`, `eUnit`.
+- `PlayerCityFounded` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `pCity->getX()`, `pCity->getY()`.
+- `PlayerDoTurn` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`.
+- `PlayerPreAIUnitUpdate` (hook), fired in CvPlayerAI.cpp. Arguments: `GetID()`.
+- `RebaseTo` (hook), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `iX`, `iY`.
+- `ReligionEnhanced` (hook), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `eReligion`, `eBelief1`, `eBelief2`.
+- `ReligionFounded` (hook), fired in CvReligionClasses.cpp. Arguments: `ePlayer`, `pkHolyCity->GetID()`, `eReligion`, `eBelief`, `eBelief1`, `eBelief2`, `eBelief3`, `eBelief4`.
+- `SetAlly` (hook), fired in CvMinorCivAI.cpp. Arguments: `m_pPlayer->GetID()`, `eOldAlly`, `eNewAlly`.
+- `SetPopulation` (hook), fired in CvCity.cpp. Arguments: `getX()`, `getY()`, `iOldPopulation`, `iNewValue`.
+- `TeamMeet` (hook), fired in CvTeam.cpp. Arguments: `eTeam`, `GetID()`.
+- `TeamSetEra` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `GetCurrentEra()`.
+- `TeamSetHasTech` (hook), fired in CvTechClasses.cpp. Arguments: `m_pTeam->GetID()`, `eIndex`, `bNewValue`.
+- `TeamTechResearched` (hook), fired in CvTeam.cpp. Arguments: `GetID()`, `eTech`, `iChange`.
+- `UiDiploEvent` (hook), fired in CvGame.cpp. Arguments: `eEvent`, `eAIPlayer`, `iArg1`, `iArg2`.
+- `UnitGetSpecialExploreTarget` (hook), fired in CvHomelandAI.cpp. Arguments: `pUnit->getOwner()`, `pUnit->GetID()`.
+- `UnitKilledInCombat` (hook), fired in CvPlayer.cpp. Arguments: `GetID()`, `eKilledPlayer`, `eUnitType`, `pKillingUnit ? pKillingUnit->GetID() : -1`.
+- `UnitPrekill` (hook), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `getUnitType()`, `getX()`, `getY()`, `bDelay`, `ePlayer`.
+- `UnitPromoted` (hook), fired in CvUnit.cpp. Arguments: `((int)getOwner())`, `GetID()`, `ePromotion`.
+- `UnitSetXY` (hook), fired in CvUnit.cpp. Arguments: `getOwner()`, `GetID()`, `getX()`, `getY()`.
+- `UnitUpgraded` (hook), fired in CvPlayer.cpp, CvUnit.cpp. Arguments: `GetID()`, `pUnit->GetID()`, `pNewUnit->GetID()`, `true`.
 
 ## VMC's other options
 

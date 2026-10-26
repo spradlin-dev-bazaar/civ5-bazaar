@@ -24,11 +24,11 @@ powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CLAUDE_SK
 
 - **`-DisplayName`** is what players see: the mod's name in the Mods menu, the `Build` folder's and the package's name, and the name the plugin reports to Bazaar. Ask the user for it if they have not given one.
 - **The file name** (the DLL's and the project's name, with no spaces) comes from the display name, so `Score Doubler` becomes `ScoreDoubler`. Pass `-FileName` only when the user wants a different one. No other mod may ship a DLL with the same name, because Bazaar finds plugins by file name.
-- **`-Destination`** is the folder to make the plugin folder in; it defaults to the current folder. The script refuses a folder inside the SDK, because the SDK build deletes and rebuilds the SDK folder. Keep the path short: Visual C++ 2008 fails once a path inside the plugin folder passes 260 characters, with PRJ0020 at the link step. If that happens, make the plugin in a folder with a shorter path, rather than shortening the plugin's name.
+- **`-Destination`** is the folder to make the plugin folder in; it defaults to the current folder. The script refuses only a folder inside the SDK that Bazaar's own repository builds, since that build deletes and rebuilds it. Keep the path short: Visual C++ 2008 fails once a path inside the plugin folder passes 260 characters, with PRJ0020 at the link step. If that happens, make the plugin in a folder with a shorter path, rather than shortening the plugin's name.
 - **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `release.cmd` refuses to make a release until it is changed.
 - **`-Sdk`** is needed only when `BAZAAR_SDK` is not set.
 
-The script copies the template without its build output, renames the files, puts the names into the text files, writes a new mod ID on the `<Guid>` line (`<ProjectGuid>` stays), and sets the teaser, description and authors; the description also replaces the template's sentence in `workshop-description.txt`. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause.
+The script copies the template without its build output, renames the files, puts the names into the text files, writes a new mod ID in the `<Guid>` (`<ProjectGuid>` stays), and sets the teaser, description and authors; the description also replaces the template's sentence in `workshop-description.txt`. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause.
 
 Then delete the template's example hooks that the plugin does not need, as the guide's Step 2 describes.
 
