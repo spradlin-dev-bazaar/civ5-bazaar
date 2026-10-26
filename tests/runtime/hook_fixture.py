@@ -20,7 +20,8 @@ BUILD = os.path.join(HERE, "out", "civgen")
 
 def fixture_project(sources):
     root = os.path.join(HERE, "fixture")
-    return common.Project(root, sources, [root, common.HOST_DIR], BUILD, os.path.join(BUILD, "hook-ids.txt"))
+    registry = os.path.join(BUILD, "hook-ids.txt")
+    return common.Project(root, sources, [root, common.HOST_DIR], BUILD, registry, plugin_include="fake_engine.h")
 
 
 def generate_hooks(sources):
@@ -67,7 +68,7 @@ def gone_hook_problems():
     gone = [hook_id for (key, _), (hook_id, _) in entries.items() if key == "Extra(int)"]
     with open(os.path.join(BUILD, "sdk", "CivHooks.h")) as f:
         header = f.read()
-    problems = ["Extra is still a namespace in CivHooks.h"] if "namespace Extra " in header else []
+    problems = ["Extra is still a hook point in CivHooks.h"] if "struct Extra " in header else []
     problems += [] if "// Extra (id " in header else ["CivHooks.h does not say Extra is gone"]
     with open(os.path.join(BUILD, "sdk", "ToyGoneHook.h"), "w") as f:
         f.write("#define TOY_GONE_HOOK_ID %d\n" % (gone[0] if gone else -1))
@@ -82,6 +83,33 @@ def export_marker_problems():
     return ["%r is not marked for export" % line for line in expected if line not in header]
 
 
+def typed_header_problems():
+    """CivHooks.h types each hook point a plugin can name, as the function's own types, and a hook of the wrong type
+    fails to compile."""
+    header = os.path.join(BUILD, "sdk", "CivHooks.h")
+    with open(header) as f:
+        text = f.read()
+    typed = dict((name, has_types) for name, _, has_types in generate.header_hooks(text))
+    problems = [] if typed.get("FakeUnit_add") else ["FakeUnit_add has no types in CivHooks.h"]
+    if typed.get("FakeUnit_Peek", True):
+        problems.append("FakeUnit_Peek, which takes a private type that a global type shares a name with, has types")
+    if "typedef int (*Original)(const FakeUnit *, FakeUnit::Mood);" not in text:
+        problems.append("FakeUnit_Feel, which takes a nested type written without its class, is not typed qualified")
+    project = fixture_project(["fake_engine.cpp"])
+    for result, should_compile in (("int& result", True), ("long& result", False), ("", False)):
+        code = (
+            "static void AfterAdd(const FakeUnit*, int, int%s) {}\n"
+            "int Register(const CivHostInfo* host)\n"
+            "{ return CivRegisterAfter<CivHooks::FakeUnit_add>(host, &AfterAdd); }\n"
+        ) % (", " + result if result else "")
+        tu = analyze.parse_as_plugin(project, header, code)
+        compiled = not any(d.severity >= analyze.ci.Diagnostic.Error for d in tu.diagnostics)
+        if compiled != should_compile:
+            outcome = "compiles" if compiled else "fails to compile"
+            problems.append("an after-hook on FakeUnit::add taking %r %s" % (result, outcome))
+    return problems
+
+
 if __name__ == "__main__":
     registry = os.path.join(BUILD, "hook-ids.txt")
     if os.path.exists(registry):
@@ -90,7 +118,7 @@ if __name__ == "__main__":
     second = generate_hooks(["aaa_extra.cpp", "fake_engine.cpp"])
     third = generate_hooks(["fake_engine.cpp"])
     problems = registry_problems(first, second, third) + key_format_problems(first) + export_marker_problems()
-    problems += shape_format_problems() + gone_hook_problems()
+    problems += shape_format_problems() + gone_hook_problems() + typed_header_problems()
     if problems:
         print("FAIL: " + "; ".join(problems))
         sys.exit(1)

@@ -3,7 +3,8 @@
 Plugins compile the engine's headers into themselves, so each class's size, the position of each field and the order
 of its virtual functions are baked into every plugin. This compiles every header the SDK ships with the compiler's own
 layout report, once with the plugins' defines and once with the host's, and compares the plugins' report with the
-committed record: a class that changed or is gone fails the build, and a new one is added to the record.
+committed record: a class that changed or is gone fails the build, and a new one is added to the record. It also
+compiles CivHooks.h on its own, as a plugin would, apart from the report, whose hook point structs are no layouts.
 
 usage: layouts.py            (run by build-hooked.cmd)
        layouts.py --accept   (run by build-hooked.cmd accept-layouts: save the current layouts as the record; from 1.0
@@ -67,7 +68,7 @@ def shipped_headers(project):
 
 
 def write_unit(project, path):
-    lines = ['#include "CvGameCoreDLLPCH.h"', '#include "CivHooks.h"', '#include "CivPluginApi.h"']
+    lines = ['#include "CvGameCoreDLLPCH.h"', '#include "CivPluginApi.h"']
     lines += ['#include "%s"' % h for h in shipped_headers(project)]
     with open(path, "w", encoding="cp1252") as f:
         f.write("\n".join(lines) + "\n")
@@ -95,9 +96,21 @@ def host_defines(project):
     return defines.group(1).split(";")
 
 
-def compile_report(unit, defines, includes):
+def compile_report(unit, defines, includes, whose):
+    return compile_unit(unit, defines, includes, ["/d1reportAllClassLayout"], "with the %s defines" % whose)
+
+
+def check_hooks_header(folder, includes):
+    """CivHooks.h, compiled as a plugin would but kept out of the report: its hook point structs are no layouts."""
+    unit = os.path.join(folder, "hooks-header.cpp")
+    with open(unit, "w", encoding="cp1252") as f:
+        f.write('#include "CivHooks.h"\n')
+    compile_unit(unit, common.PLUGIN_DEFINES, includes, [], "as a plugin's code")
+
+
+def compile_unit(unit, defines, includes, extra, how):
     # Warnings would be printed into the middle of the report.
-    args = ["cl", "/nologo", "/Zs", "/w", "/EHsc", "/MD", "/d1reportAllClassLayout"]
+    args = ["cl", "/nologo", "/Zs", "/w", "/EHsc", "/MD"] + extra
     args += ["/D" + d for d in defines] + ["/I" + i for i in includes] + [unit]
     try:
         done = subprocess.run(args, capture_output=True, cwd=os.path.dirname(unit))
@@ -107,7 +120,7 @@ def compile_report(unit, defines, includes):
     if done.returncode:
         lines = (out + done.stderr.decode("cp1252", "replace")).splitlines()
         errors = [line for line in lines if " error " in line] or lines[-20:]
-        raise RuntimeError("The headers did not compile for the layout check:\n" + "\n".join(errors[:20]))
+        raise RuntimeError("%s did not compile %s:\n" % (common.shown(unit), how) + "\n".join(errors[:20]))
     return out
 
 
@@ -259,11 +272,12 @@ def current_layouts(project):
     unit = os.path.join(folder, "all-headers.cpp")
     write_unit(project, unit)
     includes = include_dirs(project)
-    plugin = parse_report(compile_report(unit, common.PLUGIN_DEFINES, includes))
+    check_hooks_header(folder, includes)
+    plugin = parse_report(compile_report(unit, common.PLUGIN_DEFINES, includes, "plugins'"))
     if not plugin:
         raise RuntimeError("The compiler reported no class layouts, so nothing could be checked.")
     defines = host_defines(project)
-    host = parse_report(compile_report(unit, defines, includes))
+    host = parse_report(compile_report(unit, defines, includes, "host's"))
     if host != plugin:
         keys = sorted(set(key for key, _ in set(host) ^ set(plugin)))
         lines = [

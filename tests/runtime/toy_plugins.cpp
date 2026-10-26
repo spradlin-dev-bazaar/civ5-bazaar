@@ -1,7 +1,6 @@
 // One source, built once per toy plugin with a TOY_* define.
-#include "CivHooks.h"
-#include "CivPluginApi.h"
 #include "fake_engine.h"
+#include "CivHooks.h"
 #include "toy_api.h"
 
 #include <stdio.h>
@@ -78,7 +77,7 @@ static void ReplaceNothing(NotifyFn, FakeUnit*, int)
 
 TOY_EXPORT int ToyRegisterLate()
 {
-	return s_host->RegisterHook(s_host->pluginIndex, CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
+	return CivRegisterReplace<CivHooks::FakeUnit_notify>(s_host, &ReplaceNothing);
 }
 
 TOY_EXPORT int ToyRegisterHandLate()
@@ -159,10 +158,10 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_host = host;
 	Describe(info, "Toy Basic");
 	s_host->Log(s_host->pluginIndex, "starting");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
-	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify);
-	Register(CivHooks::FakeUnit_name::ID, CIV_HOOK_AFTER, (void*)&AfterName);
+	CivRegisterBefore<CivHooks::FakeUnit_add>(s_host, &BeforeAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
+	CivRegisterReplace<CivHooks::FakeUnit_notify>(s_host, &ReplaceNotify);
+	CivRegisterAfter<CivHooks::FakeUnit_name>(s_host, &AfterName);
 	return true;
 }
 
@@ -207,10 +206,10 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Second");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
-	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_REPLACE, (void*)&ReplaceSubtract);
-	Register(CivHooks::FakeUnit_Grow::ID, CIV_HOOK_REPLACE, (void*)&ReplaceGrow);
+	CivRegisterBefore<CivHooks::FakeUnit_add>(s_host, &BeforeAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
+	CivRegisterReplace<CivHooks::FakeUnit_Subtract>(s_host, &ReplaceSubtract);
+	CivRegisterReplace<CivHooks::FakeUnit_Grow>(s_host, &ReplaceGrow);
 	return true;
 }
 
@@ -271,18 +270,18 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Shapes");
-	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
-	Register(CivHooks::FakeUnit_Scale::ID, CIV_HOOK_AFTER, (void*)&AfterScale);
-	Register(CivHooks::FakeUnit_Level::ID, CIV_HOOK_AFTER, (void*)&AfterLevel);
-	Register(CivHooks::FakeUnit_Greet::ID, CIV_HOOK_AFTER, (void*)&AfterGreet);
-	Register(CivHooks::FakeUnit_op_eq::ID, CIV_HOOK_AFTER, (void*)&AfterEquals);
-	Register(CivHooks::FakeUnit_Ignore::ID, CIV_HOOK_BEFORE, (void*)&BeforeIgnore);
-	Register(CivHooks::FakeUnit_Heal::ID, CIV_HOOK_AFTER, (void*)&AfterHeal);
-	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
-	Register(CivHooks::FakeRules_Bonus::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
-	Register(CivHooks::FakeRules_Penalty::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
-	Register(CivHooks::fake_engine_cpp_Helper::ID, CIV_HOOK_AFTER, (void*)&AfterPlusThousand);
-	Register(CivHooks::Unannounced::ID, CIV_HOOK_AFTER, (void*)&AfterUnannounced);
+	CivRegisterAfter<CivHooks::FakeUnit_Twice>(s_host, &AfterTwice);
+	CivRegisterAfter<CivHooks::FakeUnit_Scale>(s_host, &AfterScale);
+	CivRegisterAfter<CivHooks::FakeUnit_Level>(s_host, &AfterLevel);
+	CivRegisterAfter<CivHooks::FakeUnit_Greet>(s_host, &AfterGreet);
+	CivRegisterAfter<CivHooks::FakeUnit_op_eq>(s_host, &AfterEquals);
+	CivRegisterBefore<CivHooks::FakeUnit_Ignore>(s_host, &BeforeIgnore);
+	CivRegisterAfter<CivHooks::FakeUnit_Heal>(s_host, &AfterHeal);
+	CivRegisterAfter<CivHooks::FakeUnit_Range>(s_host, &AfterRange);
+	CivRegisterAfter<CivHooks::FakeRules_Bonus>(s_host, &AfterPlusThousand);
+	CivRegisterAfter<CivHooks::FakeRules_Penalty>(s_host, &AfterPlusThousand);
+	CivRegisterAfter<CivHooks::fake_engine_cpp_Helper>(s_host, &AfterPlusThousand);
+	CivRegisterAfter<CivHooks::Unannounced>(s_host, &AfterUnannounced);
 	return true;
 }
 
@@ -307,9 +306,9 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Conflict");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
-	Register(CivHooks::FakeUnit_Grow::ID, CIV_HOOK_REPLACE, (void*)&ReplaceGrow);
-	LogResult("replace result", Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNotify));
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
+	CivRegisterReplace<CivHooks::FakeUnit_Grow>(s_host, &ReplaceGrow);
+	LogResult("replace result", CivRegisterReplace<CivHooks::FakeUnit_notify>(s_host, &ReplaceNotify));
 	return true;
 }
 
@@ -332,7 +331,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Describe(info, "Toy No Version");
 #endif
 	host->Log(host->pluginIndex, "starting");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	return true;
 }
@@ -364,13 +363,13 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Fault");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	return true;
 }
 
 #elif defined(TOY_FAULT_REPLACE)
 
-static int ReplaceLevel(int (*)(const FakeUnit*), const FakeUnit*)
+static const int ReplaceLevel(const int (*)(const FakeUnit*), const FakeUnit*)
 {
 	int (*volatile nothing)() = 0;
 	return nothing() + 1;
@@ -380,7 +379,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Fault Replace");
-	Register(CivHooks::FakeUnit_Level::ID, CIV_HOOK_REPLACE, (void*)&ReplaceLevel);
+	CivRegisterReplace<CivHooks::FakeUnit_Level>(s_host, &ReplaceLevel);
 	return true;
 }
 
@@ -400,7 +399,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 #else
 	Describe(info, "Toy Fault Kept");
 #endif
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_BEFORE, (void*)&BeforeAdd);
+	CivRegisterBefore<CivHooks::FakeUnit_add>(s_host, &BeforeAdd);
 	return true;
 }
 
@@ -410,7 +409,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Kept");
-	Register(CivHooks::FakeUnit_notify::ID, CIV_HOOK_REPLACE, (void*)&ReplaceNothing);
+	CivRegisterReplace<CivHooks::FakeUnit_notify>(s_host, &ReplaceNothing);
 	return true;
 }
 
@@ -444,7 +443,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Bench");
-	Register(CivHooks::Square::ID, CIV_HOOK_AFTER, (void*)&AfterSquare);
+	CivRegisterAfter<CivHooks::Square>(s_host, &AfterSquare);
 	return true;
 }
 
@@ -484,7 +483,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Reentrant");
-	Register(CivHooks::FakeUnit_Twice::ID, CIV_HOOK_AFTER, (void*)&AfterTwice);
+	CivRegisterAfter<CivHooks::FakeUnit_Twice>(s_host, &AfterTwice);
 	return true;
 }
 
@@ -554,12 +553,12 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_host = host;
 #if defined(TOY_DECLINE)
 	Describe(info, "Toy Decline");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	return false;
 #else
 	Describe(info, "Toy Late Fault");
-	Register(CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	volatile int zero = 0;
 	return 10 / zero == 1;
@@ -599,8 +598,8 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 		host->RegisterHook(host->pluginIndex + 1, CivHooks::FakeUnit_add::ID, CIV_HOOK_AFTER, (void*)&AfterAdd));
 	LogResult("hand-placed hook for an index not its own",
 		host->RegisterHandHook(host->pluginIndex + 1, CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes));
-	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeFirst);
-	LogResult("second replace", Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRangeSecond));
+	CivRegisterReplace<CivHooks::FakeUnit_Range>(s_host, &ReplaceRangeFirst);
+	LogResult("second replace", CivRegisterReplace<CivHooks::FakeUnit_Range>(s_host, &ReplaceRangeSecond));
 	LogResult("hand-placed hook past the last", RegisterHand(CIV_HAND_HOOK_COUNT, (void*)&SayYes));
 	LogResult("negative hand-placed hook", RegisterHand(-1, (void*)&SayYes));
 	LogResult("hand-placed hook with no function", RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, 0));
@@ -625,7 +624,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Overflow");
-	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
+	CivRegisterAfter<CivHooks::FakeUnit_Range>(s_host, &AfterRange);
 	return true;
 }
 
@@ -640,7 +639,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Throw");
-	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_AFTER, (void*)&AfterRange);
+	CivRegisterAfter<CivHooks::FakeUnit_Range>(s_host, &AfterRange);
 	return true;
 }
 
@@ -675,10 +674,10 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Veto");
-	Register(CivHooks::FakeUnit_Subtract::ID, CIV_HOOK_BEFORE, (void*)&BeforeSubtract);
-	Register(CivHooks::FakeUnit_Scale::ID, CIV_HOOK_BEFORE, (void*)&BeforeScale);
-	Register(CivHooks::FakeUnit_name::ID, CIV_HOOK_BEFORE, (void*)&BeforeName);
-	Register(CivHooks::FakeUnit_Greet::ID, CIV_HOOK_BEFORE, (void*)&BeforeGreet);
+	CivRegisterBefore<CivHooks::FakeUnit_Subtract>(s_host, &BeforeSubtract);
+	CivRegisterBefore<CivHooks::FakeUnit_Scale>(s_host, &BeforeScale);
+	CivRegisterBefore<CivHooks::FakeUnit_name>(s_host, &BeforeName);
+	CivRegisterBefore<CivHooks::FakeUnit_Greet>(s_host, &BeforeGreet);
 	return true;
 }
 
@@ -807,10 +806,10 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Hand Replace");
-	Register(CivHooks::FakeUnit_CancelOrders::ID, CIV_HOOK_REPLACE, (void*)&ReplaceCancelOrders);
-	Register(CivHooks::FakeUnit_PlayedByPlugin::ID, CIV_HOOK_REPLACE, (void*)&ReplacePlayedByPlugin);
-	Register(CivHooks::FakeUnit_Range::ID, CIV_HOOK_REPLACE, (void*)&ReplaceRange);
-	Register(CivHooks::FakeUnit_Reach::ID, CIV_HOOK_REPLACE, (void*)&ReplaceReach);
+	CivRegisterReplace<CivHooks::FakeUnit_CancelOrders>(s_host, &ReplaceCancelOrders);
+	CivRegisterReplace<CivHooks::FakeUnit_PlayedByPlugin>(s_host, &ReplacePlayedByPlugin);
+	CivRegisterReplace<CivHooks::FakeUnit_Range>(s_host, &ReplaceRange);
+	CivRegisterReplace<CivHooks::FakeUnit_Reach>(s_host, &ReplaceReach);
 	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
 	return true;
 }

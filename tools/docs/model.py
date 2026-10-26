@@ -59,8 +59,9 @@ class Engine:
         self.registry = generate.Registry(self.project.registry)
         cpp = [fn for fn in self.functions if fn["compiled"]]
         hooks, _, _ = generate.plan_hooks(cpp, self.project, files, edits, self.registry)
+        _, untyped = generate.checked_plugin_header(self.project, self.registry, hooks)
         for fn in hooks:
-            fn["declarations"] = hook_declarations(fn, self.text(fn["file"]))
+            fn["declarations"] = hook_declarations(fn, self.text(fn["file"]), fn["hook_id"] not in untyped)
         self.unregistered_hooks = self.registry.added
         self.stale_registry_entries = len(self.registry.entries) - len(hooks)
 
@@ -195,14 +196,14 @@ def in_ranges(offset, ranges):
 
 
 def result_slot(result):
-    # Mirrors the Slot of CivHookResult in host/CivHostHooks.h, which a plugin's result parameter must match.
+    # Mirrors CivHookSlot in host/CivPluginApi.h, which a plugin's result parameter must match.
     if result.endswith("&"):
         return result[:-1].rstrip() + "*&"
     value = re.sub(r"\s+const$", "", result)
     return re.sub(r"^const\s+(?=[^*&]*$)", "", value) + "&"
 
 
-def hook_declarations(fn, data):
+def hook_declarations(fn, data, typed):
     params = [generate.param_parts(fn, data, i) for i in range(len(fn["params"]))]
     types = [t for t, _ in params]
     args = ["%s %s" % (t, "arg" + n[len("civ_p") :] if n.startswith("civ_p") else n) for t, n in params]
@@ -221,9 +222,14 @@ def hook_declarations(fn, data):
         "static %s Replace%s(%s);" % (result, name, ", ".join([original] + self_param + args)),
         "",
     ]
+    if not typed:
+        lines.append("// CivHooks.h gives this hook point no types, so nothing checks these hooks' parameters.")
     for kind, prefix in (("BEFORE", "Before"), ("AFTER", "After"), ("REPLACE", "Replace")):
-        lines.append(
-            "host->RegisterHook(host->pluginIndex, CivHooks::%s::ID, CIV_HOOK_%s, (void*)&%s%s);"
-            % (name, kind, prefix, name)
-        )
+        if typed:
+            lines.append("CivRegister%s<CivHooks::%s>(host, &%s%s);" % (prefix, name, prefix, name))
+        else:
+            lines.append(
+                "host->RegisterHook(host->pluginIndex, CivHooks::%s::ID, CIV_HOOK_%s, (void*)&%s%s);"
+                % (name, kind, prefix, name)
+            )
     return "\n".join(lines) + "\n"

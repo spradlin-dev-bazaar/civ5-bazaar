@@ -14,7 +14,9 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 
+import analyze
 import common
 
 ID_PLACEHOLDER = "\0HOOK_ID\0"
@@ -322,17 +324,12 @@ def wrapper_code(fn, data, src_path, exported):
     lines = ["#line %d %s" % (fn["line"], c_string(src_path))]
     lines.append(("CIV_HOST_API " if exported else "") + wrapper_signature(fn, data))
     lines.append("{")
-    slot = []
     if not is_void:
         lines.append("\ttypedef %s civ_R;" % return_text(fn, data))
         lines.append("\ttypedef CivHookResult< civ_R > civ_Res;")
-        slot = ["civ_Res::Slot&"]
     result = "void" if is_void else "civ_R"
     lines += ["\tstruct civ_C", "\t{"]
-    lines.append("\t\ttypedef bool (*BeforeFn)(%s);" % ", ".join(plugin_params + slot))
-    lines.append("\t\ttypedef %s (*OriginalFn)(%s);" % (result, ", ".join(plugin_params)))
-    lines.append("\t\ttypedef %s (*ReplaceFn)(%s);" % (result, ", ".join(["OriginalFn"] + plugin_params)))
-    lines.append("\t\ttypedef void (*AfterFn)(%s);" % ", ".join(plugin_params + slot))
+    lines += ["\t\t" + typedef for typedef in hook_type_lines(result, plugin_params, "Fn")]
     lines.append("\t\tCivHookCtx civ_h;")
     if self_type:
         lines.append("\t\t%s self;" % self_type)
@@ -678,30 +675,137 @@ def hooked_signature(fn, data):
     return ("static " if fn["static_method"] else "") + result + " " + fn["hook_key"]
 
 
-def write_plugin_header(project, registry, hooks):
-    signatures = dict((fn["hook_id"], fn["signature"]) for fn in hooks)
-    lines = [
-        "#pragma once",
-        "",
-        "// Generated: one namespace per hook point, with its id and the function it hooks.",
-        "",
-        "namespace CivHooks",
-        "{",
+def plugin_spelling(type_text):
+    # Visual C++ 2008 reads >> as the shift operator, so nested template arguments need a space between them.
+    while ">>" in type_text:
+        type_text = type_text.replace(">>", "> >")
+    return type_text
+
+
+def hook_type_lines(result, params, suffix=""):
+    """The typedefs of a hook point's original function, and of a before-hook, after-hook and replacement on it."""
+    slot = [] if result == "void" else ["CivHookSlot< %s >::Type" % result]
+    original = "Original" + suffix
+    return [
+        "typedef %s (*%s)(%s);" % (result, original, ", ".join(params)),
+        "typedef bool (*Before%s)(%s);" % (suffix, ", ".join(params + slot)),
+        "typedef void (*After%s)(%s);" % (suffix, ", ".join(params + slot)),
+        "typedef %s (*Replace%s)(%s);" % (result, suffix, ", ".join([original] + params)),
     ]
-    live_names = dict((key, name) for (key, _), (hook_id, name) in registry.entries.items() if hook_id in signatures)
+
+
+def plugin_typedefs(fn, qualified=False):
+    """The hook point's typedefs for CivHooks.h: with its types as the game's code writes them, which a plugin cannot
+    always name (a nested type written inside its own class), or qualified, which reads worse but always names it."""
+    if qualified:
+        owner = fn["canonical_class"]
+        params, result = fn["canonical_params"], fn["canonical_result"]
+    else:
+        owner = "::".join([n for n in fn["namespaces"] if n] + [fn["class"] or ""])
+        params, result = [p["type"] for p in fn["params"]], fn["result_type"]
+    self_type = ["%s%s *" % ("const " if fn["const"] else "", owner)] if fn["class"] and not fn["static_method"] else []
+    result = "void" if fn["result"]["kind"] == "void" else result
+    return hook_type_lines(plugin_spelling(result), [plugin_spelling(t) for t in self_type + params])
+
+
+def function_types(fn):
+    """The hooked function's own types, canonically spelled: (result, parameters), self first."""
+    self_type = []
+    if fn["class"] and not fn["static_method"]:
+        self_type = ["%s%s *" % ("const " if fn["const"] else "", fn["canonical_class"])]
+    return fn["canonical_result"], self_type + fn["canonical_params"]
+
+
+PLUGIN_HEADER_INTRO = """#pragma once
+
+// Generated: one struct per hook point, with its id, the function it hooks, and the exact types of the hooks a plugin
+// can register on it, which CivRegisterBefore, CivRegisterAfter and CivRegisterReplace check. A hook point with no
+// types takes a type %(first)s does not declare, or one private to its class: register its hooks
+// with RegisterHook, and match the function by hand.
+
+#include "%(first)s"
+#include "CivPluginApi.h"
+
+namespace CivHooks
+{"""
+
+# A hook point's first line in CivHooks.h, which ends with the struct's closing brace only when it has no types.
+HEADER_HOOK = re.compile(r"^\tstruct (\w+) \{ enum \{ ID = (\d+) \};( \};)?", re.M)
+
+
+def header_hooks(text):
+    """(name, id, has types) for each hook point in CivHooks.h's text."""
+    return [(m.group(1), int(m.group(2)), not m.group(3)) for m in HEADER_HOOK.finditer(text)]
+
+
+def plugin_header(registry, hooks, untyped, plugin_include, qualified=()):
+    """CivHooks.h's text, and the hook id of each line that declares a hook's types, by line number."""
+    by_id = dict((fn["hook_id"], fn) for fn in hooks)
+    lines = (PLUGIN_HEADER_INTRO % {"first": plugin_include}).split("\n")
+    type_lines = {}
+    live_names = dict((key, name) for (key, _), (hook_id, name) in registry.entries.items() if hook_id in by_id)
     for (key, _), (hook_id, name) in sorted(registry.entries.items(), key=lambda item: item[1]):
-        if hook_id in signatures:
-            lines.append("\tnamespace %s { enum { ID = %d }; } // %s" % (name, hook_id, signatures[hook_id]))
+        fn = by_id.get(hook_id)
+        if fn is None:
+            # Left out, so a plugin rebuilt against this SDK stops at its old name rather than being refused in the
+            # game.
+            replacement = live_names.get(key)
+            changed = ": its function changed, and its hook is now %s" % replacement if replacement else ""
+            lines.append("\t// %s (id %d) is no longer a hook point%s." % (name, hook_id, changed))
             continue
-        # Left out, so a plugin rebuilt against this SDK stops at its old name rather than being refused in the game.
-        replacement = live_names.get(key)
-        changed = ": its function changed, and its hook is now %s" % replacement if replacement else ""
-        lines.append("\t// %s (id %d) is no longer a hook point%s." % (name, hook_id, changed))
+        if hook_id in untyped:
+            lines.append("\tstruct %s { enum { ID = %d }; }; // %s" % (name, hook_id, fn["signature"]))
+            continue
+        lines.append("\tstruct %s { enum { ID = %d }; // %s" % (name, hook_id, fn["signature"]))
+        for typedef in plugin_typedefs(fn, hook_id in qualified):
+            lines.append("\t\t" + typedef)
+            type_lines[len(lines)] = hook_id
+        lines.append("\t};")
     lines.append("}")
+    return "\n".join(lines) + "\n", type_lines
+
+
+def failing_hooks(check, type_lines, expected):
+    """The hook points whose typedefs have an error, or name other types than the hooked function's own."""
+    errors, originals = check
+    stray = sorted(line for line in errors if line not in type_lines)
+    if stray:
+        raise RuntimeError("generator: CivHooks.h has errors outside hook types, at lines %s" % stray)
+    failed = set(type_lines[line] for line in errors)
+    for line, types in originals.items():
+        hook_id = type_lines.get(line)
+        if hook_id is not None and types != expected[hook_id]:
+            failed.add(hook_id)
+    return failed
+
+
+def checked_plugin_header(project, registry, hooks):
+    """CivHooks.h's text, and the hook points it gives no types. Each hook point's types are spelled as the game's
+    code writes them, else qualified, else left out, whichever first compiles in a plugin as the function's own."""
+    expected = dict((fn["hook_id"], function_types(fn)) for fn in hooks)
+    qualified, untyped = set(), set()
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "CivHooks.h")
+        for retry_in in (qualified, untyped, None):
+            text, type_lines = plugin_header(registry, hooks, untyped, project.plugin_include, qualified)
+            with open(path, "w", newline="\r\n") as f:
+                f.write(text)
+            failed = failing_hooks(analyze.check_plugin_header(project, path), type_lines, expected)
+            if not failed:
+                return text, untyped
+            if retry_in is None:
+                raise RuntimeError("generator: CivHooks.h still fails for hook points %s" % sorted(failed)[:20])
+            retry_in |= failed
+
+
+def write_plugin_header(project, registry, hooks):
+    """Writes CivHooks.h. Returns the hook points it gives no types."""
+    text, untyped = checked_plugin_header(project, registry, hooks)
     out_dir = os.path.join(project.build_dir, "sdk")
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "CivHooks.h"), "w", newline="\r\n") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write(text)
+    return untyped
 
 
 def replace_once(text, old, new):
@@ -781,7 +885,7 @@ def run(project):
     write_mirror(project, files, edits, wrappers)
     registry.save()
     write_table(project, registry, hand_hook_sites(hooks, files, project.root))
-    write_plugin_header(project, registry, hooks)
+    untyped = write_plugin_header(project, registry, hooks)
     if project.vcproj:
         write_engine_build_files(project)
 
@@ -792,6 +896,8 @@ def run(project):
     )
     if registry.reshaped:
         print("  new numbers for functions whose return type or static changed: %d" % registry.reshaped)
+    if untyped:
+        print("  hook points whose types plugins cannot name, so CivHooks.h leaves them out: %d" % len(untyped))
     if missed or missed_shared:
         print("  export marker not placed (declaration not written literally): %d" % (missed + missed_shared))
     for reason, n in sorted(skipped.items(), key=lambda kv: -kv[1]):

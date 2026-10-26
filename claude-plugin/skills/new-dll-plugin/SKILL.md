@@ -11,7 +11,7 @@ Bazaar replaces Civilization V's core DLL and loads plugin DLLs that hook the ga
 ## 1. Find the SDK and read the guide
 
 - The SDK is the folder named by the `BAZAAR_SDK` environment variable. If that is unset, ask the user where the Bazaar SDK is. In Bazaar's own repository it is `sdk\out\Bazaar SDK`, which running `sdk\build_sdk.py` after a host build lays out.
-- Read `%BAZAAR_SDK%\README.md` in full before writing any code, and `%BAZAAR_SDK%\hand-placed-hooks.md` when choosing hooks. The parameter rules and vetoes are easy to get subtly wrong, and wrong code compiles fine.
+- Read `%BAZAAR_SDK%\README.md` in full before writing any code, and `%BAZAAR_SDK%\hand-placed-hooks.md` when choosing hooks. The parameter rules and vetoes are easy to get subtly wrong.
 - Check the guide's "What you need" against the machine: `%VS90COMNTOOLS%` set (Visual C++ 2008), the Civilization V SDK, and ModBuddy's build steps in `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy\Civ5Mod.targets`. If something is missing, tell the user what to install, using the guide's links. Installing software is their call.
 
 ## 2. Make the plugin folder with the script
@@ -36,7 +36,7 @@ Then delete the template's example hooks that the plugin does not need, as the g
 
 - Choose the kind of hook as the guide's "Which kind of hook to use" says. If one of VMC's Lua events already does the job, tell the user a plain Lua mod is enough before writing C++.
 - Find the function in `%BAZAAR_SDK%\include\CivHooks.h` by searching for `Class::Method(`, not for a single word.
-- Build the hook's parameter list from that line exactly, with the guide's table: `self` and whether it is const, every parameter in order, `result` as a reference, and a reference to a pointer for functions that return a reference. Registration accepts any function, so a wrong list is caught only when the game crashes or reads garbage. Check it twice.
+- Build the hook's parameter list from that function's block, with the guide's table: `self` and whether it is const, every parameter in order, `result` as a reference, and a reference to a pointer for functions that return a reference. Register it with `CivRegisterBefore`, `CivRegisterAfter` or `CivRegisterReplace`, so the compiler checks the list against the block's types. A block with no types needs `host->RegisterHook`, which checks nothing: there a wrong list is caught only when the game crashes or reads garbage, so check it twice.
 - When the behaviour matters, read the function's code, not just its name. For example, `CvCity::CreateBuilding` also runs when a building is bought. The SDK has headers only. The closest code is Bazaar's own source, which is based on VMC; the Civilization V SDK's `CvGameCoreSource` has Firaxis's original.
 - Register each hook in `CivPluginEntry` with the template's `Check(...)`, so a failed registration shows in `Bazaar.log`.
 

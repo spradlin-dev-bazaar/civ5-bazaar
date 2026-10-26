@@ -61,13 +61,15 @@ HOST_MOD_NAME = "Bazaar Multi-DLL Mod Loader"
 class Project:
     """A tree of C++ sources to hook: the engine, or a small test fixture."""
 
-    def __init__(self, root, sources, include_dirs, build_dir, registry, vcproj=None):
+    def __init__(self, root, sources, include_dirs, build_dir, registry, plugin_include, vcproj=None):
         self.root = os.path.abspath(root)
         self.sources = sources
         self.include_dirs = include_dirs
         self.build_dir = build_dir
         self.registry = registry
         self.vcproj = vcproj
+        # The header CivHooks.h includes for the types its hook points take.
+        self.plugin_include = plugin_include
 
     @property
     def mirror_root(self):
@@ -133,4 +135,12 @@ def engine_sources():
 
 def engine_project():
     includes = [ENGINE_DIR] + [os.path.join(SOURCE_ROOT, inc) for inc in SUPPORT_INCLUDE]
-    return Project(ENGINE_DIR, engine_sources(), includes, BUILD_DIR, os.path.join(HERE, "hook-ids.txt"), VCPROJ)
+    return Project(
+        ENGINE_DIR,
+        engine_sources(),
+        includes,
+        BUILD_DIR,
+        os.path.join(HERE, "hook-ids.txt"),
+        "CvGameCoreDLLPCH.h",
+        VCPROJ,
+    )

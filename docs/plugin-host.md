@@ -169,7 +169,7 @@ All three are per-plugin, and the SDK template ships with them filled in; the ho
 
 A folder shipped with each host release (also the thing other developers download), laid out by `sdk/build_sdk.py`:
 
-- `include/` the engine's headers as the host was built from them, with the export marker resolving to import, the Firaxis headers they include, `CivPluginApi.h` (the handshake, the API version and the hand-placed hooks) and `CivHooks.h` (every hook's number, with the function's signature as a comment; typed declarations are issue #10);
+- `include/` the engine's headers as the host was built from them, with the export marker resolving to import, the Firaxis headers they include, `CivPluginApi.h` (the handshake, the API version, the hand-placed hooks and the typed registration functions) and `CivHooks.h` (every hook's number and the function's signature, with the exact type of each kind of hook when a plugin can name the types the function takes);
 - `lib/` the host's import library, `CvGameCore_Expansion2.lib`, and the Firaxis libraries;
 - `CivPlugin.vsprops` the compiler and linker settings of the host build, with paths through the `BAZAAR_SDK` environment variable;
 - `README.md`, the plugin-writing guide (sdk/README.md), and `hand-placed-hooks.md`;

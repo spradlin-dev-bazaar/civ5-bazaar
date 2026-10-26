@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "sdk"))
 import build_docs  # noqa: E402
 import build_sdk  # noqa: E402
 import common  # noqa: E402
+import generate  # noqa: E402
 import layouts  # noqa: E402
 import mods  # noqa: E402
 import version  # noqa: E402
@@ -46,7 +47,6 @@ PART_WAY = (
     " any it added, which git status lists"
 )
 
-HOOK_LINE = re.compile(r"^\tnamespace (\w+) \{ enum \{ ID = (\d+) \}; \}", re.M)
 EXPORT_LINE = re.compile(r"^ +\d+ +[0-9A-F]+ +[0-9A-F]{8} (\S+)", re.M)
 EXPORT_COUNT = re.compile(r"^ +(\d+) number of names$", re.M)
 API_VERSION_LINE = re.compile(layouts.API_NUMBER % "(?:MAJOR|MINOR)")
@@ -177,8 +177,7 @@ def saved_release():
 
 
 def hooks_from(text):
-    found = sorted(HOOK_LINE.findall(text), key=lambda hook: int(hook[1]))
-    return ["%s\t%s" % (hook_id, name) for name, hook_id in found]
+    return ["%d\t%s" % (hook_id, name) for name, hook_id, _ in sorted(generate.header_hooks(text), key=lambda h: h[1])]
 
 
 def current_hooks():

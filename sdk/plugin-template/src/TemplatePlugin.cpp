@@ -61,10 +61,9 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	s_host = host;
 	plugin->name = "Template Plugin";
 	plugin->version = PLUGIN_VERSION;
-	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn), "before CvPlayer::doTurn");
+	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
-	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame),
-		"after CvLuaGame::RegisterMembers");
+	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	return true;
 }
 

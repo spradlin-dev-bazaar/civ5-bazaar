@@ -6,6 +6,13 @@
 
 // A stand-in engine, hooked by the real generator at test time. Each function is a shape the
 // generator must handle.
+
+// Shares its name with FakeUnit's private Hidden, which Peek takes.
+struct Hidden
+{
+	long other;
+};
+
 class FakeUnit
 {
 public:
@@ -34,6 +41,22 @@ public:
 #endif
 	void CancelOrders(int reason);
 	bool PlayedByPlugin(int player) const;
+
+private:
+	struct Hidden
+	{
+		int value;
+	};
+
+public:
+	int Peek(const Hidden& hidden) const;
+
+	enum Mood
+	{
+		CALM,
+		ANGRY,
+	};
+	int Feel(Mood mood) const;
 
 	int m_notified;
 	std::string m_name;

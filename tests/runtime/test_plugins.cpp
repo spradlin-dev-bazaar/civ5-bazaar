@@ -1,11 +1,11 @@
 // Loading plugins, running their hooks, catching their crashes, and sharing memory with them.
 #include "harness.h"
+#include "fake_engine.h"
 #include "CivHooks.h"
 #include "CivHostCrash.h"
 #include "CivHostHand.h"
 #include "CivHostHooks.h"
 #include "CivHostPath.h"
-#include "fake_engine.h"
 
 #include <dbghelp.h>
 #include <malloc.h>

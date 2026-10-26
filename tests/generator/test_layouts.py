@@ -254,7 +254,7 @@ class RunTest(unittest.TestCase):
         texts = iter([plugin, host if host is not None else plugin])
         out = io.StringIO()
         with mock.patch.object(layouts, "compile_report", lambda *args: next(texts)):
-            with redirect_stdout(out):
+            with mock.patch.object(layouts, "check_hooks_header", lambda *args: None), redirect_stdout(out):
                 code = layouts.main(["--accept"] if step == "accept" else [])
         return code, out.getvalue()
 
@@ -376,7 +376,7 @@ class RealReportTest(unittest.TestCase):
                 "struct Unit : public Base { %s };\n"
                 "struct Outer { struct iterator { int* p; }; iterator m_it; };\n" % unit_body
             )
-        return layouts.compile_report(unit, [], [])
+        return layouts.compile_report(unit, [], [], "plugins'")
 
     def report_of(self, unit_body):
         return layouts.parse_report(self.compiled(unit_body))

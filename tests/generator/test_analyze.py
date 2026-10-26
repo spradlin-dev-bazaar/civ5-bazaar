@@ -14,6 +14,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "generator"))
 
 import analyze  # noqa: E402
+import common  # noqa: E402
 
 
 class ProjectErrorsTest(unittest.TestCase):
@@ -41,6 +42,60 @@ class KnownErrorsTest(unittest.TestCase):
         self.assertEqual(
             analyze.known_errors(path), {("CvDatabaseUtility.h", "expected expression"), ("A.h", "invalid\tname")}
         )
+
+
+class CanonicalParametersTest(unittest.TestCase):
+    def test_a_parameters_top_level_const_and_volatile_are_dropped_and_any_other_kept(self):
+        source = (
+            "struct S { enum E { A }; }; namespace N { struct T {}; }\n"
+            "void f(const int a, const char* const c, char* volatile d, const S e, const N::T& g, S::E h,\n"
+            "       void (*const p)(int), int (*const q)[3]);\n"
+        )
+        tu = analyze.ci.Index.create().parse("f.cpp", args=["-x", "c++"], unsaved_files=[("f.cpp", source)])
+        f = [c for c in tu.cursor.get_children() if c.spelling == "f"][0]
+        self.assertEqual(
+            analyze.canonical_parameters(f.type),
+            ["int", "const char *", "char *", "S", "const N::T &", "S::E", "void (*)(int)", "int (*)[3]"],
+        )
+
+
+class CheckPluginHeaderTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root)
+        self.engine = os.path.join(self.root, "engine")
+        self.sdk = os.path.join(self.root, "sdk")
+        os.makedirs(self.engine)
+        os.makedirs(self.sdk)
+        self.project = common.Project(self.engine, [], [self.engine], self.sdk, "", "Engine.h")
+
+    def write(self, folder, name, text):
+        path = os.path.join(folder, name)
+        with open(path, "w") as f:
+            f.write(text)
+        return path
+
+    def test_an_error_in_the_games_headers_stops_unless_it_is_known(self):
+        self.write(self.engine, "Engine.h", "int broken = ;\n")
+        header = self.write(self.sdk, "CivHooks.h", '#include "Engine.h"\n')
+        with self.assertRaises(RuntimeError):
+            analyze.check_plugin_header(self.project, header)
+        known = {("Engine.h", "expected expression")}
+        with mock.patch.object(analyze, "known_errors", lambda: known):
+            self.assertEqual(analyze.check_plugin_header(self.project, header), (set(), {}))
+
+    def test_each_original_typedef_gives_its_types_and_an_error_gives_its_line(self):
+        self.write(self.engine, "Engine.h", "struct Unit { enum Mood { CALM }; };\n")
+        header = self.write(
+            self.sdk,
+            "CivHooks.h",
+            '#include "Engine.h"\nnamespace CivHooks\n{\n'
+            "\tstruct A { typedef int (*Original)(const Unit *, Unit::Mood, const int); };\n"
+            "\tstruct B { typedef Missing (*Original)(); };\n}\n",
+        )
+        lines, originals = analyze.check_plugin_header(self.project, header)
+        self.assertEqual(lines, {5})
+        self.assertEqual(originals[4], ("int", ["const Unit *", "Unit::Mood", "int"]))
 
 
 if __name__ == "__main__":
