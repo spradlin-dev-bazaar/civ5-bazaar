@@ -29,7 +29,7 @@ Ask the developer before each step that publishes something or changes git: comm
 
 ## 4. Check in the game
 
-This step is the developer's: explain it, then wait for the result.
+This step is the developer's: explain it, then wait for the result. Skip it when Bazaar's mod is the same as at the last release apart from its version number, as in a release that only updates the SDK or the docs.
 
 1. Move any other Bazaar folders, such as test builds, out of `Documents\My Games\Sid Meier's Civilization 5\MODS`.
 2. Copy the two `.civ5mod` files from `dist\v<number>\` into MODS. The game unpacks them when it starts.
@@ -56,4 +56,4 @@ Work from what `number` listed, `git log v<last release>..HEAD`, and the pull re
 
 ## 7. Steam Workshop
 
-The developer uploads every release, pre-releases included, with ModBuddy, by hand: Bazaar's package each time, pasting the description from `workshop\bazaar.txt`, and the VMC Bootstrap, with `workshop\vmc-bootstrap.txt`, only when it has changed. Before the upload, add the release's notes to the top of `workshop\changes.txt` in BBCode, without the install paragraph or the file names, and get them approved; the developer pastes that section as the update's change note, and it goes to main through a small pull request. Before 1.0 the Workshop items stay private. Making them public is the first public release, 1.0, and the repository on GitHub goes public with it: remind the developer.
+The developer uploads every release that changes Bazaar's mod, pre-releases included, with ModBuddy, by hand: Bazaar's package each time, pasting the description from `workshop\bazaar.txt`, and the VMC Bootstrap, with `workshop\vmc-bootstrap.txt`, only when it has changed. A release that only updates the SDK or the docs is not uploaded and gets no change note, since the Workshop page points to GitHub for both. Before the upload, add the release's notes to the top of `workshop\changes.txt` in BBCode, without the install paragraph or the file names, and get them approved; the developer pastes that section as the update's change note, and it goes to main through a small pull request. Before 1.0 the Workshop items stay private. Making them public is the first public release, 1.0, and the repository on GitHub goes public with it: remind the developer.
