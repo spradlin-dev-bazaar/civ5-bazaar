@@ -194,6 +194,12 @@ namespace
 			"new notices of one kind replace the waiting ones of that kind and leave the others");
 		Check(!CivNoticesWaiting(), "taking the notices empties the queue");
 
+		CivQueuePopup("b.dll crashed");
+		CivReplaceNotices("Plugin not loaded", std::vector<std::string>());
+		const std::vector<CivNotice> popups = CivTakeNotices();
+		Check(popups.size() == 1 && popups[0].popup && popups[0].message == "b.dll crashed",
+			"a pop-up waits with the notices, marked as one, and replacing notices leaves it");
+
 		std::vector<std::string> both;
 		both.push_back("a.dll: x");
 		both.push_back("b.dll: y");

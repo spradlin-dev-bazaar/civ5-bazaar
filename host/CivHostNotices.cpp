@@ -17,6 +17,14 @@ void CivQueueNotice(const std::string& summary, const std::string& message)
 	s_notices.push_back(notice);
 }
 
+void CivQueuePopup(const std::string& message)
+{
+	CivNotice notice;
+	notice.message = message;
+	notice.popup = true;
+	s_notices.push_back(notice);
+}
+
 void CivReplaceNotices(const std::string& summary, const std::vector<std::string>& messages)
 {
 	for (size_t i = s_notices.size(); i-- > 0;)

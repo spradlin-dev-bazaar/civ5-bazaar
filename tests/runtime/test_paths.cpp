@@ -14,6 +14,8 @@ void TestPaths()
 	Check(CivUtf8(CivWide(word)) == word, "a name outside the system's code page survives the trip to Windows and back");
 	Check(CivSameText("\xC3\x84pfel.dll", "\xC3\xA4PFEL.DLL"), "file names match in any case, accented letters too");
 	Check(!CivSameText("a.dll", "b.dll"), "different names do not match");
+	Check(CivShortened(word, word.size()) == word, "a name that fits is not shortened");
+	Check(CivShortened(word, 8) == "\xD0\x9F\xD0\xBB...", "a long name is cut between letters, never inside one, and ends with dots");
 	if (GetACP() == 1252)
 		Check(CivUtf8(CivWide("caf\xE9")) == "caf\xC3\xA9", "a name that is not UTF-8 is read in the system's code page");
 

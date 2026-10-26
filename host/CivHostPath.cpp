@@ -46,6 +46,16 @@ std::string CivUtf8(const std::wstring& wide)
 	return text;
 }
 
+std::string CivShortened(const std::string& utf8, size_t most)
+{
+	if (utf8.size() <= most)
+		return utf8;
+	size_t end = most < 3 ? 0 : most - 3;
+	while (end > 0 && (utf8[end] & 0xC0) == 0x80)
+		--end;
+	return utf8.substr(0, end) + "...";
+}
+
 bool CivSameText(const std::string& a, const std::string& b)
 {
 	return a == b || Upper(CivWide(a)) == Upper(CivWide(b));

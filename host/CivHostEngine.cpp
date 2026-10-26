@@ -57,7 +57,18 @@ namespace
 		if (shuttingDown)
 			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\Bazaar.log.");
 		else
-			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working and was turned off until you return to the main menu. The game may now be unstable: if you save, use a new save slot rather than overwriting your main save. Details are in Logs\\Bazaar.log.");
+		{
+			const std::string rest = " stopped working and was turned off until you return to the main menu.[NEWLINE][NEWLINE]The game may now be unstable. If you want to keep this game, save it in a new save slot rather than over your main save, and play on at your own risk.[NEWLINE][NEWLINE]Details are in Logs\\Bazaar.log.";
+			CivQueuePopup(CivShortened(name, sizeof(CvPopupInfo().szText) - 1 - rest.size()) + rest);
+		}
+	}
+
+	void ShowPopup(const std::string& text)
+	{
+		// The game's TextPopup.lua takes Data1 as the width to wrap the text at.
+		CvPopupInfo popup(BUTTONPOPUP_TEXT, 500);
+		strncpy_s(popup.szText, sizeof(popup.szText), text.c_str(), _TRUNCATE);
+		GC.GetEngineUserInterface()->AddPopup(popup);
 	}
 
 	const char* const kPluginProblem = "Plugin problem";
@@ -445,7 +456,12 @@ void CivHostOnGameUpdate()
 	// A plugin's notification hook can crash here, and the crash's own notice must not move the strings being sent.
 	const std::vector<CivNotice> sending = CivTakeNotices();
 	for (size_t i = 0; i < sending.size(); ++i)
-		notifications->Add(NOTIFICATION_GENERIC, sending[i].message.c_str(), sending[i].summary.c_str(), -1, -1, -1);
+	{
+		if (sending[i].popup)
+			ShowPopup(sending[i].message);
+		else
+			notifications->Add(NOTIFICATION_GENERIC, sending[i].message.c_str(), sending[i].summary.c_str(), -1, -1, -1);
+	}
 }
 
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.
