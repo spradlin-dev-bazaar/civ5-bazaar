@@ -147,6 +147,8 @@ Load order is the list on the screen, top first.
 
 The host's DLL GUID is what saves record. From 0.5, Bazaar keeps each plugin's own data in the save. When the game writes a save, Bazaar asks each plugin that registered for it for its data and writes it under the plugin's name. When the game reads the save, Bazaar hands each plugin its own data back; one plugin's data never reaches another. Bazaar's part of the save carries a version number, as each part of the game's own save does, so a game saved before 0.5 still loads, and the data of a plugin that is not loaded is skipped.
 
+A plugin can also give players, cities, units and plots values of its own, since it cannot add fields to the engine's classes. It declares each value once, such as a whole number called Kills on every unit, and reads and sets it through Bazaar for any object. Bazaar saves and loads the values with the plugin's data, drops an object's values when the object is gone, and carries them over when the game replaces an object with a new one, as it does for a captured city or an upgraded unit. The plugin chooses, for each value, whether it carries over.
+
 Which saves need which plugins is left to the game's own mod settings. A plugin mod that keeps data in saves sets AffectsSavedGames, so a save made with it cannot be loaded without it, and MinCompatibleSaveVersion, the oldest version of the mod whose saves it can still load.
 
 Lua mods keep data in a save through the game's own store, `Modding.OpenSaveData()`, as Firaxis's scenarios do. A plugin can use it too, through a Lua part of its own, but nothing in Lua runs just before a save: the data has to be written each time it changes, and after a load the plugin's C++ part has no data until its Lua part hands it back. It suits plugins with little data that changes at moments Lua sees.
@@ -298,7 +300,7 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 - #19: the small bugs in the Claude Code plugin's scripts, event list and evals are fixed;
 - #46: the docs home page names the site once in its title.
 
-**P3.2 — plugin saves (#50).** Plugins keep their own data in saved games, as described under Save games, and the SDK guide and the plugin template show how. Exit: a plugin's data survives saving and loading in the game, and a game saved with 0.4 still loads.
+**P3.2 — plugin saves (#50).** Plugins keep their own data in saved games, and their own values on players, cities, units and plots, as described under Save games; the SDK guide and the plugin template show how. Exit: a plugin's data and values survive saving and loading in the game, a value carries over when a city is captured and when a unit upgrades, and a game saved with 0.4 still loads.
 
 **P3.3 — multiplayer and hot seat, first stage (#51).** First a multiplayer game and a hot seat game with Bazaar and no plugins, since VMC itself was never tested in multiplayer. Then: every player's computer loads the same plugins in the same order; a plugin crash on one computer does not put the game out of step; the multiplayer and hot seat setup screens reach the Plugins screen; and the MCP plugin's seats are checked in hot seat. Then the mods' multiplayer and hot seat settings change, for Bazaar and both templates. A plugin list players can share, which also names the mods they still need, comes in a later release. Exit: a multiplayer game on two computers and a hot seat game, each played for a few turns with the template plugin and the MCP plugin.
 
