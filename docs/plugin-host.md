@@ -1,6 +1,6 @@
 # Bazaar Multi-DLL Mod Loader: one DLL, many plugin DLLs
 
-Status: planned 2026-10-19, reworked 2026-10-21. P0 to P2.5 are done, and 0.4.1 is the newest pre-release. What P3 and the later phases add is a plan.
+Status: planned 2026-10-19, reworked 2026-10-21. P0 to P2.5 are done, and 0.4.1 is the newest pre-release. P3.1 is under way on the p3.1 branch. What the rest of P3 and the later phases add is a plan.
 
 ## Goal
 
@@ -215,7 +215,7 @@ Functions are not described in bulk; a function with no hand-written description
 
 ## The MCP plugin
 
-`Claude/` (37 files, ~11,800 lines, counted 2026-10-21), today part of the Local MCP Server mod in the civ5-mods repository, moves to a new repository of its own and becomes `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
+`Claude/` (37 files, ~11,800 lines, counted 2026-10-21), once part of the Local MCP Server mod in the civ5-mods repository, moved in P2 to a repository of its own and became `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changed: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler were already self-contained. The work was:
 
 1. replace each engine edit with a hook registration from the table above;
 2. move the `CvLuaGame.cpp` methods into the plugin and add them to the `Game` table from an after-hook on `CvLuaGame::RegisterMembers`, as the template's `AfterRegisterGame` does;
@@ -249,7 +249,7 @@ A release is made on the developer's machine, because the host, the SDK and the 
 6. **Docs site.** A GitHub Action runs when a release is published, pre-releases included. Once per repository, Pages must deploy from GitHub Actions, and the github-pages environment must let tags matching `v*` deploy. It takes the site out of that release's docs zip and publishes it on GitHub Pages, so the site always shows the newest release. The repository stays private until 0.5, when the Workshop items go public, and becomes public with them. Until then the project's GitHub Team plan publishes Pages from the private repository, and the site itself is public. The Action can also be run by hand on any release to publish its site again.
 7. **Workshop.** Every release that changes Bazaar's mod, pre-releases included, is uploaded to the Steam Workshop by hand in ModBuddy: Bazaar's package each time, with the release's section of `workshop/changes.txt` as the change note, and the VMC Bootstrap only when it has changed. Before 0.5 the Workshop items stay private; they go public with 0.5, when the repository does. A new major version goes up as new Workshop items, not as an update: games saved with the old version need its mod, and plugins built for it keep working there, so the old items stay up. The Workshop page points to the GitHub release for the SDK and docs. A release that only updates the SDK or the docs is not uploaded, since the Workshop page points to GitHub for both.
 
-One check before the second release, when Bazaar's mod version first goes up: whether a save made with the first release still loads after the player updates to the second, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
+Checked before the second release, when Bazaar's mod version first went up: a save made with the first release still loads after the player updates to the second, though Civ 5 records each mod's version in the save. So Bazaar's mod version goes up with every release, as step 2 says.
 
 ### Releasing a plugin or Lua mod
 
@@ -302,13 +302,17 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 - #33: Bazaar loads plugins whatever characters their paths hold;
 - #9: `Bazaar.log` starts afresh each time the game starts;
 - #19: the small bugs in the Claude Code plugin's scripts, event list and evals are fixed;
-- #46: the docs home page names the site once in its title.
+- #46: the docs home page names the site once in its title;
+- #28: the plugin order functions whose names collided are renamed;
+- #31: the host's source files are listed in one place, so every host file builds without being listed.
+
+The other maintainability issues (#6, #11, #14, #16, #17, #21, #23, #24, #26, #27, #29, #30, #32, #34, #35) each name the change that should set them off. They wait for it, in whichever phase it comes.
 
 **P3.2 — plugin saves (#50).** Plugins keep their own data in saved games, and their own values on players, cities, units and plots, as described under Save games; the SDK guide and the plugin template show how. Exit: a plugin's data and values survive saving and loading in the game, a value carries over when a city is captured and when a unit upgrades, and a game saved with 0.4 still loads.
 
-**P3.3 — multiplayer and hot seat, first stage (#51).** First a multiplayer game and a hot seat game with Bazaar and no plugins, since VMC itself was never tested in multiplayer. Then: every player's computer loads the same plugins in the same order; a plugin crash on one computer does not put the game out of step, and in hot seat its pop-up is not lost when the turn passes to the next player; the multiplayer and hot seat setup screens reach the Plugins screen; and the MCP plugin's seats are checked in hot seat. Then the mods' multiplayer and hot seat settings change, for Bazaar and both templates. A plugin list players can share, which also names the mods they still need, comes in a later release. Exit: a multiplayer game on two computers and a hot seat game, each played for a few turns with the template plugin and the MCP plugin.
+**P3.3 — release 0.5.0 and go public.** The freeze moves from 1.0 to 0.5 wherever it is written: the release script, its skill, the layout check, the SDK guide and the docs. Then a last look at everything plugins rely on, since it freezes now; the release of 0.5.0, checked in the game with a save from 0.4; and the public launch: the repository goes public, Bazaar's two Workshop items get 0.5.0 and go public, and the MCP plugin makes its first public release, from its own repository. Exit: 0.5.0 and the MCP plugin released and public on GitHub and the Workshop, with every issue in P3 closed.
 
-**P3.4 — release 0.5.0 and go public.** The freeze moves from 1.0 to 0.5 wherever it is written: the release script, its skill, the layout check, the SDK guide and the docs. Then a last look at everything plugins rely on, since it freezes now; the release of 0.5.0, checked in the game with a save from 0.4; and the public launch: the repository goes public, Bazaar's two Workshop items get 0.5.0 and go public, and the MCP plugin makes its first public release, from its own repository. Exit: 0.5.0 and the MCP plugin released and public on GitHub and the Workshop, with every issue in P3 closed.
+**Between 0.5 and 1.0 — multiplayer and hot seat, if possible (#51).** Nice to have, somewhere in 0.6 to 0.9, and only if it turns out to be possible. Until then Bazaar's mod and both templates stay marked single player only. First a multiplayer game and a hot seat game with Bazaar and no plugins, since VMC itself was never tested in multiplayer; if that fails in ways Bazaar cannot fix, multiplayer stays out. Then: every player's computer loads the same plugins in the same order; a plugin crash on one computer does not put the game out of step, and in hot seat its pop-up is not lost when the turn passes to the next player; the multiplayer and hot seat setup screens reach the Plugins screen; and the MCP plugin's seats are checked in hot seat. Then the mods' multiplayer and hot seat settings change, for Bazaar and both templates. Since 0.5 froze what plugins rely on, anything this adds to the plugin API is an addition. A plugin list players can share, which also names the mods they still need, comes after this first stage. Exit: a multiplayer game on two computers and a hot seat game, each played for a few turns with the template plugin and the MCP plugin.
 
 **P4 — a clean core, 1.0.0.** 1.0.0 is the first break, made so the core becomes a clean library. It keeps the Firaxis code and what other mods rely on: VMC's Lua events and its data options. VMC's switched gameplay features and its bug fixes move into Bazaar plugins, one for each of VMC's pick'n'mix mods and one for the bug fixes, built and released together from one repository of their own against each Bazaar release. The first step sorts every VMC option, and every change VMC makes that is always on, into what stays and what moves, and the list goes into this plan. Bazaar's mod marks whoward69's original pick'n'mix mods as incompatible, and its Workshop description links to the new plugins. 1.0.0 is released with `prepare --major`, on new Workshop items, and every plugin is rebuilt against it. Exit: 1.0.0 and the new plugins released and public, each moved feature checked in the game.
 
