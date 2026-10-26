@@ -164,11 +164,12 @@ def page(outline):
         (label, None if target == outline.path else rel_link(outline.path, target)) for label, target in outline.trail
     ]
     body = "<h1>%s</h1>" % esc(outline.heading) + "".join(block(b, outline.path) for b in outline.blocks)
+    title = outline.title if outline.title == SITE_NAME else "%s - %s" % (outline.title, SITE_NAME)
     return (
         "<!doctype html>\n"
         '<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        "<title>%(title)s - %(site)s</title>"
+        "<title>%(title)s</title>"
         '<link rel="stylesheet" href="%(root)s%(style)s">'
         '<script defer src="%(root)s%(script)s"></script>'
         '</head><body data-root="%(root)s" data-index="%(index)s">'
@@ -179,7 +180,7 @@ def page(outline):
         "<footer>%(footer)s</footer>"
         "</body></html>\n"
     ) % {
-        "title": esc(outline.title),
+        "title": esc(title),
         "site": esc(SITE_NAME),
         "root": esc(root),
         "style": STYLE_FILE,

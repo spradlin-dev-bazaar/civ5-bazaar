@@ -52,7 +52,7 @@ static int Hello(lua_State* L)
 // The Game table is on top of the Lua stack while its methods are registered.
 static void AfterRegisterGame(lua_State* L)
 {
-	lua_pushcclosure(L, &Hello, 0);
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello);
 	lua_setfield(L, -2, "TemplateHello");
 }
 
@@ -61,10 +61,9 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	s_host = host;
 	plugin->name = "Template Plugin";
 	plugin->version = PLUGIN_VERSION;
-	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn), "before CvPlayer::doTurn");
+	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
-	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame),
-		"after CvLuaGame::RegisterMembers");
+	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	return true;
 }
 

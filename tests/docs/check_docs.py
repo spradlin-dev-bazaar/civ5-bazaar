@@ -35,7 +35,7 @@ DECLARATIONS = {
     "Thing::Score(bool) const": [
         "static bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);",
         "static int ReplaceThing_Score(int (*original)(const Thing*, bool), const Thing* self, bool bFinal);",
-        "host->RegisterHook(host->pluginIndex, CivHooks::Thing_Score::ID, CIV_HOOK_AFTER, (void*)&AfterThing_Score);",
+        "CivRegisterAfter<CivHooks::Thing_Score>(host, &AfterThing_Score);",
     ],
     "Thing::Get(int)": ["static bool BeforeThing_Get(int i, Thing*& result);"],
     "Thing::Level() const": ["static bool BeforeThing_Level(const Thing* self, int& result);"],
@@ -48,20 +48,26 @@ DECLARATIONS = {
     "Setup::Option::GetValue() const": [
         "static bool BeforeSetup_Option_GetValue(const Setup::Option* self, int& result);"
     ],
+    "Thing::Feel(Mood) const": [
+        "static bool BeforeThing_Feel(const Thing* self, Thing::Mood mood, int& result);",
+        "static int ReplaceThing_Feel(int (*original)(const Thing*, Thing::Mood), const Thing* self, Thing::Mood mood)",
+        "CivRegisterBefore<CivHooks::Thing_Feel>(host, &BeforeThing_Feel);",
+    ],
 }
 WHOLE_DECLARATIONS = {
     "Thing::Reset()": """static bool BeforeThing_Reset(Thing* self);
 static void AfterThing_Reset(Thing* self);
 static void ReplaceThing_Reset(void (*original)(Thing*), Thing* self);
 
-host->RegisterHook(host->pluginIndex, CivHooks::Thing_Reset::ID, CIV_HOOK_BEFORE, (void*)&BeforeThing_Reset);
-host->RegisterHook(host->pluginIndex, CivHooks::Thing_Reset::ID, CIV_HOOK_AFTER, (void*)&AfterThing_Reset);
-host->RegisterHook(host->pluginIndex, CivHooks::Thing_Reset::ID, CIV_HOOK_REPLACE, (void*)&ReplaceThing_Reset);
+CivRegisterBefore<CivHooks::Thing_Reset>(host, &BeforeThing_Reset);
+CivRegisterAfter<CivHooks::Thing_Reset>(host, &AfterThing_Reset);
+CivRegisterReplace<CivHooks::Thing_Reset>(host, &ReplaceThing_Reset);
 """,
     "Measure(const Shape &)": """static bool BeforeMeasure(const Shape& shape, int& result);
 static void AfterMeasure(const Shape& shape, int& result);
 static int ReplaceMeasure(int (*original)(const Shape&), const Shape& shape);
 
+// CivHooks.h gives this hook point no types, so nothing checks these hooks' parameters.
 host->RegisterHook(host->pluginIndex, CivHooks::Measure::ID, CIV_HOOK_BEFORE, (void*)&BeforeMeasure);
 host->RegisterHook(host->pluginIndex, CivHooks::Measure::ID, CIV_HOOK_AFTER, (void*)&AfterMeasure);
 host->RegisterHook(host->pluginIndex, CivHooks::Measure::ID, CIV_HOOK_REPLACE, (void*)&ReplaceMeasure);
@@ -81,7 +87,8 @@ def crlf_copy(sources, name):
 
 
 def project(root, sources):
-    return common.Project(root, sources, [root], os.path.join(root, "build"), os.path.join(root, "hook-ids.txt"))
+    registry = os.path.join(root, "hook-ids.txt")
+    return common.Project(root, sources, [root], os.path.join(root, "build"), registry, plugin_include="docs_engine.h")
 
 
 def fixture_project(name, edits=()):
@@ -663,6 +670,7 @@ def html_problems(site):
         THING + "index.html": [
             '<a href="Inline.html" title="Thing::Inline() const">Inline() const</a> <span class="badge">'
         ],
+        "index.html": ["<title>Bazaar developer reference</title>"],
     }
     problems = []
     for path, texts in wanted.items():

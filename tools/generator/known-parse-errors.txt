@@ -1,4 +1,14 @@
-# Parse errors outside function bodies that are known to be harmless, as file<TAB>message.
+# Parse errors outside function bodies that are known to be harmless, as file<TAB>message<TAB>the text of the line it
+# is on (spaces and tabs may differ). An entry stops matching when its line's text changes.
 # CvDatabaseUtility.h names a template parameter 'default', which MSVC accepts and clang does not; templates get no hooks.
-CvDatabaseUtility.h	invalid parameter name: 'default' is a keyword
-CvDatabaseUtility.h	expected expression
+CvDatabaseUtility.h	invalid parameter name: 'default' is a keyword	void InitializeArray(T*& pArray, const char* szTableName, T default = (T)0);
+CvDatabaseUtility.h	invalid parameter name: 'default' is a keyword	inline void CvDatabaseUtility::InitializeArray(T*& pArray, const char* szTableName, T default)
+CvDatabaseUtility.h	expected expression	InitializeArray(pArray, count, default);
+# FirePlace's headers, whose errors only the layout check stops on (MSVC compiles them): errors inside templates,
+# which the record leaves out. FFastList.h has `friend class TYPE;` twice, and both give the error.
+FFastAllocator.h	use of class template 'FFastAllocator' requires template arguments	void operator = (const FFastAllocator& rhs){}
+FFastList.h	expected member name or ';' after declaration specifiers	explicit TYPE( const TYPE& rhs ) : BASE_TYPE( rhs ) {};
+FFastList.h	expected ')'	explicit TYPE( const TYPE& rhs ) : BASE_TYPE( rhs ) {};
+FFastList.h	use of undeclared identifier 'rhs'	explicit TYPE( const TYPE& rhs ) : BASE_TYPE( rhs ) {};
+FFastList.h	'explicit' can only appear on non-static member functions	explicit TYPE( const TYPE& rhs ) : BASE_TYPE( rhs ) {};
+FFastList.h	typedef 'TYPE' cannot be referenced with a class specifier	friend class TYPE;

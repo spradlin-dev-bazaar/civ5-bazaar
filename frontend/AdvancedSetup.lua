@@ -218,7 +218,7 @@ local function OpenNextSetup()
 	end
 	if g_NextSetup == nil then
 		local ok, path = pcall(function()
-			return UI.GetMapPreview("bazaar:nextsetup", Modding.GetActivatedMods(), ContentManager.IsActive(GODS_AND_KINGS, ContentType.GAMEPLAY));
+			return UI.GetMapPreview("bazaar:nextsetup", ContentManager.IsActive(GODS_AND_KINGS, ContentType.GAMEPLAY));
 		end);
 		if not ok or type(path) ~= "string" then
 			print("Bazaar could not open Advanced Setup: " .. tostring(path));

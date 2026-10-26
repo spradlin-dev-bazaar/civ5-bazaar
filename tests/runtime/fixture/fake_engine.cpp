@@ -97,6 +97,16 @@ bool FakeUnit::PlayedByPlugin(int player) const
 	return CivHandIsPluginControlledPlayer(player);
 }
 
+int FakeUnit::Peek(const Hidden& hidden) const
+{
+	return hidden.value;
+}
+
+int FakeUnit::Feel(Mood mood) const
+{
+	return mood == ANGRY ? 1 : 0;
+}
+
 int FakeRules::Bonus(int x)
 {
 	return x + 1;

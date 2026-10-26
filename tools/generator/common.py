@@ -47,9 +47,12 @@ LAYOUT_DEFINES = ["_SECURE_SCL=0", "_HAS_ITERATOR_DEBUGGING=0"]
 
 ENGINE_DEFINES = ["FXS_IS_DLL", "WIN32", "NDEBUG", "_WINDOWS", "_USRDLL", "FINAL_RELEASE", "_CRT_SECURE_NO_WARNINGS"]
 
-# Clang reads the engine as the host build compiles it: with its export define, and what cl defines by itself for /MD
-# and /EHsc.
-CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS", "_MT", "_DLL", "_CPPUNWIND"]
+# What cl defines by itself for /MD and /EHsc.
+CL_DEFINES = ["_MT", "_DLL", "_CPPUNWIND"]
+
+# Clang reads the engine as the host build compiles it, with its export define. The layout defines are set here too,
+# since parse-shims\msvc-leniency.h reads standard headers before CvGameCoreDLLPCH.h can set them.
+CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS"] + LAYOUT_DEFINES + CL_DEFINES
 
 PLUGIN_DEFINES = ["CIV_HOST_API=__declspec(dllimport)"] + LAYOUT_DEFINES + ENGINE_DEFINES
 
@@ -61,13 +64,15 @@ HOST_MOD_NAME = "Bazaar Multi-DLL Mod Loader"
 class Project:
     """A tree of C++ sources to hook: the engine, or a small test fixture."""
 
-    def __init__(self, root, sources, include_dirs, build_dir, registry, vcproj=None):
+    def __init__(self, root, sources, include_dirs, build_dir, registry, plugin_include, vcproj=None):
         self.root = os.path.abspath(root)
         self.sources = sources
         self.include_dirs = include_dirs
         self.build_dir = build_dir
         self.registry = registry
         self.vcproj = vcproj
+        # The header CivHooks.h includes for the types its hook points take.
+        self.plugin_include = plugin_include
 
     @property
     def mirror_root(self):
@@ -78,30 +83,72 @@ class Project:
         return os.path.join(self.mirror_root, os.path.basename(self.root))
 
     def contains(self, path):
-        if not path:
-            return False
-        return os.path.normcase(os.path.abspath(path)).startswith(os.path.normcase(self.root) + os.sep)
+        return under(path, [self.root])
 
     def clang_args(self):
-        args = [
-            "-x",
-            "c++",
-            "--target=i686-pc-windows-msvc",
-            "-fms-extensions",
-            "-fms-compatibility",
-            "-fms-compatibility-version=15.00",
-            "-fdelayed-template-parsing",
-            "-nostdlibinc",
-            "-Wno-everything",
-            "-ferror-limit=0",
-            "-include",
-            os.path.join(HERE, "parse-shims", "msvc-leniency.h"),
-        ]
-        args += ["-D" + d for d in CLANG_DEFINES]
-        for inc in VS2008_INCLUDE:
-            args += ["-isystem", inc]
-        args += ["-I" + inc for inc in self.include_dirs]
-        return args
+        return clang_arguments(CLANG_DEFINES, self.include_dirs)
+
+
+def under(path, folders):
+    if not path:
+        return False
+    path = os.path.normcase(os.path.abspath(path))
+    return any(path.startswith(os.path.normcase(os.path.abspath(folder)) + os.sep) for folder in folders)
+
+
+def clang_arguments(defines, include_dirs):
+    args = [
+        "-x",
+        "c++",
+        "--target=i686-pc-windows-msvc",
+        "-fms-extensions",
+        "-fms-compatibility",
+        "-fms-compatibility-version=15.00",
+        "-fdelayed-template-parsing",
+        "-nostdlibinc",
+        "-Wno-everything",
+        "-ferror-limit=0",
+        "-include",
+        os.path.join(HERE, "parse-shims", "msvc-leniency.h"),
+    ]
+    args += ["-D" + d for d in defines]
+    for inc in VS2008_INCLUDE:
+        args += ["-isystem", inc]
+    args += ["-I" + inc for inc in include_dirs]
+    return args
+
+
+def known_errors(path=os.path.join(HERE, "known-parse-errors.txt")):
+    """(file name, message, line text) of each parse error known to be harmless."""
+    entries = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t", 2)
+            if len(fields) != 3:
+                raise RuntimeError("%s: %r needs a file name, a message and a line's text between tabs" % (path, line))
+            entries.add((fields[0], fields[1], even_spaces(fields[2])))
+    return entries
+
+
+def even_spaces(text):
+    return re.sub(r"[ \t]+", " ", text).strip(" ")
+
+
+def source_line(path, number):
+    """A line of a file, numbered as clang numbers it, with its spaces evened out; empty past the end."""
+    with open(path, "rb") as f:
+        # Not str.splitlines, which also breaks at form feeds and other characters clang does not count as line ends.
+        lines = re.split(rb"\r\n|\r|\n", f.read())
+    if not 0 < number <= len(lines):
+        return ""
+    return even_spaces(lines[number - 1].decode("cp1252", errors="replace"))
+
+
+def known_error(known, path, number, message):
+    """Whether known lists this error: its file's name, its message and the text of its line."""
+    return (os.path.basename(path), message, source_line(path, number)) in known
 
 
 def shown(path):
@@ -133,4 +180,12 @@ def engine_sources():
 
 def engine_project():
     includes = [ENGINE_DIR] + [os.path.join(SOURCE_ROOT, inc) for inc in SUPPORT_INCLUDE]
-    return Project(ENGINE_DIR, engine_sources(), includes, BUILD_DIR, os.path.join(HERE, "hook-ids.txt"), VCPROJ)
+    return Project(
+        ENGINE_DIR,
+        engine_sources(),
+        includes,
+        BUILD_DIR,
+        os.path.join(HERE, "hook-ids.txt"),
+        "CvGameCoreDLLPCH.h",
+        VCPROJ,
+    )

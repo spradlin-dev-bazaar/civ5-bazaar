@@ -135,3 +135,8 @@ int FreeHelper(int x)
 {
 	return Thing::Get(x).Score(x, 1);
 }
+
+int Thing::Feel(Mood mood) const
+{
+	return mood;
+}

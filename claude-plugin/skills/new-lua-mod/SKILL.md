@@ -21,9 +21,13 @@ Believe its warnings:
 
 - **never fired**: nothing calls the event, so a mod cannot rely on it.
 - **misnamed in VMC's notes**: subscribe by the code's name, not the notes'.
+- **not in Bazaar's code**: nothing defines or fires the event, so a mod cannot use it.
 - **Also needs**: the code checks a second option too. Switch both on, or the event never fires.
 - **Always on**: the event fires even with its option off, but then with the base game's arguments. Switch the option on to get the arguments listed under it.
 - **Argument count differs**: VMC's notes and code disagree. Use only the arguments both agree on.
+- **Answer `false` by default**: a test-all event where `true` from every handler makes the game do something, rather than go on as usual. Answer `false` in every case the mod does not mean to change.
+
+Other notes on an event's line matter too, such as another case that fires it.
 
 If no event fits, or the mod has to change a rule that no event or option offers, a Lua mod cannot do it. Say so, and suggest a Bazaar DLL plugin instead (the `new-dll-plugin` skill).
 
@@ -40,7 +44,7 @@ powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CLAUDE_SK
 - **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `release.cmd` refuses to make a release until it is changed.
 - **`-Destination`** is the folder to make the mod folder in; it defaults to the current folder. Keep the path short: ModBuddy's build fails once a path inside the mod folder passes 260 characters.
 
-The script copies the template, renames it, gives the mod a new ID on the `<Guid>` line (`<ProjectGuid>` stays), sets the teaser, description and authors (the description also goes into `workshop-description.txt`), and writes the SQL. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause. If the mod turns out to need another option later, add an `UPDATE` line of the same form to the `.sql`, with the option's name exactly as the reference gives it.
+The script copies the template, renames it, gives the mod a new ID in the `<Guid>` (`<ProjectGuid>` stays), sets the teaser, description and authors (the description also goes into `workshop-description.txt`), and writes the SQL. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause. If the mod turns out to need another option later, add an `UPDATE` line of the same form to the `.sql`, with the option's name exactly as the reference gives it.
 
 The template's project file makes the mod depend on Bazaar, which also makes the game load it after VMC's database files, so the SQL finds `CustomModOptions`. It also marks the mod as affecting saved games. Keep that: the SQL is a database change, and a loaded save applies the database changes only of the mods it lists.
 
@@ -50,7 +54,7 @@ The template's project file makes the mod depend on Bazaar, which also makes the
 - Subscribe with `GameEvents.<Name>.Add(function(<arguments>) ... end)`, taking the arguments in the order the reference gives.
 - What the handler returns depends on the event's kind:
   - **hook**: nothing;
-  - **test-all**: `true` to allow, `false` to forbid. Any `false` forbids, so return `true` in every case the mod does not mean to block;
+  - **test-all**: `true` to allow, `false` to forbid. Any `false` forbids, so return `true` in every case the mod does not mean to block. An event the reference marks **answer `false` by default** works the other way: answer `false` unless the mod means the game to act;
   - **test-any**: `true` only in the cases the mod means to say yes to;
   - **value**: the number the reference describes.
 - `print(...)` writes to `Logs\Lua.log`, but only once the game's logging is on: `LoggingEnabled = 1` in `config.ini`, in `Documents\My Games\Sid Meier's Civilization 5`.

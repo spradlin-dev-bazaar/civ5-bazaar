@@ -23,6 +23,11 @@ public:
 	const Thing& Self() const;
 	void Reset();
 	int Weight(int) const;
+	enum Mood
+	{
+		MOOD_CALM
+	};
+	int Feel(Mood mood) const;
 
 protected:
 	int m_i;

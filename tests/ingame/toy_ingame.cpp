@@ -35,9 +35,8 @@ static void Describe(CivPluginInfo* info, const char* name)
 
 typedef int (*ScoreFn)(const CvPlayer*, bool, bool);
 
-static void Register(int hookId, int kind, void* fn, const char* what)
+static void LogRegistered(int result, const char* what)
 {
-	const int result = s_host->RegisterHook(s_host->pluginIndex, hookId, kind, fn);
 	Log("registered %s: %s", what, result == CIV_HOOK_OK ? "ok" : "refused");
 }
 
@@ -65,9 +64,9 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Gold");
-	Register(CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn, "before CvPlayer::doTurn");
-	Register(CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_AFTER, (void*)&AfterDoTurn, "after CvPlayer::doTurn");
-	Register(CivHooks::CvPlayer_GetScore::ID, CIV_HOOK_REPLACE, (void*)&ReplaceScore, "replace CvPlayer::GetScore");
+	LogRegistered(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(s_host, &BeforeDoTurn), "before CvPlayer::doTurn");
+	LogRegistered(CivRegisterAfter<CivHooks::CvPlayer_doTurn>(s_host, &AfterDoTurn), "after CvPlayer::doTurn");
+	LogRegistered(CivRegisterReplace<CivHooks::CvPlayer_GetScore>(s_host, &ReplaceScore), "replace CvPlayer::GetScore");
 	return true;
 }
 
@@ -87,7 +86,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Rival");
-	Register(CivHooks::CvPlayer_GetScore::ID, CIV_HOOK_REPLACE, (void*)&ReplaceScore, "replace CvPlayer::GetScore");
+	LogRegistered(CivRegisterReplace<CivHooks::CvPlayer_GetScore>(s_host, &ReplaceScore), "replace CvPlayer::GetScore");
 	return true;
 }
 
@@ -102,11 +101,25 @@ static void AfterDoTurn(CvPlayer* self)
 	}
 }
 
+// For the tester to call from FireTuner, so the crash comes from Lua rather than from a turn.
+static int CrashFromLua(lua_State* L)
+{
+	int* volatile nowhere = 0;
+	return *nowhere;
+}
+
+static void AfterRegisterGame(lua_State* L)
+{
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &CrashFromLua);
+	lua_setfield(L, -2, "ToyCrashLua");
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Crash");
-	Register(CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_AFTER, (void*)&AfterDoTurn, "after CvPlayer::doTurn");
+	LogRegistered(CivRegisterAfter<CivHooks::CvPlayer_doTurn>(s_host, &AfterDoTurn), "after CvPlayer::doTurn");
+	LogRegistered(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(s_host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	return true;
 }
 
@@ -171,11 +184,18 @@ static int Ping(lua_State* L)
 	return 1;
 }
 
+static int Raise(lua_State* L)
+{
+	return luaL_error(L, "Toy Hand raised this Lua error on purpose");
+}
+
 // The Game table is on top of the stack while its methods are registered.
 static void AfterRegisterGame(lua_State* L)
 {
-	lua_pushcclosure(L, &Ping, 0);
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Ping);
 	lua_setfield(L, -2, "ToyHandPing");
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Raise);
+	lua_setfield(L, -2, "ToyHandRaise");
 }
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
@@ -188,7 +208,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	RegisterHand(CIV_HAND_NOTIFICATION_ADDED, (void*)&HeardNotification, "NotificationAdded");
 	RegisterHand(CIV_HAND_DEAL_RESOLVED, (void*)&HeardDeal, "DealResolved");
 	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled, "UnitOrdersCancelled");
-	Register(CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame, "after CvLuaGame::RegisterMembers");
+	LogRegistered(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(s_host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	return true;
 }
 
@@ -212,7 +232,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Hand Replace");
-	Register(CivHooks::CvNotifications_Add::ID, CIV_HOOK_REPLACE, (void*)&ReplaceAddNotification, "replace CvNotifications::Add");
+	LogRegistered(CivRegisterReplace<CivHooks::CvNotifications_Add>(s_host, &ReplaceAddNotification), "replace CvNotifications::Add");
 	return true;
 }
 

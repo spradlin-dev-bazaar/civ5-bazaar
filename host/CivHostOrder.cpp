@@ -1,21 +1,15 @@
 #include "CivHostOrder.h"
-
-#include <string.h>
+#include "CivHostPath.h"
 
 namespace
 {
 	const char* const kLoad = "load";
 	const char* const kSkip = "skip";
 
-	bool SameFile(const std::string& a, const std::string& b)
-	{
-		return _stricmp(a.c_str(), b.c_str()) == 0;
-	}
-
 	bool Contains(const std::vector<std::string>& files, const std::string& file)
 	{
 		for (size_t i = 0; i < files.size(); ++i)
-			if (SameFile(files[i], file))
+			if (CivSameText(files[i], file))
 				return true;
 		return false;
 	}
@@ -57,7 +51,7 @@ namespace
 			{
 				const std::string& a = order[i].file;
 				const std::string& b = order[i].useBothWith[j];
-				const std::string partner = SameFile(a, file) ? b : (SameFile(b, file) ? a : std::string());
+				const std::string partner = CivSameText(a, file) ? b : (CivSameText(b, file) ? a : std::string());
 				if (!partner.empty() && !Contains(partners, partner))
 					partners.push_back(partner);
 			}
@@ -65,12 +59,20 @@ namespace
 		return partners;
 	}
 
+	const CivNotLoaded* FindNotLoaded(const std::vector<CivNotLoaded>& notLoaded, const std::string& file)
+	{
+		for (size_t i = 0; i < notLoaded.size(); ++i)
+			if (CivSameText(notLoaded[i].file, file))
+				return &notLoaded[i];
+		return 0;
+	}
+
 	bool TakeLoadedRow(const std::vector<CivPluginReportRow>& loaded, const std::string& file, std::vector<bool>* taken,
 		CivPluginReportRow* row)
 	{
 		for (size_t i = 0; i < loaded.size(); ++i)
 		{
-			if ((*taken)[i] || !SameFile(loaded[i].file, file))
+			if ((*taken)[i] || !CivSameText(loaded[i].file, file))
 				continue;
 			(*taken)[i] = true;
 			*row = loaded[i];
@@ -80,18 +82,18 @@ namespace
 	}
 }
 
-std::vector<CivOrderEntry> CivApplyOrder(const std::vector<std::string>& listedFiles, const std::vector<CivOrderEntry>& saved)
+std::vector<CivOrderEntry> CivOrderListedFiles(const std::vector<std::string>& listedFiles, const std::vector<CivOrderEntry>& wanted)
 {
 	std::vector<bool> placed(listedFiles.size(), false);
 	std::vector<CivOrderEntry> order;
-	for (size_t s = 0; s < saved.size(); ++s)
+	for (size_t w = 0; w < wanted.size(); ++w)
 	{
 		for (size_t l = 0; l < listedFiles.size(); ++l)
 		{
-			if (placed[l] || !SameFile(listedFiles[l], saved[s].file))
+			if (placed[l] || !CivSameText(listedFiles[l], wanted[w].file))
 				continue;
 			placed[l] = true;
-			CivOrderEntry entry = saved[s];
+			CivOrderEntry entry = wanted[w];
 			entry.file = listedFiles[l];
 			order.push_back(entry);
 			break;
@@ -115,7 +117,7 @@ std::vector<CivOrderEntry> CivKeepUnlisted(const std::vector<CivOrderEntry>& ord
 	{
 		bool listed = false;
 		for (size_t k = 0; k < kept.size() && !listed; ++k)
-			listed = SameFile(kept[k].file, saved[s].file);
+			listed = CivSameText(kept[k].file, saved[s].file);
 		if (!listed)
 			kept.push_back(saved[s]);
 	}
@@ -171,7 +173,7 @@ CivFilePairs CivUseBothPairs(const std::vector<CivOrderEntry>& order)
 	return pairs;
 }
 
-std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEntry>& order, const std::vector<std::string>& missing,
+std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEntry>& order, const std::vector<CivNotLoaded>& notLoaded,
 	const std::vector<CivPluginReportRow>& loaded)
 {
 	std::vector<CivPluginReportRow> rows;
@@ -179,6 +181,7 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 	for (size_t i = 0; i < order.size(); ++i)
 	{
 		const CivOrderEntry& e = order[i];
+		const CivNotLoaded* notLoadedEntry = FindNotLoaded(notLoaded, e.file);
 		CivPluginReportRow row;
 		row.name = e.name.empty() ? e.file : e.name;
 		row.version = e.version;
@@ -187,10 +190,10 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 			row.status = "Skipped";
 			row.skipped = true;
 		}
-		else if (Contains(missing, e.file))
+		else if (notLoadedEntry)
 		{
 			row.status = CIV_REPORT_NOT_LOADED;
-			row.problems = CIV_REPORT_FILE_NOT_FOUND;
+			row.problems = notLoadedEntry->reason;
 			row.failed = true;
 		}
 		else if (!TakeLoadedRow(loaded, e.file, &taken, &row))
@@ -203,4 +206,19 @@ std::vector<CivPluginReportRow> CivOrderReportRows(const std::vector<CivOrderEnt
 		rows.push_back(row);
 	}
 	return rows;
+}
+
+std::vector<CivPluginReportRow> CivWithNote(const char* warning, const std::vector<CivPluginReportRow>& rows)
+{
+	std::vector<CivPluginReportRow> noted;
+	if (warning)
+	{
+		CivPluginReportRow note;
+		note.name = "Bazaar";
+		note.status = "Warning";
+		note.problems = warning;
+		noted.push_back(note);
+	}
+	noted.insert(noted.end(), rows.begin(), rows.end());
+	return noted;
 }

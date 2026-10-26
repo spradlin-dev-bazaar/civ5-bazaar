@@ -11,7 +11,7 @@ Bazaar replaces Civilization V's core DLL and loads plugin DLLs that hook the ga
 ## 1. Find the SDK and read the guide
 
 - The SDK is the folder named by the `BAZAAR_SDK` environment variable. If that is unset, ask the user where the Bazaar SDK is. In Bazaar's own repository it is `sdk\out\Bazaar SDK`, which running `sdk\build_sdk.py` after a host build lays out.
-- Read `%BAZAAR_SDK%\README.md` in full before writing any code, and `%BAZAAR_SDK%\hand-placed-hooks.md` when choosing hooks. The parameter rules and vetoes are easy to get subtly wrong, and wrong code compiles fine.
+- Read `%BAZAAR_SDK%\README.md` in full before writing any code, and `%BAZAAR_SDK%\hand-placed-hooks.md` when choosing hooks. The parameter rules and vetoes are easy to get subtly wrong.
 - Check the guide's "What you need" against the machine: `%VS90COMNTOOLS%` set (Visual C++ 2008), the Civilization V SDK, and ModBuddy's build steps in `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy\Civ5Mod.targets`. If something is missing, tell the user what to install, using the guide's links. Installing software is their call.
 
 ## 2. Make the plugin folder with the script
@@ -24,11 +24,11 @@ powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CLAUDE_SK
 
 - **`-DisplayName`** is what players see: the mod's name in the Mods menu, the `Build` folder's and the package's name, and the name the plugin reports to Bazaar. Ask the user for it if they have not given one.
 - **The file name** (the DLL's and the project's name, with no spaces) comes from the display name, so `Score Doubler` becomes `ScoreDoubler`. Pass `-FileName` only when the user wants a different one. No other mod may ship a DLL with the same name, because Bazaar finds plugins by file name.
-- **`-Destination`** is the folder to make the plugin folder in; it defaults to the current folder. The script refuses a folder inside the SDK, because the SDK build deletes and rebuilds the SDK folder. Keep the path short: Visual C++ 2008 fails once a path inside the plugin folder passes 260 characters, with PRJ0020 at the link step. If that happens, make the plugin in a folder with a shorter path, rather than shortening the plugin's name.
+- **`-Destination`** is the folder to make the plugin folder in; it defaults to the current folder. The script refuses only a folder inside the SDK that Bazaar's own repository builds, since that build deletes and rebuilds it. Keep the path short: Visual C++ 2008 fails once a path inside the plugin folder passes 260 characters, with PRJ0020 at the link step. If that happens, make the plugin in a folder with a shorter path, rather than shortening the plugin's name.
 - **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `release.cmd` refuses to make a release until it is changed.
 - **`-Sdk`** is needed only when `BAZAAR_SDK` is not set.
 
-The script copies the template without its build output, renames the files, puts the names into the text files, writes a new mod ID on the `<Guid>` line (`<ProjectGuid>` stays), and sets the teaser, description and authors; the description also replaces the template's sentence in `workshop-description.txt`. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause.
+The script copies the template without its build output, renames the files, puts the names into the text files, writes a new mod ID in the `<Guid>` (`<ProjectGuid>` stays), and sets the teaser, description and authors; the description also replaces the template's sentence in `workshop-description.txt`. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause.
 
 Then delete the template's example hooks that the plugin does not need, as the guide's Step 2 describes.
 
@@ -36,7 +36,7 @@ Then delete the template's example hooks that the plugin does not need, as the g
 
 - Choose the kind of hook as the guide's "Which kind of hook to use" says. If one of VMC's Lua events already does the job, tell the user a plain Lua mod is enough before writing C++.
 - Find the function in `%BAZAAR_SDK%\include\CivHooks.h` by searching for `Class::Method(`, not for a single word.
-- Build the hook's parameter list from that line exactly, with the guide's table: `self` and whether it is const, every parameter in order, `result` as a reference, and a reference to a pointer for functions that return a reference. Registration accepts any function, so a wrong list is caught only when the game crashes or reads garbage. Check it twice.
+- Build the hook's parameter list from that function's block, with the guide's table: `self` and whether it is const, every parameter in order, `result` as a reference, and a reference to a pointer for functions that return a reference. Register it with `CivRegisterBefore`, `CivRegisterAfter` or `CivRegisterReplace`, so the compiler checks the list against the block's types. A block with no types needs `host->RegisterHook`, which checks nothing: there a wrong list is caught only when the game crashes or reads garbage, so check it twice.
 - When the behaviour matters, read the function's code, not just its name. For example, `CvCity::CreateBuilding` also runs when a building is bought. The SDK has headers only. The closest code is Bazaar's own source, which is based on VMC; the Civilization V SDK's `CvGameCoreSource` has Firaxis's original.
 - Register each hook in `CivPluginEntry` with the template's `Check(...)`, so a failed registration shows in `Bazaar.log`.
 
@@ -58,6 +58,6 @@ When the user is turning a modified core DLL into a plugin:
 2. Map each edit to a hook:
    - code at the start or end of a function becomes a before-hook or an after-hook;
    - code in the middle becomes a hand-placed hook if one exists, and otherwise a request for one or, as a last resort, a replacement;
-   - `Game.*` Lua methods added in `CvLuaGame.cpp` become an after-hook on `CvLuaGame::RegisterMembers`.
+   - `Game.*` Lua methods added in `CvLuaGame.cpp` become an after-hook on `CvLuaGame::RegisterMembers`, which pushes each one with `host->PushLuaFunction` so that it runs inside Bazaar's crash protection.
 3. Flag code that reads or writes private or protected members: a plugin cannot reach them yet, so it needs another route.
 4. Show the user the list of edits and the hook each one becomes before writing code. That list is the port's design.

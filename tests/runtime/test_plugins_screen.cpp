@@ -1,6 +1,9 @@
-// The Plugins screen's host logic, which needs no plugins: the player's order and the Advanced Setup screen it replaced.
+// The Plugins screen's host logic, which needs no plugins: the player's order, Bazaar's notes and notices, and the
+// Advanced Setup screen it replaced.
 #include "harness.h"
+#include "CivHostNotices.h"
 #include "CivHostOrder.h"
+#include "CivHostPath.h"
 #include "CivHostSetup.h"
 
 #include <stdio.h>
@@ -19,10 +22,10 @@ namespace
 	void WriteText(const std::string& path, const std::string& text)
 	{
 		for (size_t slash = path.find('\\', 3); slash != std::string::npos; slash = path.find('\\', slash + 1))
-			CreateDirectoryA(path.substr(0, slash).c_str(), 0);
-		SetFileAttributesA(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+			CreateDirectoryW(CivWide(path.substr(0, slash)).c_str(), 0);
+		SetFileAttributesW(CivWide(path).c_str(), FILE_ATTRIBUTE_NORMAL);
 		FILE* f = 0;
-		if (fopen_s(&f, path.c_str(), "wb") == 0 && f)
+		if (_wfopen_s(&f, CivWide(path).c_str(), L"wb") == 0 && f)
 		{
 			fwrite(text.data(), 1, text.size(), f);
 			fclose(f);
@@ -32,26 +35,11 @@ namespace
 	std::string ReadText(const std::string& path)
 	{
 		std::string text;
-		FILE* f = 0;
-		if (fopen_s(&f, path.c_str(), "rb") == 0 && f)
-		{
-			char buffer[256];
-			for (size_t n; (n = fread(buffer, 1, sizeof(buffer), f)) > 0;)
-				text.append(buffer, n);
-			fclose(f);
-		}
+		CivReadFile(path, &text);
 		return text;
 	}
 
-	std::string ModInfo(const char* id, int version, const char* files)
-	{
-		char head[256];
-		_snprintf_s(head, sizeof(head), _TRUNCATE, "\xEF\xBB\xBF<?xml version=\"1.0\"?>\r\n<Mod id=\"%s\" version=\"%d\">\r\n", id, version);
-		return std::string(head) + "  <Dependencies>\r\n    <Mod id=\"dependency\" minversion=\"0\" maxversion=\"999\" title=\"Other\" />\r\n"
-			"  </Dependencies>\r\n  <Files>\r\n" + files + "  </Files>\r\n</Mod>\r\n";
-	}
-
-	CivActiveMod Active(const char* id, int version)
+	CivActiveMod Mod(const char* id, int version)
 	{
 		CivActiveMod mod;
 		mod.id = id;
@@ -59,7 +47,15 @@ namespace
 		return mod;
 	}
 
-	void TestApplyOrder()
+	CivModFile File(const std::string& path, bool imported)
+	{
+		CivModFile file;
+		file.path = path;
+		file.imported = imported;
+		return file;
+	}
+
+	void TestOrderListedFiles()
 	{
 		std::vector<std::string> listed;
 		listed.push_back("A.dll");
@@ -70,7 +66,7 @@ namespace
 		saved.push_back(Entry("c.dll", true, "Toy C"));
 		saved.push_back(Entry("gone.dll", false, ""));
 		saved.push_back(Entry("a.DLL", false, ""));
-		const std::vector<CivOrderEntry> order = CivApplyOrder(listed, saved);
+		const std::vector<CivOrderEntry> order = CivOrderListedFiles(listed, saved);
 		Check(order.size() == 4, "every listed plugin is in the order once per listing, and a saved one no longer listed is not");
 		if (order.size() != 4)
 			return;
@@ -118,23 +114,33 @@ namespace
 		entries.push_back(Entry("missing.dll", false, ""));
 		entries.push_back(Entry("last.dll", false, ""));
 		entries.push_back(Entry("ghost.dll", false, ""));
-		const std::vector<std::string> missing(1, "MISSING.dll");
+		entries.push_back(Entry("unsaved.dll", false, ""));
+		const char* const files[] = {"MISSING.dll", "unsaved.dll", "skipped.dll"};
+		const char* const reasons[] = {CIV_REPORT_FILE_NOT_FOUND, CIV_REPORT_NOT_IN_SAVES, CIV_REPORT_FILE_NOT_FOUND};
+		std::vector<CivNotLoaded> notLoaded(3);
+		for (int i = 0; i < 3; ++i)
+		{
+			notLoaded[i].file = files[i];
+			notLoaded[i].reason = reasons[i];
+		}
 		std::vector<CivPluginReportRow> loaded(2);
 		loaded[0].name = "Toy Last";
 		loaded[0].file = "last.dll";
 		loaded[1].name = "Toy First";
 		loaded[1].file = "FIRST.DLL";
-		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(entries, missing, loaded);
-		Check(rows.size() == 5, "the Plugins screen gets one row per plugin in the order");
-		if (rows.size() != 5)
+		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(entries, notLoaded, loaded);
+		Check(rows.size() == 6, "the Plugins screen gets one row per plugin in the order");
+		if (rows.size() != 6)
 			return;
 		Check(rows[0].name == "Toy First" && rows[3].name == "Toy Last",
-			"each loaded plugin's row is matched by its file name and keeps its place among skipped and missing ones");
-		Check(rows[1].skipped && !rows[1].failed && rows[1].status == "Skipped", "a skipped plugin is listed as Skipped, not as a failure");
+			"each loaded plugin's row is matched by its file name and keeps its place among skipped ones and ones not loaded");
+		Check(rows[1].skipped && !rows[1].failed && rows[1].status == "Skipped" && rows[1].problems.empty(),
+			"a skipped plugin is listed as Skipped, not as a failure, even with a reason not to load it");
 		Check(rows[1].name == "Toy Skipped", "a skipped plugin is listed by its saved name");
-		Check(rows[2].failed && rows[2].status == "Not loaded", "a missing file is listed in its place as Not loaded");
-		Check(rows[2].problems == CIV_REPORT_FILE_NOT_FOUND, "a missing plugin's row says the file was not found");
-		Check(rows[2].name == "missing.dll", "a missing plugin is listed by its file name");
+		Check(rows[2].failed && rows[2].status == "Not loaded", "a plugin Bazaar did not load is listed in its place as Not loaded");
+		Check(rows[2].problems == CIV_REPORT_FILE_NOT_FOUND && rows[5].problems == CIV_REPORT_NOT_IN_SAVES,
+			"each plugin not loaded gives its own reason");
+		Check(rows[2].name == "missing.dll", "a plugin not loaded is listed by its file name");
 		Check(rows[4].failed && rows[4].status == "Not loaded", "a plugin with no loaded row is listed as Not loaded, not as blank");
 		Check(rows[0].file == "first.dll", "each row carries the file name as listed, which the screen sends back");
 	}
@@ -157,88 +163,127 @@ namespace
 		const CivFilePairs pairs = CivUseBothPairs(order);
 		Check(pairs.size() == 2 && pairs[0] == CivFilePair("b.dll", "a.dll") && pairs[1] == CivFilePair("b.dll", "c.dll"),
 			"each choice pairs the plugin with the one it is used with");
-		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(order, std::vector<std::string>(), std::vector<CivPluginReportRow>());
+		const std::vector<CivPluginReportRow> rows = CivOrderReportRows(order, std::vector<CivNotLoaded>(), std::vector<CivPluginReportRow>());
 		Check(rows.size() == 2 && rows[1].useBothWith == order[1].useBothWith, "the Plugins screen gets each plugin's choices");
 		Check(rows.size() == 2 && rows[0].useBothWith == std::vector<std::string>(1, "b.dll"), "a choice saved on one plugin's line also shows on the other plugin's row");
 		std::vector<CivOrderEntry> bothLines = order;
 		bothLines[0].useBothWith.push_back("B.DLL");
-		const std::vector<CivPluginReportRow> bothRows = CivOrderReportRows(bothLines, std::vector<std::string>(), std::vector<CivPluginReportRow>());
+		const std::vector<CivPluginReportRow> bothRows = CivOrderReportRows(bothLines, std::vector<CivNotLoaded>(), std::vector<CivPluginReportRow>());
 		Check(bothRows.size() == 2 && bothRows[0].useBothWith.size() == 1 && bothRows[1].useBothWith.size() == 2,
 			"a choice saved on both plugins' lines is listed once on each row");
 		const std::vector<CivOrderEntry> kept = CivKeepUnlisted(std::vector<CivOrderEntry>(1, order[0]), order);
 		Check(kept.size() == 2 && kept[1].useBothWith == order[1].useBothWith, "a plugin whose mod is off keeps its choices when the order is saved");
 	}
+
+	void TestNotes()
+	{
+		const std::vector<CivPluginReportRow> plugins(1);
+		const std::vector<CivPluginReportRow> rows = CivWithNote("outer", CivWithNote("inner", plugins));
+		Check(rows.size() == 3 && rows[0].problems == "outer" && rows[1].problems == "inner" && rows[0].file.empty(),
+			"Bazaar's notes come before the plugins, the last one added first");
+		Check(CivWithNote(NULL, plugins).size() == 1, "no warning adds no note");
+
+		CivTakeNotices();
+		CivQueueNotice("Plugin not loaded", "a.dll: old");
+		CivQueueNotice("Plugin disabled", "b.dll crashed");
+		CivQueueNotice("Plugin not loaded", "c.dll: old");
+		CivReplaceNotices("Plugin not loaded", std::vector<std::string>(1, "a.dll: new"));
+		Check(CivNoticesWaiting(), "queued notices wait for a game");
+		const std::vector<CivNotice> taken = CivTakeNotices();
+		Check(taken.size() == 2 && taken[0].message == "b.dll crashed" && taken[1].message == "a.dll: new",
+			"new notices of one kind replace the waiting ones of that kind and leave the others");
+		Check(!CivNoticesWaiting(), "taking the notices empties the queue");
+
+		CivQueuePopup("b.dll crashed");
+		CivReplaceNotices("Plugin not loaded", std::vector<std::string>());
+		const std::vector<CivNotice> popups = CivTakeNotices();
+		Check(popups.size() == 1 && popups[0].popup && popups[0].message == "b.dll crashed",
+			"a pop-up waits with the notices, marked as one, and replacing notices leaves it");
+
+		std::vector<std::string> both;
+		both.push_back("a.dll: x");
+		both.push_back("b.dll: y");
+		const std::vector<std::string> swapped(both.rbegin(), both.rend());
+		CivForgetNamedNotices();
+		Check(CivReplaceNoticesOnce("Plugin not loaded", both) && CivTakeNotices().size() == 2, "plugins not loaded are named");
+		Check(!CivReplaceNoticesOnce("Plugin not loaded", swapped) && !CivNoticesWaiting(),
+			"plugins still not loaded are not named again, in whatever order they come");
+		Check(CivReplaceNoticesOnce("Plugin not loaded", std::vector<std::string>(1, "a.dll: z")) && CivNoticesWaiting(),
+			"a plugin not loaded for another reason is named again");
+		Check(CivReplaceNoticesOnce("Plugin not loaded", std::vector<std::string>()) && !CivNoticesWaiting(),
+			"a waiting notice goes once its plugin loads");
+		CivReplaceNoticesOnce("Plugin not loaded", both);
+		CivTakeNotices();
+		CivForgetNamedNotices();
+		Check(CivReplaceNoticesOnce("Plugin not loaded", both), "once forgotten, as when the game restarts its core, the same plugins are named again");
+		CivTakeNotices();
+	}
 }
 
 void TestOrder()
 {
-	TestApplyOrder();
+	TestOrderListedFiles();
 	TestOrderText();
 	TestOrderRows();
 	TestUseBoth();
+	TestNotes();
 }
 
 void TestReplacedSetup()
 {
-	const std::string ras = ModInfo("ras-id", 15,
-		"    <File md5=\"1\" import=\"0\">Unused/AdvancedSetup.xml</File>\r\n"
-		"    <File md5=\"2\" import=\"1\">UI Overrides/AdvancedSetup.xml</File>\r\n"
-		"    <File import=\"1\" md5=\"3\">UI Overrides/AdvancedSetup.lua</File>\r\n");
-	std::string id;
-	int version = 0;
-	Check(CivModIdentity(ras, &id, &version) && id == "ras-id", "a mod description gives its ID, not a dependency's");
-	Check(version == 15, "a mod description gives its version");
-	Check(CivImportedFile(ras, "advancedsetup.XML") == "UI Overrides/AdvancedSetup.xml", "it finds a file the mod imports into the game, by name in any case");
-	Check(CivImportedFile(ModInfo("x", 1, "    <File import=\"0\">AdvancedSetup.xml</File>\r\n"), "AdvancedSetup.xml").empty(),
-		"a file the mod does not import is not counted");
-	Check(CivImportedFile(ModInfo("x", 1, "    <File import=\"1\">Fish &amp; Chips/AdvancedSetup.lua</File>\r\n"), "AdvancedSetup.lua")
-			== "Fish & Chips/AdvancedSetup.lua",
-		"an escaped character in a path is read back");
-
-	const std::string root = OutFile("setup_test");
+	// The folder name has Cyrillic letters, which no Western code page has.
+	const std::string root = OutFile("setup_test \xD0\x9C\xD0\xBE\xD0\xB4\xD1\x8B");
 	const std::string mods = root + "\\MODS";
 	const std::string own = mods + "\\Bazaar (v 1)";
 	const std::string game = root + "\\Game";
 	const std::string rasXml = mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.xml";
-	WriteText(mods + "\\RAS (v 15)\\RAS (v 15).modinfo", ras);
 	WriteText(rasXml, "ras xml");
 	WriteText(mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua", "ras lua");
-	WriteText(mods + "\\Other (v 1)\\Other (v 1).modinfo", ModInfo("other-id", 1, "    <File import=\"1\">Other.lua</File>\r\n"));
-	WriteText(own + "\\Bazaar (v 1).modinfo", ModInfo("bazaar-id", 1, "    <File import=\"1\">frontend/AdvancedSetup.xml</File>\r\n"));
 	WriteText(own + "\\frontend\\AdvancedSetup.xml", "bazaar xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "game xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.lua", "game lua");
 	WriteText(game + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "expansion xml");
 
-	std::vector<CivActiveMod> withRas;
-	withRas.push_back(Active("ras-id", 15));
-	withRas.push_back(Active("other-id", 1));
-	withRas.push_back(Active("bazaar-id", 1));
-	const CivReplacedSetup first = CivCopyReplacedSetup(mods, game, own, withRas, true);
+	// Mixed slashes, as the game's mod database gives them.
+	std::vector<CivActiveMod> active;
+	active.push_back(Mod("ras-id", 15));
+	active.back().files.push_back(File(mods + "\\RAS (v 15)\\Unused/AdvancedSetup.xml", false));
+	active.back().files.push_back(File(mods + "\\RAS (v 15)\\UI Overrides/AdvancedSetup.xml", true));
+	active.back().files.push_back(File(mods + "\\RAS (v 15)\\UI Overrides/AdvancedSetup.lua", true));
+	active.push_back(Mod("other-id", 1));
+	active.back().files.push_back(File(mods + "\\Other (v 1)\\Other.lua", true));
+	active.push_back(Mod("bazaar-id", 1));
+	active.back().files.push_back(File(own + "\\frontend/AdvancedSetup.xml", true));
+
+	const CivReplacedSetup first = CivCopyReplacedSetup(game, own, active, true);
 	const std::string copy = own + "\\BazaarNextSetup";
 	Check(first.copy == copy, "another active mod's screen is copied beside Bazaar under a name of its own");
 	Check(ReadText(copy + ".xml") == "ras xml", "its layout is that mod's, and Bazaar's own is passed over");
 	Check(ReadText(copy + ".lua") == "ras lua", "the copied script is that mod's too");
-	Check(first.xmlSource == rasXml, "it says which file it copied");
+	Check(first.xmlSource == rasXml, "it says which file it copied, with Windows slashes");
 
-	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_READONLY);
+	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_READONLY);
 	// This copy is read-only too, and the next copy must still overwrite it.
-	CivCopyReplacedSetup(mods, game, own, withRas, true);
-	Check(!CivCopyReplacedSetup(mods, game, own, withRas, true).copy.empty(), "a read-only source does not stop the next copy");
-	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_NORMAL);
+	CivCopyReplacedSetup(game, own, active, true);
+	Check(!CivCopyReplacedSetup(game, own, active, true).copy.empty(), "a read-only source does not stop the next copy");
+	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_NORMAL);
 
-	std::vector<CivActiveMod> withoutRas(withRas.begin() + 1, withRas.end());
-	CivCopyReplacedSetup(mods, game, own, withoutRas, true);
+	std::vector<CivActiveMod> late(active);
+	late.push_back(Mod("late-id", 2));
+	late.back().files.push_back(File(mods + "\\Late (v 2)\\AdvancedSetup.xml", true));
+	WriteText(mods + "\\Late (v 2)\\AdvancedSetup.xml", "late xml");
+	const CivReplacedSetup lastWins = CivCopyReplacedSetup(game, own, late, true);
+	Check(ReadText(copy + ".xml") == "late xml" && lastWins.luaSource == mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua",
+		"of two mods replacing one file, the later one is copied");
+
+	std::vector<CivActiveMod> withoutRas(active.begin() + 1, active.end());
+	CivCopyReplacedSetup(game, own, withoutRas, true);
 	Check(ReadText(copy + ".xml") == "expansion xml", "with no such mod active, the game's own layout is copied");
 	Check(ReadText(copy + ".lua") == "game lua", "with no such mod active, the game's own script is copied");
-	CivCopyReplacedSetup(mods, game, own, withoutRas, false);
+	CivCopyReplacedSetup(game, own, withoutRas, false);
 	Check(ReadText(copy + ".xml") == "game xml", "the game's base layout is used when Gods and Kings is off");
-	withoutRas.push_back(Active("ras-id", 14));
-	const CivReplacedSetup otherVersion = CivCopyReplacedSetup(mods, game, own, withoutRas, false);
-	Check(otherVersion.xmlSource == game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml",
-		"an installed mod counts only in the version that is active");
 
-	const CivReplacedSetup failed = CivCopyReplacedSetup(mods, root + "\\NoGame", own, withoutRas, false);
+	const CivReplacedSetup failed = CivCopyReplacedSetup(root + "\\NoGame", own, withoutRas, false);
 	Check(failed.copy.empty(), "a screen that cannot be copied gives no path");
 	Check(failed.problem.find("Could not copy") == 0, "a screen that cannot be copied gives a reason");
 }

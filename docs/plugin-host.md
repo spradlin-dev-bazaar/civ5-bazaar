@@ -1,6 +1,6 @@
 # Bazaar Multi-DLL Mod Loader: one DLL, many plugin DLLs
 
-Status: planned 2026-10-19, reworked 2026-10-21. P0, the proof of concept, was finished on 2026-10-22: the generator, the hooked host, plugin loading and unloading and crash handling all work in the game with small test plugins. P1 is under way on the p1 branch: VMC is in, the engine calls are back, the Plugins screen lists, reorders and skips plugins, and the hand-placed hooks are in. The rest of P1 is not built yet. Anything else in this document is a plan unless a section says otherwise.
+Status: planned 2026-10-19, reworked 2026-10-21. P0 to P3.1 are done, and 0.4.1 is the newest pre-release. What the rest of P3 and the later phases add is a plan.
 
 ## Goal
 
@@ -9,7 +9,7 @@ The game loads exactly one rules DLL. Today that DLL is the Local MCP Server mod
 The goal is one **host DLL** that loads any number of **plugin DLLs**, each its own Workshop mod with its own intent:
 
 - the MCP server is a plugin, not part of the host;
-- rules changes and bug fixes are their own plugins (or plain Lua mods on the host's hooks); the host adds none of its own beyond what VMC already carries, and adds to the engine only hand-placed hooks and read-only accessors for state a plugin cannot otherwise reach;
+- rules changes and bug fixes are their own plugins (or plain Lua mods on the host's hooks); the host adds none of its own beyond what VMC already carries, and from 1.0 VMC's own rule changes and bug fixes move out into plugins too. The host adds to the engine only hand-placed hooks and read-only accessors for state a plugin cannot otherwise reach;
 - other developers can write plugins against a documented SDK;
 - an existing DLL mod can become a plugin: each engine function it edited becomes a replacement registered by the plugin, with no change to the host;
 - a plugin built for an older host keeps running on a newer one.
@@ -32,7 +32,7 @@ Plugin DLLs  (ordinary mods: one folder each, with <Name>.dll at its top level)
   <other>.dll            anything else that needs C++; Lua mods use VMC hooks instead
 ```
 
-The host finds plugins through the game's own mod system: each plugin mod inserts one row, its file name, into a `DllPlugins` table, which the host's own mod creates. At the point where VMC reads its own `CustomModOptions` table, the host reads `DllPlugins`, finds each file under the MODS folder, loads it in the order the Plugins screen saved, and runs the handshake below.
+The host finds plugins through the game's own mod system: each plugin mod inserts one row, its file name, into a `DllPlugins` table, which the host's own mod creates. At the point where VMC reads its own `CustomModOptions` table, the host reads `DllPlugins`, finds each file among the files of the mods that are turned on, as the game's own mod database lists them, loads it in the order the Plugins screen saved, and runs the handshake below.
 
 ## Why VMC as the host base
 
@@ -54,11 +54,11 @@ The numbers allow it: the host built from the Firaxis source exports about 14,50
 
 What makes it safe: both sides are built by the same compiler with the shared C runtime (`/MD`) and the same compile flags, so objects, strings and vectors cross the boundary unchanged. The flags must be byte-identical (the map-drawing crash of v40 came from one mismatched define); the SDK ships a property sheet that pins them.
 
-What makes it last: plugins compile the engine's headers into themselves, so field offsets, class sizes and vtable slots are baked into every plugin binary. From 1.0 on, **class layouts and vtables never change**. New host-side state goes in side tables keyed by the object, never in the classes. VMC's compile-time switches are chosen once, compiled in, and toggled at runtime through the database as VMC already does.
+What makes it last: plugins compile the engine's headers into themselves, so field offsets, class sizes and vtable slots are baked into every plugin binary. From 0.5 on, **class layouts and vtables never change** within a major version. New host-side state goes in side tables keyed by the object, never in the classes. VMC's compile-time switches are chosen once, compiled in, and toggled at runtime through the database as VMC already does.
 
 ### 2. Additive builds and the handshake
 
-Every host build carries a host API version. A plugin records the API version it was built against. The rule: a host loads any plugin built against its own version or an earlier one. The host keeps that promise by only adding: new functions, new hook points, new side tables. Nothing shipped is removed, renamed or changed in meaning. From 1.0 on, if a break is ever unavoidable, the major version changes and older plugins are refused. Before 1.0 a build may break the promise if it must; every plugin is then rebuilt against it.
+Every host build carries a host API version. A plugin records the API version it was built against. The rule: a host loads any plugin built against its own version or an earlier one. The host keeps that promise by only adding: new functions, new hook points, new side tables. Nothing shipped is removed, renamed or changed in meaning. From 0.5 on, a break needs a new major version, which refuses older plugins; the first, 1.0, is planned in P4. Before 0.5 a build may break the promise if it must; every plugin is then rebuilt against it.
 
 Each plugin exports the API version it was built against as data, which the template declares in one line. Before loading a plugin, the host reads that version from the file without running any of the plugin's code. A plugin built for a newer host, or for an older major, is not loaded. The refusal is logged, shown on the Plugins screen beside the plugin, and shown as an in-game notification naming the plugin and the two versions. Never a silent skip. Because the host decides before any plugin code runs, a plugin never checks the version itself, and a plugin that uses functions an older host lacks gets the same refusal instead of a Windows load error.
 
@@ -120,22 +120,24 @@ Rules fixes currently inside the DLL that are **not** MCP:
 
 ### 4. Failure containment
 
-C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded. When a plugin faults (access violation, divide by zero, illegal instruction):
+C++ exceptions are on, as in Firaxis's project, because the engine's own code uses them. Nothing here relies on them: crash protection uses Windows structured exception handling, and a C++ exception that escapes a plugin is caught like any other crash. Every call from a wrapper or a hand-placed hook into a plugin is guarded, and so is every call from Lua into a function a plugin added, which the host pushes for the plugin so that Lua calls the host first. A Lua error the plugin raises passes through the guard: Lua raises errors with longjmp, not as an exception, so the guard never sees one. When a plugin faults (access violation, divide by zero, illegal instruction):
 
 - the host logs the plugin, the function, what memory the fault touched and the call stack;
-- the plugin is quarantined until the player returns to the main menu: none of its hooks run again. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
-- an in-game notification names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable and that any save should go to a new slot, and says the details are in Logs\Bazaar.log. A pop-up in the middle of the screen is planned instead (issue #4);
+- the plugin is quarantined until the player returns to the main menu: none of its hooks run again, and its Lua functions raise a Lua error instead of running. There the host calls its shutdown function and unloads it like any other plugin, so a fixed version can be dropped in before a game is started or loaded;
+- a pop-up in the middle of the screen, which the player must close, names the plugin, says it is off until the player returns to the main menu, warns that the game may now be unstable, advises saving to a new slot rather than over the main save and playing on at the player's own risk, and says the details are in Logs\Bazaar.log. A crash while shutting down, at the main menu, is a notification in the next game instead;
 - the game keeps running.
 
 Before unloading any plugin, the host checks that none of its threads is still running inside its DLL. A plugin that left one running, or whose shutdown function crashed, stays in memory and is refused until Civilization V restarts, because unloading it could crash the game.
 
 Known limit: a plugin that faulted halfway through a replace may already have changed some state, and the original then runs on top of it. That turn may be odd; it is still better than a crash to desktop, and the quarantine stops it recurring.
 
+Known limit: a crash caught below a protected Lua call (`lua_pcall`, which the game also uses to fire Lua events) leaves that Lua state's error handling pointing at a call that no longer exists, because the guard unwinds past Lua's own clean-up. The next Lua error in that state may then crash the game; when the protected call was made inside a plugin's Lua function, that is the error the host raises at once to report the crash. The host cannot repair it, since that part of the Lua state is Lua's own; the notice already warns that the game may be unstable.
+
 ### 5. The Plugins screen
 
 When the player presses Next on the Mods browser, the game switches on the enabled mods and the host loads the plugins. A mod cannot add the Plugins screen to the screens that follow: the game builds them at startup, before any mod is on, and files a mod imports only replace screens the game builds later, the first time they open. On the way to starting a game, Advanced Setup is the only such screen. So the Plugins screen takes its place: Mods > Single Player > Set Up Game > Advanced Setup opens the Plugins screen, and its Continue button opens the Advanced Setup screen it replaced.
 
-When two mods import files with the same name, the one the game switches on later wins. The host mod lists Really Advanced Setup as a reference, which makes the game switch the host on after it, so the host's screen wins over that mod's. Another mod that replaces Advanced Setup and is switched on after the host would win instead, and its screen would show in place of the Plugins screen; such a mod gets added to the references once it is known. The plugins still load in the saved order either way. The game also finds screens by file name, so the screen the host replaced cannot be opened under its own name. Continue asks the host's DLL to copy it, from the last active mod that imports it or else from the game, into the host mod's folder under a name of its own, and opens the copy. Nothing in the other mod is changed.
+When two mods import files with the same name, the one installed last wins: the game takes the mod with the newest row in its mod database, whatever order it switches the mods on in. The host's screen wins over Really Advanced Setup's because the host was installed after it, and every update of the host is installed anew. Another mod that replaces Advanced Setup and is installed after the host wins instead, and its screen shows in place of the Plugins screen until the host is updated (#55). The plugins still load in the saved order either way. The game also finds screens by file name, so the screen the host replaced cannot be opened under its own name. Continue asks the host's DLL to copy it, from the last active mod that imports it or else from the game, into the host mod's folder under a name of its own, and opens the copy. Nothing in the other mod is changed.
 
 The Plugins screen is front-end Lua. After loading the plugins, the host writes a `BazaarPlugins` table with one row per plugin (its file, name, version, a status, its problems, whether it failed or was skipped, the plugins it may conflict with, and the ones the player chose to use it with anyway), and the screen lists those rows. Handshake refusals, replace conflicts and crashes show beside the plugin, so the player can see what to move or skip without reading a log; possible conflicts with hand-placed hooks show there too, with a Use both anyway checkbox. Arrows move a plugin up or down, and a checkbox skips it without turning off its mod. Once anything has changed, a Reload Plugins button appears. Reload, Back and Continue all send the new order to the host, which saves it, with the Use both anyway choices, to `ModUserData\Bazaar plugin order.txt`, reloads the plugins and rewrites the table. The host reads that file whenever it loads plugins.
 
@@ -145,7 +147,15 @@ Load order is the list on the screen, top first.
 
 ### 6. Save games
 
-The host's DLL GUID is what saves record. Plugins keep no state in saves today (seat labels live in the game's player nicknames); if one ever needs it, add a `SaveData(stream)`/`LoadData(stream)` pair keyed by plugin name. Not needed for the MCP plugin.
+The host's DLL GUID is what saves record. From 0.5, Bazaar keeps each plugin's own data in the save. When the game writes a save, Bazaar asks each plugin that registered for it for its data and writes it under the plugin's name. When the game reads the save, Bazaar hands each plugin its own data back; one plugin's data never reaches another. Bazaar's part of the save carries a version number, as each part of the game's own save does, so a game saved before 0.5 still loads, and the data of a plugin that is not loaded is skipped.
+
+A plugin can also give players, cities, units and plots values of its own, since it cannot add fields to the engine's classes. It declares each value once, such as a whole number called Kills on every unit, and reads and sets it through Bazaar for any object. Bazaar saves and loads the values with the plugin's data, drops an object's values when the object is gone, and carries them over when the game replaces an object with a new one, as it does for a captured city or an upgraded unit. The plugin chooses, for each value, whether it carries over.
+
+Which saves need which plugins is left to the game's own mod settings. Every plugin mod sets AffectsSavedGames, so a save made with it cannot be loaded without it; Bazaar refuses a plugin whose mod does not, since a game loaded from a save would lack the plugin's `DllPlugins` row. A plugin that keeps data in saves also sets MinCompatibleSaveVersion, the oldest version of the mod whose saves it can still load.
+
+Lua mods keep data in a save through the game's own store, `Modding.OpenSaveData()`, as Firaxis's scenarios do. A plugin can use it too, through a Lua part of its own, but nothing in Lua runs just before a save: the data has to be written each time it changes, and after a load the plugin's C++ part has no data until its Lua part hands it back. It suits plugins with little data that changes at moments Lua sees.
+
+The MCP plugin keeps nothing in saves: its seat labels live in the game's player nicknames.
 
 ### 7. A plugin mod without the host
 
@@ -161,7 +171,7 @@ All three are per-plugin, and the SDK template ships with them filled in; the ho
 
 A folder shipped with each host release (also the thing other developers download), laid out by `sdk/build_sdk.py`:
 
-- `include/` the engine's headers as the host was built from them, with the export marker resolving to import, the Firaxis headers they include, `CivPluginApi.h` (the handshake, the API version and the hand-placed hooks) and `CivHooks.h` (every hook's number, with the function's signature as a comment; typed declarations are issue #10);
+- `include/` the engine's headers as the host was built from them, with the export marker resolving to import, the Firaxis headers they include, `CivPluginApi.h` (the handshake, the API version, the hand-placed hooks and the typed registration functions) and `CivHooks.h` (every hook's number and the function's signature, with the exact type of each kind of hook when a plugin can name the types the function takes);
 - `lib/` the host's import library, `CvGameCore_Expansion2.lib`, and the Firaxis libraries;
 - `CivPlugin.vsprops` the compiler and linker settings of the host build, with paths through the `BAZAAR_SDK` environment variable;
 - `README.md`, the plugin-writing guide (sdk/README.md), and `hand-placed-hooks.md`;
@@ -205,7 +215,7 @@ Functions are not described in bulk; a function with no hand-written description
 
 ## The MCP plugin
 
-`Claude/` (37 files, ~11,800 lines, counted 2026-10-21), today part of the Local MCP Server mod in the civ5-mods repository, moves to a new repository of its own and becomes `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changes: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler are already self-contained. The work is:
+`Claude/` (37 files, ~11,800 lines, counted 2026-10-21), once part of the Local MCP Server mod in the civ5-mods repository, moved in P2 to a repository of its own and became `MCPServer.dll`, a plugin mod. It never comes into this repository. Internally almost nothing changed: the HTTP server, tools, bridge, seat logic, map drawing, playback release and crash handler were already self-contained. The work was:
 
 1. replace each engine edit with a hook registration from the table above;
 2. move the `CvLuaGame.cpp` methods into the plugin and add them to the `Game` table from an after-hook on `CvLuaGame::RegisterMembers`, as the template's `AfterRegisterGame` does;
@@ -218,15 +228,15 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 ## Versioning and releases
 
 - Releases use semantic versioning: three numbers, major.minor.patch, such as 1.2.0. The first two are the API version. The minor number goes up when a release adds to the API, the patch number when a release only fixes things, and the major number only for a break. Each release is tagged with its version, such as `v1.2.0`, and published on GitHub with its packages, SDK and docs, as described under Making a release. A Workshop host is fine, because an updated host keeps loading older plugins; the Workshop page points to GitHub for the SDK.
-- 1.0 is the first public release. Builds before it are numbered 0.x and may break plugins if they must. We avoid that, and when it happens, every plugin we have is rebuilt against the new build.
+- 0.5 is the first public release. Builds before it may break plugins if they must. We avoid that, and when it happens, every plugin we have is rebuilt against the new build.
 - A plugin release names the API version it was built against. The handshake catches mismatches.
-- From 1.0 on, host builds only add. Layouts, vtables, hook numbers and signatures, and function meanings are frozen; a major version change is the one exception and refuses older plugins.
+- From 0.5 on, host builds only add. Layouts, vtables, hook numbers and signatures, and function meanings are frozen; a major version change is the one exception and refuses older plugins.
 
 ### Making a release
 
 A release is made on the developer's machine, because the host, the SDK and the docs all need Visual C++ 2008. A script, `tools/release.py`, does the repeatable work, so anyone can run it. A Claude Code skill in this repository, `.claude/skills/release`, walks through the steps around it that need judgment. The repository's .gitignore lets .claude/skills/ through, since .claude folders are often ignored.
 
-1. **Choose the number.** The script compares the current build with the previous release: the hook list and the host's exported names, saved at that release, and `CivPluginApi.h` and the class layout record as they were at its tag. If anything was added, removed or changed, the middle number goes up; otherwise the last one does. Anything removed or changed is listed, since every plugin must then be rebuilt: before 1.0 that is allowed, and from 1.0 on the script stops unless it is run with --major, which starts a new major version. The first release has nothing to compare with and keeps the number already in `VERSION`.
+1. **Choose the number.** The script compares the current build with the previous release: the hook list and the host's exported names, saved at that release, and `CivPluginApi.h` and the layout record of classes and enum values as they were at its tag. If anything was added, removed or changed, the middle number goes up; otherwise the last one does. Anything removed or changed is listed, since every plugin must then be rebuilt: before 0.5 that is allowed, and from 0.5 on the script stops unless it is run with --major, which starts a new major version. The first release has nothing to compare with and keeps the number already in `VERSION`.
 2. **Prepare.** On a branch of its own, the release raises the version in `VERSION` at the top of the repository, which holds the release version and the version of Bazaar's mod, a whole number that goes up by one each release. The VMC Bootstrap keeps VMC's own version, 97, because Bazaar depends on exactly that version; so does VMC's save-format number in CustomMods.h, which only a VMC update changes. The API version in `CivPluginApi.h` and the Claude plugin's version in `plugin.json` follow it, and so does the Bazaar release the SDK's plugin template says it needs, in its `VERSION` and its Workshop description: the first release with this API version, such as 0.4.0 for 0.4.2. The script refuses to build when any of them disagree. The Lua mod template's Bazaar release is set by hand instead, since a Lua mod needs only the Bazaar features it uses. The docs step saves the new function history, and the script saves the new lists. The tests and the lint run, and the branch goes to main through a pull request.
 3. **Build.** From main, with nothing uncommitted, the script builds the host, lays out and checks the SDK, builds the docs, and writes the release's files, each carrying LICENSE and NOTICE:
    - Bazaar's two mods as `.civ5mod` packages, Bazaar itself and its VMC Bootstrap;
@@ -235,11 +245,11 @@ A release is made on the developer's machine, because the host, the SDK and the 
 
    Building the docs again for a release whose history is already saved gives the same pages, so this build marks the same changes as the preparation did. If a function moved within its file after the preparation, its code unchanged, this build moves its marks to the new lines and so changes the history file; the script then stops, and the moved lines reach main through another pull request before the release is tagged. `release.py build --trial` does the same on any branch, without the release marks in the docs, and writes to `dist/trial`; nothing is published from it.
 4. **Check in the game.** The packages are installed from the release's files, not the build folders, and a game is loaded with the template plugin built from the SDK zip. The log has to show the plugin's hooks running. A release that only updates the SDK or the docs, with Bazaar's mod the same apart from its version number, skips this check.
-5. **Publish.** The script tags main, such as `v0.4.0`, and creates the GitHub release as a draft, with the files attached and release notes the skill drafts: what changed for players, and what was added for plugin authors. The developer publishes it from the draft. Releases before 1.0 are marked as pre-releases.
-6. **Docs site.** A GitHub Action runs when a release is published, pre-releases included. Once per repository, Pages must deploy from GitHub Actions, and the github-pages environment must let tags matching `v*` deploy. It takes the site out of that release's docs zip and publishes it on GitHub Pages, so the site always shows the newest release. The repository stays private until 1.0, when the Workshop items go public, and becomes public with them. Until then the project's GitHub Team plan publishes Pages from the private repository, and the site itself is public. The Action can also be run by hand on any release to publish its site again.
-7. **Workshop.** Every release that changes Bazaar's mod, pre-releases included, is uploaded to the Steam Workshop by hand in ModBuddy: Bazaar's package each time, with the release's section of `workshop/changes.txt` as the change note, and the VMC Bootstrap only when it has changed. Before 1.0 the Workshop items stay private; they go public with 1.0, when the repository does. The Workshop page points to the GitHub release for the SDK and docs. A release that only updates the SDK or the docs is not uploaded, since the Workshop page points to GitHub for both.
+5. **Publish.** The script tags main, such as `v0.4.0`, and creates the GitHub release as a draft, with the files attached and release notes the skill drafts: what changed for players, and what was added for plugin authors. The developer publishes it from the draft. Releases before 0.5 are marked as pre-releases.
+6. **Docs site.** A GitHub Action runs when a release is published, pre-releases included. Once per repository, Pages must deploy from GitHub Actions, and the github-pages environment must let tags matching `v*` deploy. It takes the site out of that release's docs zip and publishes it on GitHub Pages, so the site always shows the newest release. The repository stays private until 0.5, when the Workshop items go public, and becomes public with them. Until then the project's GitHub Team plan publishes Pages from the private repository, and the site itself is public. The Action can also be run by hand on any release to publish its site again.
+7. **Workshop.** Every release that changes Bazaar's mod, pre-releases included, is uploaded to the Steam Workshop by hand in ModBuddy: Bazaar's package each time, with the release's section of `workshop/changes.txt` as the change note, and the VMC Bootstrap only when it has changed. Before 0.5 the Workshop items stay private; they go public with 0.5, when the repository does. A new major version goes up as new Workshop items, not as an update: games saved with the old version need its mod, and plugins built for it keep working there, so the old items stay up. The Workshop page points to the GitHub release for the SDK and docs. A release that only updates the SDK or the docs is not uploaded, since the Workshop page points to GitHub for both.
 
-One check before the second release, when Bazaar's mod version first goes up: whether a save made with the first release still loads after the player updates to the second, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
+Checked before the second release, when Bazaar's mod version first went up: a save made with the first release still loads after the player updates to the second, though Civ 5 records each mod's version in the save. So Bazaar's mod version goes up with every release, as step 2 says.
 
 ### Releasing a plugin or Lua mod
 
@@ -247,7 +257,7 @@ Plugin and Lua mod authors get a release script of their own, `release.ps1`, in 
 
 - `VERSION` holds the release number in the author's own scheme: either a whole number, which is also the mod's version, or semantic versioning, with a second line for the mod's version, which the script raises by one each release because the game takes only a whole number. Another line names the oldest Bazaar release the mod needs.
 - Before building, the script writes the version from `VERSION` into the `.civ5proj` and, for a plugin, into a small header the DLL is built with, so the author changes it in one place. It checks that the mod's version is higher than every released one; that nothing of the template is left, such as its mod ID or its name; and, for a plugin, that the SDK is not newer than the Bazaar release `VERSION` names.
-- It builds with the template's `build.cmd`, then checks the package: a mod that changes the game's database must affect saved games, and a plugin's DLL must be named in a `DllPlugins` row and declare the API version it was built for.
+- It builds with the template's `build.cmd`, then checks the package: a mod that changes the game's database must affect saved games, and a plugin's DLL must be named in a `DllPlugins` row, be among the mod's files and declare the API version it was built for.
 - It keeps each release's package in `Releases\<version>\` and never overwrites one.
 - `CHANGES.txt` holds the change notes in BBCode, newest first, to paste into the Workshop update; the script warns when the new version has no section.
 - Each template also has a Workshop description in BBCode, `workshop-description.txt`, to paste into ModBuddy. It says "Requires Bazaar X or newer.", and the script stops when that differs from the Bazaar release `VERSION` names.
@@ -279,23 +289,49 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 
 **P2.5 — releases for plugin and Lua mod authors.** A release script for the plugin template and the Lua mod template, as described under Releasing a plugin or Lua mod. Exit: the script and its tests on main, and a plugin and a Lua mod made from the templates each released with it through the real build.
 
-**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The first public release, 1.0, of the host and SDK from this repository, the MCP plugin's first release from its own, and the Workshop pages. The layouts and the hook numbers freeze at that release.
+**P3 — the first public release, 0.5.0.** 0.5.0 is the first public, stable release. From it on, what plugins rely on is frozen, so everything chosen for it is done first, and no release is made until all of it is. Plugins built for 0.4 or earlier are rebuilt against it.
+
+**P3.1 — fixes.** The bugs and enhancements chosen for 0.5:
+- #20 and #38: the layout check also catches a field that changes type and a virtual function whose parameters change, and its advice for a changed class works with the release script, since 0.5 freezes the layouts;
+- #1: Bazaar loads each plugin from the folder of the mod that is turned on, not the first file of that name it finds in MODS;
+- #52: Bazaar refuses a plugin whose mod doesn't affect saved games, since the plugin would not load in a game loaded from a save;
+- #53: the release script and a docs tool read mods' XML files with an XML parser, not by matching text; Bazaar asks the game's own mod database instead;
+- #10: `CivHooks.h` declares the exact shape of each hook function, so a wrong one fails to compile instead of crashing the game;
+- #22: plugins' Lua functions run inside the crash guard;
+- #4: a plugin crash shows a pop-up in the middle of the screen;
+- #33: Bazaar loads plugins whatever characters their paths hold;
+- #9: `Bazaar.log` starts afresh each time the game starts;
+- #19: the small bugs in the Claude Code plugin's scripts, event list and evals are fixed;
+- #46: the docs home page names the site once in its title;
+- #28: the plugin order functions whose names collided are renamed;
+- #31: the host's source files are listed in one place, so every host file builds without being listed.
+
+The other maintainability issues (#6, #11, #16, #17, #21, #23, #24, #26, #27, #29, #30, #32, #34, #35) each name the change that should set them off. They wait for it, in whichever phase it comes. #19 set off #14, so the Claude Code plugin's scripts and event list got their tests in P3.1.
+
+**P3.2 — plugin saves (#50).** Plugins keep their own data in saved games, and their own values on players, cities, units and plots, as described under Save games; the SDK guide and the plugin template show how. Exit: a plugin's data and values survive saving and loading in the game, a value carries over when a city is captured and when a unit upgrades, and a game saved with 0.4 still loads.
+
+**P3.3 — release 0.5.0 and go public.** The freeze moves from 1.0 to 0.5 wherever it is written: the release script, which also marks every 0.x release as a pre-release, and its skill; the layout check and its tests; the SDK guide; the README; the comment at the top of `CivPluginApi.h`; the generator's README; and the project's review notes in `.claude/gate-lenses/bazaar.md`. The release script and the layout check each decide on their own that the freeze starts at version 1.0. They should share one setting for where it starts, so that moving it changes one value. Then a last look at everything plugins rely on, since it freezes now; the release of 0.5.0, checked in the game with a save from 0.4; and the public launch: the repository goes public, Bazaar's two Workshop items get 0.5.0 and go public, and the MCP plugin makes its first public release, from its own repository. Exit: 0.5.0 and the MCP plugin released and public on GitHub and the Workshop, with every issue in P3 closed.
+
+**Between 0.5 and 1.0 — multiplayer and hot seat, if possible (#51).** Nice to have, somewhere in 0.6 to 0.9, and only if it turns out to be possible. Until then Bazaar's mod and both templates stay marked single player only. First a multiplayer game and a hot seat game with Bazaar and no plugins, since VMC itself was never tested in multiplayer; if that fails in ways Bazaar cannot fix, multiplayer stays out. Then: every player's computer loads the same plugins in the same order; a plugin crash on one computer does not put the game out of step, and in hot seat its pop-up is not lost when the turn passes to the next player; the multiplayer and hot seat setup screens reach the Plugins screen; and the MCP plugin's seats are checked in hot seat. Then the mods' multiplayer and hot seat settings change, for Bazaar and both templates. Since 0.5 froze what plugins rely on, anything this adds to the plugin API is an addition. A plugin list players can share, which also names the mods they still need, comes after this first stage. Exit: a multiplayer game on two computers and a hot seat game, each played for a few turns with the template plugin and the MCP plugin.
+
+**P4 — a clean core, 1.0.0.** 1.0.0 is the first break, made so the core becomes a clean library. It keeps the Firaxis code and what other mods rely on: VMC's Lua events and its data options. VMC's switched gameplay features and its bug fixes move into Bazaar plugins, one for each of VMC's pick'n'mix mods and one for the bug fixes, built and released together from one repository of their own against each Bazaar release. The first step sorts every VMC option, and every change VMC makes that is always on, into what stays and what moves, and the list goes into this plan. Bazaar's mod marks whoward69's original pick'n'mix mods as incompatible, and its Workshop description links to the new plugins. 1.0.0 is released with `prepare --major`, on new Workshop items, and every plugin is rebuilt against it. Exit: 1.0.0 and the new plugins released and public, each moved feature checked in the game.
+
+**P5 — game fixes.** The city-state explorer fix and the captured-city seen-by fix, each a Lua mod on a VMC hook where one exists and a plugin where not. Calmer AI and the friendship and denounce rules are done, in the reduced-aggression mod's own repository.
 
 ## Risks
 
 - **Speed.** Every wrapped function is a real call plus a listener check, and nothing wrapped can be inlined. The hot paths call small functions millions of times a turn. P0 measures it on both compilers before anything is committed; the fallback is the same generator on a chosen subset.
 - **The generator's long tail.** A few hundred odd signatures could cost more than the rest together. P0 runs it over everything for that reason.
-- **The layout freeze is a discipline, not a mechanism.** One added field breaks every plugin. The build compares the exported layouts against a saved record and fails on any change. Before 1.0, a change is accepted on purpose by saving the record again and rebuilding every plugin; from 1.0 on, it is not.
+- **The layout freeze is a discipline, not a mechanism.** One added field breaks every plugin. The build compares the exported layouts, with each field's type, each virtual function's parameters and each enum value, against a saved record and fails on any change. Before 0.5, a change is accepted on purpose by saving the record again and rebuilding every plugin; from 0.5 on, only in a new major version.
 - **Header functions are not hook points.** Listed in the SDK; a plugin that needs one replaces the caller instead.
 - **No isolation beyond containment.** A faulting plugin is caught and quarantined, but a plugin that corrupts state without faulting is not detectable.
 - **Wrap order.** Two plugins hooking one function in an order that matters is not detectable. The Plugins screen makes order visible and the player's to set; that is the whole answer.
 - **Export count.** Watch the 65,535 limit; print the count in the build.
 - **Load timing.** Plugins must load after the database is ready and before the first turn; the point where VMC reads its options is the candidate. P0 tests the same moment in the plain Firaxis source, and P1 confirms it in VMC.
 - **Lua registration.** The host registers Lua methods per context; the plugin's registration must run for each new context the same way. Verify in P2.
-- **VMC behaviour changes.** VMC's bug fixes and features are switches; the host ships with the same defaults VMC does, and our own settings are a separate decision.
+- **VMC behaviour changes.** VMC's bug fixes and features are switches; until 1.0 the host ships with the same defaults VMC does. From 1.0 they are plugins, and the player chooses them.
 
 ## Not in scope
 
 - Stacking with other replacement DLLs (Community Patch etc.). Nothing can do that. If the Community Patch ever adopts the loader, that is their build of it.
-- Multiplayer. Every machine in a multiplayer game must run identical code in the same order, which the host cannot guarantee for plugins: each player's plugin order and crash quarantine are local to their machine. The MCP server also controls seats from one machine. VMC itself is untested in multiplayer: its author does not play it, and known multiplayer bugs were left to community forks.
 - A plugin registry or version-matching service. The API version and the handshake are enough.

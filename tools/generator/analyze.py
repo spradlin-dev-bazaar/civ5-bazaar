@@ -109,6 +109,12 @@ def default_constructible(record_type):
     return False
 
 
+def canonical_parameters(function_type):
+    """A function type's parameters, each named from outside its class and namespace, without the top-level const or
+    volatile that a function pointer type ignores."""
+    return [t.spelling for t in function_type.get_canonical().argument_types()]
+
+
 def classify_result(t):
     if t.kind == ci.TypeKind.VOID:
         return {"kind": "void"}
@@ -297,6 +303,10 @@ def function_record(c, data, rel, project):
         classify_result(c.result_type) if c.kind not in (CK.CONSTRUCTOR, CK.DESTRUCTOR) else {"kind": "void"}
     )
     rec["result_type"] = c.result_type.spelling
+    rec["canonical_result"] = c.result_type.get_canonical().spelling
+    rec["canonical_params"] = canonical_parameters(c.type)
+    parent = c.semantic_parent
+    rec["canonical_class"] = parent.type.get_canonical().spelling if rec["class"] and parent else None
     if not reasons and rec["result"]["kind"] == "record" and not rec["result"].get("default_ctor"):
         reasons.append("returns a class without a default constructor")
     if not reasons and rec["result"]["kind"] == "other":
@@ -377,20 +387,56 @@ def run(project):
     return results
 
 
-def known_errors(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "known-parse-errors.txt")):
-    with open(path, encoding="utf-8") as f:
-        return set(tuple(line.rstrip("\n").split("\t", 1)) for line in f if line.strip() and not line.startswith("#"))
+def parse_as_plugin(project, header, code=""):
+    """A plugin source that includes header, followed by code."""
+    probe = os.path.join(os.path.dirname(header), "civ_plugin_probe.cpp")
+    source = '#include "%s"\n%s' % (os.path.basename(header), code)
+    args = project.clang_args() + ["-I" + os.path.dirname(header), "-I" + common.HOST_DIR]
+    return ci.Index.create().parse(probe, args=args, unsaved_files=[(probe, source)])
+
+
+def check_plugin_header(project, header):
+    """Parses CivHooks.h as a plugin includes it. Returns the lines of header with an error, and each Original
+    typedef's canonical types by line: (result, parameters)."""
+    header = os.path.normcase(os.path.abspath(header))
+    tu = parse_as_plugin(project, header)
+    known = common.known_errors()
+    lines = set()
+    for d in tu.diagnostics:
+        path = os.path.abspath(d.location.file.name) if d.location.file else ""
+        if d.severity == ci.Diagnostic.Fatal or (
+            d.severity >= ci.Diagnostic.Error
+            and project.contains(path)
+            and not common.known_error(known, path, d.location.line, d.spelling)
+        ):
+            # Types the game's headers no longer declare would leave hook points untyped without a word.
+            where = "%s:%d " % (common.shown(path), d.location.line) if path else ""
+            raise RuntimeError("generator: could not read the game's headers as a plugin does: " + where + d.spelling)
+        if d.severity >= ci.Diagnostic.Error and os.path.normcase(path) == header:
+            lines.add(d.location.line)
+    originals = {}
+    for space in tu.cursor.get_children():
+        if space.spelling != "CivHooks" or not space.location.file:
+            continue
+        if os.path.normcase(os.path.abspath(space.location.file.name)) != header:
+            continue
+        for c in (c for struct in space.get_children() for c in struct.get_children()):
+            original = c.kind == CK.TYPEDEF_DECL and c.spelling == "Original"
+            fn = c.underlying_typedef_type.get_canonical().get_pointee() if original else None
+            if fn is not None and fn.kind == ci.TypeKind.FUNCTIONPROTO:
+                originals[c.location.line] = (fn.get_result().get_canonical().spelling, canonical_parameters(fn))
+    return lines, originals
 
 
 def project_errors(project, results):
     """New parse errors in the project outside function bodies: they can hide functions, so the build must stop.
     Errors inside a body cannot, since the generator never needs a body's contents."""
-    known = known_errors()
+    known = common.known_errors()
     return {
         (e[0], e[1], e[2])
         for r in results
         for e in r["errors"]
-        if project.contains(e[0]) and not e[3] and (os.path.basename(e[0]), e[2]) not in known
+        if project.contains(e[0]) and not e[3] and not common.known_error(known, e[0], e[1], e[2])
     }
 
 

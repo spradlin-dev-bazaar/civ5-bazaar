@@ -20,6 +20,7 @@ PROJECT = common.engine_project()
 HOST_LIB = os.path.join(common.HOST_OUTPUT, "CvGameCore_Expansion2.lib")
 HOOKS_HEADER = os.path.join(PROJECT.build_dir, "sdk", "CivHooks.h")
 OUT = os.path.join(HERE, "out")
+# new-dll-plugin.ps1 refuses to make a plugin folder in here because this script is two folders up.
 SDK = os.path.join(OUT, "Bazaar SDK")
 CHECK_NAME = "TemplateCheck"
 TEMPLATE_CHECK = os.path.join(OUT, CHECK_NAME)

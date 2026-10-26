@@ -13,7 +13,10 @@ class CvUnit;
 
 enum CivHookKind
 {
+	// Returning true vetoes the call: the caller gets what the before-hooks left in the result, and the after-hooks
+	// still run. A veto on a function that returns a reference still runs the function if no before-hook set the result.
 	CIV_HOOK_BEFORE = 0,
+	// Runs after the function, or after a veto, and may change the result.
 	CIV_HOOK_AFTER = 1,
 	// A replacement gets the original function as its first argument; calling it runs the engine's own version.
 	CIV_HOOK_REPLACE = 2,
@@ -67,13 +70,44 @@ typedef void (*CivNotificationAddedFn)(int player, int notificationType, const c
 typedef void (*CivDealResolvedFn)(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);
 typedef void (*CivUnitOrdersCancelledFn)(CvUnit* unit, int reason);
 
+struct lua_State;
+typedef int (*CivLuaFunction)(lua_State* L);
+
 struct CivHostInfo
 {
 	int pluginIndex;
+	// Only from CivPluginEntry. fn must have the exact type CivHooks.h gives the hook point for that kind; the typed
+	// CivRegisterBefore, CivRegisterAfter and CivRegisterReplace below make the compiler check it.
 	int (*RegisterHook)(int pluginIndex, int hookId, int kind, void* fn);
 	void (*Log)(int pluginIndex, const char* message);
 	int (*RegisterHandHook)(int pluginIndex, int handHook, void* fn);
+	// Pushes exactly one value onto L's stack: fn as a Lua function that runs inside Bazaar's crash guard. Once the
+	// plugin is off, or unloaded, calling it raises a Lua error instead.
+	void (*PushLuaFunction)(int pluginIndex, lua_State* L, CivLuaFunction fn);
 };
+
+// The result parameter of a before-hook or after-hook on a function returning R: a reference to the value the caller
+// gets, or, for a function returning a reference, to a pointer to it.
+template<class R> struct CivHookSlot { typedef R& Type; };
+template<class T> struct CivHookSlot<const T> { typedef T& Type; };
+template<class T> struct CivHookSlot<T&> { typedef T*& Type; };
+
+// Hook is a hook point from CivHooks.h, such as CivHooks::CvPlayer_GetScore. A hook whose type does not match fails to
+// compile.
+template<class Hook> int CivRegisterBefore(const CivHostInfo* host, typename Hook::Before hook)
+{
+	return host->RegisterHook(host->pluginIndex, Hook::ID, CIV_HOOK_BEFORE, (void*)hook);
+}
+
+template<class Hook> int CivRegisterAfter(const CivHostInfo* host, typename Hook::After hook)
+{
+	return host->RegisterHook(host->pluginIndex, Hook::ID, CIV_HOOK_AFTER, (void*)hook);
+}
+
+template<class Hook> int CivRegisterReplace(const CivHostInfo* host, typename Hook::Replace hook)
+{
+	return host->RegisterHook(host->pluginIndex, Hook::ID, CIV_HOOK_REPLACE, (void*)hook);
+}
 
 struct CivPluginInfo
 {

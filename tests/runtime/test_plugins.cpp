@@ -1,10 +1,11 @@
 // Loading plugins, running their hooks, catching their crashes, and sharing memory with them.
 #include "harness.h"
+#include "fake_engine.h"
 #include "CivHooks.h"
 #include "CivHostCrash.h"
 #include "CivHostHand.h"
 #include "CivHostHooks.h"
-#include "fake_engine.h"
+#include "CivHostPath.h"
 
 #include <dbghelp.h>
 #include <malloc.h>
@@ -93,7 +94,7 @@ void TestLoading()
 	Check(ReportRow("toy_no_version.dll").problems.find("which Bazaar") != std::string::npos, "the Plugins screen says the plugin does not say which Bazaar it was built for");
 	Check(!LogHas("[Toy No Version]"), "a plugin that does not export its API version never runs");
 	Check(HasStatus("toy_newer_imports.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a newer host that uses a function this host lacks is refused by its version, not by a Windows load error");
-	const HMODULE unloadable = LoadLibraryExA(OutFile("toy_newer_imports.dll").c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+	const HMODULE unloadable = LoadLibraryExW(CivWide(OutFile("toy_newer_imports.dll")).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
 	Check(!unloadable, "Windows itself cannot load toy_newer_imports.dll, so only its version could have refused it");
 	if (unloadable)
 		FreeLibrary(unloadable);
@@ -199,7 +200,8 @@ void TestQuarantine()
 	const DWORD options = SymGetOptions() & ~(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS);
 	SymSetOptions(options);
 	const int result = unit.add(2, 3);
-	Check(FaultCount() == before + 2, "faulting before- and after-hooks are both caught and reported");
+	Check(FaultCount() == before + 2 && !LastFaultWhileShuttingDown(),
+		"faulting before- and after-hooks are both caught and reported as crashes, not as ones while shutting down");
 	Check(SymGetOptions() == options, "a crash report puts back dbghelp's settings, which the game's own crash handling shares");
 	Check(result == 110, "the other plugins' hooks still run on the same call");
 	Check(IsQuarantined("toy_fault.dll"), "a faulting plugin is quarantined");
@@ -221,7 +223,7 @@ void TestQuarantine()
 
 	const int calls = g_levelCalls;
 	const int level = unit.Level();
-	Check(FaultCount() == before + 3, "a faulting replacement is caught");
+	Check(FaultCount() == before + 3 && !LastFaultWhileShuttingDown(), "a faulting replacement is caught and reported as a crash");
 	Check(level == 7 && g_levelCalls == calls + 1, "when a replacement faults, the original runs instead, once");
 	Check(unit.Level() == 7 && g_levelCalls == calls + 2, "the original keeps running once the replacement is quarantined");
 	Check(FaultCount() == before + 3, "a quarantined replacement does not fault again");
@@ -243,7 +245,7 @@ void TestQuarantine()
 
 	// toy_fault_before's crash makes the crash log record the DLL loaded behind Bazaar's back, before it is freed.
 	StartWithNone();
-	const HMODULE behind = LoadLibraryExA(OutFile("toy_fault.dll").c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+	const HMODULE behind = LoadLibraryExW(CivWide(OutFile("toy_fault.dll")).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
 	const char* const recorder[] = {"toy_fault_before.dll"};
 	StartWith(recorder);
 	unit.add(2, 3);

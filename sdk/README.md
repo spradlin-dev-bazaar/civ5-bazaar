@@ -41,7 +41,7 @@ For example, to make every player's score count double, you add an after-hook to
 | In the SDK | What it is |
 |---|---|
 | `plugin-template\` | A small working plugin to start from, with the script that makes its releases. |
-| `include\CivHooks.h` | Every game function you can hook, with its hook ID. |
+| `include\CivHooks.h` | Every game function you can hook, with its hook ID and the types of its hooks. |
 | `include\CivPluginApi.h` | The interface between Bazaar and a plugin: the structs, function types and constants both sides use. |
 | the rest of `include\` | The game's headers, in the versions Bazaar was built from. |
 | `lib\` | The libraries your plugin links against. |
@@ -70,9 +70,9 @@ For example, to make every player's score count double, you add an after-hook to
 
 1. Copy `plugin-template` to a folder of your own. If you built it in Step 1, leave out `Build\`, `Packages\`, `src\out\` and `mod\TemplatePlugin.dll`: those are the template's build output.
 2. Unless that folder sits directly inside the Bazaar SDK folder, set the environment variable `BAZAAR_SDK` to the SDK folder: without it, the build looks for the SDK in the folder above yours. Open a new Command Prompt afterwards, so that it sees the variable, or set it for one Command Prompt with `set BAZAAR_SDK=<the SDK folder>` before running `build.cmd`.
-3. Choose a file name without spaces, such as `ScoreDoubler`, and a display name, such as `Score Doubler`. Rename the four files with `TemplatePlugin` in their names (`src\TemplatePlugin.cpp`, `src\TemplatePlugin.vcproj`, `mod\TemplatePlugin.sql` and `mod\TemplatePlugin.civ5proj`). Then, in every text file in the folder (the `.cpp`, `.vcproj`, `.sql`, `.civ5proj`, `build.cmd` and `workshop-description.txt`), replace `TemplatePlugin` with the file name and `Template Plugin` with the display name.
+3. Choose a file name without spaces, such as `ScoreDoubler`, and a display name, such as `Score Doubler`, without commas: the build passes the display name to MSBuild, which splits it at a comma. Rename the four files with `TemplatePlugin` in their names (`src\TemplatePlugin.cpp`, `src\TemplatePlugin.vcproj`, `mod\TemplatePlugin.sql` and `mod\TemplatePlugin.civ5proj`). Then, in every text file in the folder (the `.cpp`, `.vcproj`, `.sql`, `.civ5proj`, `build.cmd` and `workshop-description.txt`), replace `TemplatePlugin` with the file name and `Template Plugin` with the display name.
 
-   No other mod may ship a DLL with the same name as yours: Bazaar finds each plugin by searching the MODS folder for its file name.
+   No other mod may ship a DLL with the same name as yours: Bazaar finds each plugin by its file name, among the files of the mods that are turned on. So keep the DLL's `<Content>` entry in the `.civ5proj`: it makes the DLL one of the mod's files.
 4. Give your mod its own ID: replace the GUID on the `.civ5proj`'s `<Guid>` line with a new one (PowerShell's `New-Guid` makes one). It becomes the mod's ID in the `.modinfo`. Leave the `<ProjectGuid>` line above it alone: that one is ModBuddy's ID for the project. Every mod needs its own ID, so the game can tell yours apart from the template.
 5. In the `.civ5proj`, set the teaser, description and authors. In `workshop-description.txt`, replace the template's sentence with a description of your plugin for its Steam Workshop page. Leave the version in the `.civ5proj` and in `src\PluginVersion.h` alone: `release.cmd` writes both from `VERSION` for each release (see [Publishing](#publishing)).
 6. Delete the template's examples you do not want, with their `Check(...)` lines in `CivPluginEntry`:
@@ -110,19 +110,18 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	s_host = host;
 	plugin->name = "Template Plugin";
 	plugin->version = PLUGIN_VERSION;
-	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_doTurn::ID, CIV_HOOK_BEFORE, (void*)&BeforeDoTurn), "before CvPlayer::doTurn");
+	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
-	Check(host->RegisterHook(host->pluginIndex, CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame),
-		"after CvLuaGame::RegisterMembers");
+	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	return true;
 }
 ```
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
-- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook` and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
+- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)) and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
 - **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version. Bazaar copies them when `CivPluginEntry` returns, so point both at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
 - **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
-- **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration, and `(void*)&BeforeDoTurn` passes the hook function's address; [Registering a hook](#registering-a-hook) explains each argument. Hooks can only be registered from `CivPluginEntry`.
+- **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration. `CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn)` registers `BeforeDoTurn` as a before-hook on `CvPlayer::doTurn`; [Registering a hook](#registering-a-hook) explains it. Hooks can only be registered from `CivPluginEntry`.
 - **Returning `true`** loads the plugin. Returning `false` tells Bazaar not to load it, and the Plugins screen shows it as Not loaded: "Declined to load."
 
 ### Writing to the log
@@ -137,13 +136,18 @@ Log("%s starts turn %d with %d gold", player->getCivilizationShortDescription(),
 
 ### Finding a function to hook
 
-`CivHooks.h` lists every function you can hook, one per line. Search it for the class and method together, such as `CvPlayer::GetScore(`; a single word such as `Score` matches far more lines, because many other functions use it too:
+`CivHooks.h` lists every function you can hook, each in a short block that starts with the function's signature. Search it for the class and method together, such as `CvPlayer::GetScore(`; a single word such as `Score` matches far more lines, because many other functions use it too:
 
 ```cpp
-namespace CvPlayer_GetScore { enum { ID = 6887 }; } // int CvPlayer::GetScore(bool, bool) const
+struct CvPlayer_GetScore { enum { ID = 6887 }; // int CvPlayer::GetScore(bool, bool) const
+	typedef int (*Original)(const CvPlayer *, bool, bool);
+	typedef bool (*Before)(const CvPlayer *, bool, bool, CivHookSlot< int >::Type);
+	typedef void (*After)(const CvPlayer *, bool, bool, CivHookSlot< int >::Type);
+	typedef int (*Replace)(Original, const CvPlayer *, bool, bool);
+};
 ```
 
-- **`CvPlayer_GetScore`** is the hook's name in code. The line declares a namespace of that name holding an enum with one constant, `ID`, so `CivHooks::CvPlayer_GetScore::ID` is the hook's ID (`::` reaches a name inside a namespace or class), and you never type the number.
+- **`CvPlayer_GetScore`** is the function's hook point: its name in code. The block declares a struct of that name, so `CivHooks::CvPlayer_GetScore` names it (`::` reaches a name inside a namespace or class). The struct holds the hook point's ID, an enum constant you never need to type, and the exact type of each kind of hook (see [Writing a hook](#writing-a-hook)).
 - **The comment** is the function's signature: `GetScore`, a method of `CvPlayer`, takes two `bool` parameters and returns an `int`. The `const` at the end means it does not modify the player.
 
 When you search:
@@ -189,7 +193,7 @@ A replacement that never calls `original` skips everything the game's own versio
 
 ### Writing a hook
 
-A hook's parameters must match the game's function exactly. Build them from the function's line in `CivHooks.h`, in this order:
+A hook's parameters must match the game's function exactly. Build them from the function's signature in `CivHooks.h`, in this order:
 
 | Parameter | When it is there | For `int CvPlayer::GetScore(bool, bool) const` |
 |---|---|---|
@@ -202,7 +206,7 @@ A hook's parameters must match the game's function exactly. Build them from the 
 - **`self`** is the object the method was called on (what C++ calls `this`). For a const method it is a pointer to const: the hook can read the object but not change it. Static methods and functions outside any class have no `self`.
 - **`result`** is a reference to the value the caller will get, so assigning to it changes what the game gets back. In a before-hook the game's function has not run yet, so `result` holds a default (zero, `false` or empty), not the game's answer. Functions that return `void` have no `result`.
 
-A before-hook returns a `bool` (`true` vetoes the call), an after-hook returns `void`, and a replacement returns the same type as the game's function. So for `GetScore`, the three kinds are declared like this (each still needs its `{ ... }` body when you write it):
+A before-hook returns a `bool` (`true` vetoes the call), an after-hook returns `void`, and a replacement returns the same type as the game's function, `const` included: for `const bool CvBuildingEntry::GetArtInfoCulturalVariation() const`, a replacement and its `original` return `const bool`. So for `GetScore`, the three kinds are declared like this (each still needs its `{ ... }` body when you write it):
 
 ```cpp
 static bool BeforeScore(const CvPlayer* self, bool bFinal, bool bVictory, int& result);
@@ -212,24 +216,33 @@ static int ReplaceScore(int (*original)(const CvPlayer*, bool, bool), const CvPl
 
 `static` here only keeps each hook private to your `.cpp` file, as in the template. C++ needs a function declared before it is used, so write your hooks above `CivPluginEntry`.
 
-> **Get the parameters exactly right.** Registration accepts any function, so neither the compiler nor Bazaar can check them. If they do not match, your hook may crash, or it may quietly read the wrong values. Bazaar catches a crash and turns your plugin off, and the game keeps going, though it may not be stable afterwards. Copy the types from the function's line in `CivHooks.h`.
+The hook point's block in `CivHooks.h` spells out the same three types, as function pointer types named `Before`, `After` and `Replace`, with `Original` for the type of `original`. There, the type of `result` is written `CivHookSlot< int >::Type`: the template `CivHookSlot` in `CivPluginApi.h` turns the function's return type into the type of `result`, here `int&`. The typedefs can also spell a type in full where the signature does not, such as `CvLeague::ContributionTier` for a signature's `ContributionTier`: a plugin must write it the typedefs' way.
+
+The compiler checks your hook against those types when you register it, as below: a hook with a wrong parameter, or a missing one, fails to compile, and the error names your hook's type and the hook point's.
+
+Some hook points have no types in `CivHooks.h`, nearly all of them on the `CvDll` classes, which only pass the game's calls on: their functions take a type that `CvGameCoreDLLPCH.h` does not declare, or one private to its class. Such a hook point's block is a single line, with `}; };` right after its ID. Register hooks on them with `host->RegisterHook`, as below, and get the parameters exactly right by hand: nothing checks them, and if they do not match, your hook may crash or quietly read the wrong values. Bazaar catches a crash and turns your plugin off, and the game keeps going, though it may not be stable afterwards.
 
 ### Registering a hook
 
 In `CivPluginEntry`, ask Bazaar to call your hook:
 
 ```cpp
-Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_GetScore::ID, CIV_HOOK_AFTER, (void*)&AfterScore), "after CvPlayer::GetScore");
+Check(CivRegisterAfter<CivHooks::CvPlayer_GetScore>(host, &AfterScore), "after CvPlayer::GetScore");
 ```
 
-`RegisterHook` takes:
+`CivRegisterBefore`, `CivRegisterAfter` and `CivRegisterReplace`, in `CivPluginApi.h`, register the three kinds of hook. Each takes:
 
-1. `host->pluginIndex`, your plugin's index;
-2. the hook ID, `CivHooks::` + the name from `CivHooks.h` + `::ID`;
-3. the kind of hook: `CIV_HOOK_BEFORE`, `CIV_HOOK_AFTER` or `CIV_HOOK_REPLACE`;
-4. your hook, as `(void*)&AfterScore`: `&AfterScore` is the function's address, and `(void*)` casts it to an untyped pointer. That cast is why nothing can check your hook's parameters.
+1. the hook point, in angle brackets: `CivHooks::` + the name from `CivHooks.h`;
+2. `host`;
+3. your hook's address, `&AfterScore` (`&` before a name takes its address). If your hook's type is not the hook point's `After` type, this is where it fails to compile.
 
-It returns one of these codes, the `CivHookRegisterResult` values in `CivPluginApi.h`, and `Check` logs any code other than 0:
+For a hook point with no types, call `host->RegisterHook` instead. It takes your plugin's index, `host->pluginIndex`; the hook point's ID, `CivHooks::` + the name + `::ID`; the kind of hook, `CIV_HOOK_BEFORE`, `CIV_HOOK_AFTER` or `CIV_HOOK_REPLACE`; and your hook as `(void*)&AfterScore`, its address cast to an untyped pointer, which is why nothing can check it:
+
+```cpp
+Check(host->RegisterHook(host->pluginIndex, CivHooks::CvDllGame_GetActivePlayer::ID, CIV_HOOK_AFTER, (void*)&AfterGetActivePlayer), "after CvDllGame::GetActivePlayer");
+```
+
+Both return one of these codes, the `CivHookRegisterResult` values in `CivPluginApi.h`, and `Check` logs any code other than 0:
 
 | Code | Name in `CivPluginApi.h` | Meaning |
 |---|---|---|
@@ -255,7 +268,7 @@ It returns one of these codes, the `CivHookRegisterResult` values in `CivPluginA
 4. **Register it** in `CivPluginEntry`:
 
    ```cpp
-   Check(host->RegisterHook(host->pluginIndex, CivHooks::CvPlayer_GetScore::ID, CIV_HOOK_AFTER, (void*)&AfterScore), "after CvPlayer::GetScore");
+   Check(CivRegisterAfter<CivHooks::CvPlayer_GetScore>(host, &AfterScore), "after CvPlayer::GetScore");
    ```
 
 5. **Build and test it**, as in [Testing a new build](#testing-a-new-build). Every score the game works out is now doubled, including the scores Lua sees. To watch it work, add `Log("score %d", result);` after the doubling line for one test run, then take it out again: the game works out scores often.
@@ -320,16 +333,15 @@ static int Hello(lua_State* L)
 
 static void AfterRegisterGame(lua_State* L)
 {
-	lua_pushcclosure(L, &Hello, 0);
+	s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello);
 	lua_setfield(L, -2, "TemplateHello");
 }
 
 // in CivPluginEntry:
-Check(host->RegisterHook(host->pluginIndex, CivHooks::CvLuaGame_RegisterMembers::ID, CIV_HOOK_AFTER, (void*)&AfterRegisterGame),
-	"after CvLuaGame::RegisterMembers");
+Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 ```
 
-Lua and C++ exchange values on the Lua stack. `L` (`lua_State* L`, a pointer to the Lua state) is passed to every `lua_...` call. While `AfterRegisterGame` runs, the `Game` table is on top of the stack. `lua_pushcclosure(L, &Hello, 0)` pushes `Hello` as a Lua function, so the table is now second from the top. `lua_setfield(L, -2, "TemplateHello")` pops the function and stores it in the table at index `-2` (second from the top) as `TemplateHello`. Use the same two lines for each function you add.
+Lua and C++ exchange values on the Lua stack. `L` (`lua_State* L`, a pointer to the Lua state) is passed to every `lua_...` call. While `AfterRegisterGame` runs, the `Game` table is on top of the stack. `s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello)` pushes `Hello` as a Lua function, so the table is now second from the top. `lua_setfield(L, -2, "TemplateHello")` pops the function and stores it in the table at index `-2` (second from the top) as `TemplateHello`. Use the same two lines for each function you add.
 
 `AfterRegisterGame` has no `self` and no `result`, because `RegisterMembers` is static and returns `void`.
 
@@ -346,7 +358,11 @@ static int CountMyCities(lua_State* L)
 
 Add it in `AfterRegisterGame` the same way, and Lua code can call `Game.CountMyCities()`.
 
-Bazaar's crash protection covers your hooks, not your Lua functions. A crash in a Lua function crashes the game, and a plugin Bazaar has turned off after a crash in a hook keeps its Lua functions, which Lua can still call. Keep them short, and don't let them rely on state a crashed hook may have left half-changed.
+Bazaar runs your Lua functions inside the same crash protection as your hooks. A crash in one turns your plugin off, as a crash in a hook does, and the Lua code that called it gets a Lua error instead of the game crashing. Once your plugin is off, or unloaded, its Lua functions raise a Lua error saying so. Push each one with `PushLuaFunction`, not with Lua's own `lua_pushcclosure`, `lua_pushcfunction` or `lua_register`: Bazaar cannot protect a function that Lua calls directly. A function pushed this way has no upvalues of its own (values Lua keeps with a function): `lua_upvalueindex` reads Bazaar's, so keep what a function needs between calls in a variable of your plugin's.
+
+A Lua error is not a crash: your function raises one with `luaL_error`, and Lua raises one for you when an argument check such as `luaL_checkinteger` fails or Lua code you run with `lua_call` fails. It leaves your function at once, and C++ may skip the clean-up of objects your function holds, such as the memory of a `std::string`. So check the arguments and run Lua code before you create such objects.
+
+The protection has one gap: if your function runs Lua code in protected mode (with `lua_pcall`, or through the game, as when it fires a Lua event) and the game's own code crashes underneath, Lua's record of where to go after an error is left out of date. Bazaar's own Lua error about the crash is then the first to use it, so the game will most likely crash at that point.
 
 ## Using VMC's events and options
 
@@ -390,13 +406,13 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
 
 ## When something goes wrong
 
-- **`Bazaar.log`**, in `Documents\My Games\Sid Meier's Civilization 5\Logs`, lists each plugin Bazaar loaded or did not load, with the reason, and every crash. The template's `Check` also logs there any hook that could not be registered.
+- **`Bazaar.log`**, in `Documents\My Games\Sid Meier's Civilization 5\Logs`, lists each plugin Bazaar loaded or did not load, with the reason, and every crash. The template's `Check` also logs there any hook that could not be registered. It starts afresh each time Civilization V starts, so copy it before restarting the game if you need the old lines.
 - **The Plugins screen** shows each plugin's status:
   - Loaded;
-  - Not loaded, with the reason: for example "Declined to load.", a newer Bazaar is needed, the DLL was not found in the MODS folder, or a clash with another plugin;
+  - Not loaded, with the reason: for example "Declined to load.", a newer Bazaar is needed, no mod that is turned on lists the DLL among its files, the mod does not affect saved games (see [Publishing](#publishing)), or a clash with another plugin;
   - Turned off after a crash;
   - Skipped: the player unchecked it.
-- **If your plugin crashes inside a hook,** the game carries on. Bazaar turns your plugin off until the player goes back to the main menu, and shows a "Plugin disabled" notice. A common cause is a hook whose parameters do not match the game's function. `Bazaar.log` then says where it crashed: what memory it touched, and the call stack, innermost first. Each line gives the DLL and an offset into it, such as `MyPlugin.dll+0x00001A2B`. On the machine you built the plugin on, while the `.pdb` file the build wrote is still where the build put it, the line also names the function and the source line, such as `(BeforeDoTurn, MyPlugin.cpp line 42)`. Without the `.pdb`, as on a player's machine, the call stack may skip some calls, but its first line is always where the crash happened.
+- **If your plugin crashes inside a hook or a Lua function,** the game carries on. Bazaar turns your plugin off until the player goes back to the main menu, and shows a pop-up in the middle of the screen that names your plugin and warns that the game may now be unstable. A common cause is a hook whose parameters do not match the game's function. `Bazaar.log` then says where it crashed: what memory it touched, and the call stack, innermost first. Each line gives the DLL and an offset into it, such as `MyPlugin.dll+0x00001A2B`. On the machine you built the plugin on, while the `.pdb` file the build wrote is still where the build put it, the line also names the function and the source line, such as `(BeforeDoTurn, MyPlugin.cpp line 42)`. Without the `.pdb`, as on a player's machine, the call stack may skip some calls, but its first line is always where the crash happened.
 
 ## Publishing
 
@@ -408,7 +424,7 @@ Make each release with `release.cmd`, in your plugin's folder. Besides what buil
 4. In ModBuddy, choose **Tools > Upload to Steam Workshop > Upload new Mod...**, and accept the terms. Click **[...]** and select the package in `Releases\<release>\`, such as `Releases\1\Score Doubler (v 1).civ5mod`. Paste `workshop-description.txt` as the description, and your `CHANGES.txt` section as the change note. For a later release, update your existing Workshop item with the new package instead of uploading a new mod.
 5. On your plugin's Steam Workshop page, list Bazaar under Required Items: Steam then offers Bazaar to anyone who subscribes to your plugin.
 
-The template marks the mod as affecting saved games (`<AffectsSavedGames>` in the `.civ5proj`). Keep it that way. A save lists the mods marked this way, and when someone loads it, the game applies the database changes of those mods only. Your plugin's SQL is a database change, so without the mark, a loaded save would have no `DllPlugins` row for your DLL and Bazaar would not load your plugin. Mods that change nothing in the database, such as ones that only add keyboard shortcuts, are not affected and can be added or removed freely. `release.cmd` refuses a release without it.
+The template marks the mod as affecting saved games (`<AffectsSavedGames>` in the `.civ5proj`). Keep it that way. A save lists the mods marked this way, and when someone loads it, the game applies the database changes of those mods only. Your plugin's SQL is a database change, so without the mark, a loaded save would have no `DllPlugins` row for your DLL and Bazaar would not load your plugin. Mods that change nothing in the database, such as ones that only add keyboard shortcuts, are not affected and can be added or removed freely. `release.cmd` refuses a release without it, and Bazaar refuses to load a plugin whose mod lacks it, even in a new game, so the problem shows at once.
 
 Bazaar itself does not keep anything in saved games for plugins.
 
@@ -446,10 +462,15 @@ If one of your threads is still running when it returns, Bazaar leaves your DLL 
 A few functions return a reference to an object the game already holds, rather than a value. In `CivHooks.h`, their return type ends in `&`, which marks a reference:
 
 ```cpp
-namespace CvPlayer_getHandicapInfo { enum { ID = 7473 }; } // CvHandicapInfo& CvPlayer::getHandicapInfo() const
+struct CvPlayer_getHandicapInfo { enum { ID = 7473 }; // CvHandicapInfo& CvPlayer::getHandicapInfo() const
+	typedef CvHandicapInfo & (*Original)(const CvPlayer *);
+	typedef bool (*Before)(const CvPlayer *, CivHookSlot< CvHandicapInfo & >::Type);
+	typedef void (*After)(const CvPlayer *, CivHookSlot< CvHandicapInfo & >::Type);
+	typedef CvHandicapInfo & (*Replace)(Original, const CvPlayer *);
+};
 ```
 
-This one returns a reference to a `CvHandicapInfo`, the player's difficulty settings. A reference cannot be null and cannot be pointed at another object later, so `result` cannot be one. Instead, for these functions `result` is a pointer to the object, passed by reference so that your hook can change it. C++ writes that as `CvHandicapInfo*& result`, a reference to a pointer to a `CvHandicapInfo`:
+This one returns a reference to a `CvHandicapInfo`, the player's difficulty settings. A reference cannot be null and cannot be pointed at another object later, so `result` cannot be one. Instead, for these functions `result` is a pointer to the object, passed by reference so that your hook can change it. C++ writes that as `CvHandicapInfo*& result`, a reference to a pointer to a `CvHandicapInfo`, which is what `CivHookSlot< CvHandicapInfo & >::Type` in `CivHooks.h` stands for:
 
 ```cpp
 static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
@@ -465,6 +486,7 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 - **The game's code**: the game's core DLL, `CvGameCore_Expansion2.dll`. Bazaar replaces it.
 - **Hand-placed hook**: a fixed spot inside the game's code where Bazaar calls plugins. Each is either a question or an announcement.
 - **Hook**: a function of yours that Bazaar calls before, after or instead of one of the game's functions.
+- **Hook point**: a game function you can hook, as `CivHooks.h` lists it, with its ID and the types of its hooks.
 - **Load order**: the order of the plugins on the Plugins screen, top first.
 - **`original`**: a replacement's first parameter, a function pointer to the game's own version of the function.
 - **Plugins screen**: the screen Bazaar puts in place of Advanced Setup, where the player orders, skips and reloads plugins.
@@ -490,7 +512,9 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 | `(T)x` | `x` cast to the type `T`: `(void*)x` is `x` as an untyped pointer, `(PlayerTypes)x` is `x` as a `PlayerTypes` enum value |
 | `R (*f)(A, B)` | `f` is a pointer to a function that takes an `A` and a `B` and returns an `R` |
 | `typedef R (*Name)(A, B)` | names the function pointer type "pointer to a function that takes an `A` and a `B` and returns an `R`" `Name` |
-| `namespace N { enum { ID = 5 }; }` | a namespace `N` holding an enum with one constant, `ID`, whose value is 5 |
+| `struct N { enum { ID = 5 }; ... };` | a struct `N` holding an enum with one constant, `ID`, whose value is 5, and the declarations in place of `...` |
+| `F<A>(x)` | a call to the template function `F`, with `A` in angle brackets choosing what it works on: `CivRegisterAfter<CivHooks::CvPlayer_GetScore>(host, &AfterScore)` registers an after-hook on that hook point |
+| `T< A >::Type` | the type `Type` that the template `T` gives for `A` |
 | a signature ending in `;` | a declaration: it names the function and its parameters but has no body. The function still needs its `{ ... }` body |
 | `const` after a method | the method does not modify its object |
 | `static` on a method | the method belongs to the class, not to an object, so it has no `self` |

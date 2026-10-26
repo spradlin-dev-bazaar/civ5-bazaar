@@ -4,7 +4,7 @@ Makes a new Bazaar Lua mod folder from this skill's Lua mod template.
 
 .DESCRIPTION
 Copies the template without its build output, renames its files, puts the new names into its text files, gives the
-mod a new ID on the .civ5proj's <Guid> line (the <ProjectGuid> line stays), sets the teaser, description and authors,
+mod a new ID in the .civ5proj's <Guid> (its <ProjectGuid> stays), sets the teaser, description and authors,
 and writes the SQL that switches on the VMC options named in -Options. Files are changed byte for byte, so their
 encoding and line endings stay as the template has them.
 

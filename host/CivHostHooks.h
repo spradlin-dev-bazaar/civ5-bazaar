@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CivPluginApi.h"
+
 #include <new>
 
 struct CivHookEntry
@@ -64,11 +66,10 @@ void CivHookOriginalCalled();
 template<class T> struct CivHookArg { typedef T* Ptr; typedef T Type; };
 template<class T> struct CivHookArg<T&> { typedef T* Ptr; typedef T& Type; };
 
-// A vetoed call returns what the hooks left in the slot: the type's default unless a hook set it.
+// A vetoed call returns what the hooks left in value: the type's default unless a hook set it.
 // A reference result can't be empty, so its wrapper runs the original instead.
 template<class R> struct CivHookResult
 {
-	typedef R Slot;
 	R value;
 	CivHookResult() : value() {}
 	// Copy-construct rather than assign: some engine handles copy state their operator= drops.
@@ -83,7 +84,6 @@ template<class T> struct CivHookResult<const T> : CivHookResult<T>
 
 template<class T> struct CivHookResult<T&>
 {
-	typedef T* Slot;
 	T* value;
 	CivHookResult() : value(0) {}
 	void Set(T& v) { value = &v; }

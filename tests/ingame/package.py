@@ -49,6 +49,7 @@ VMC_CHECK_LUA = """print("DLL id " .. Game.GetDllGuid())
 print("EVENTS_PLAYER_TURN on: " .. tostring(Game.IsCustomModOption("EVENTS_PLAYER_TURN")))
 GameEvents.PlayerDoneTurn.Add(function(iPlayer) print("PlayerDoneTurn for player " .. iPlayer) end)
 print("Game.ToyHandPing: " .. (Game.ToyHandPing and Game.ToyHandPing() or "missing"))
+print("Game.ToyHandRaise: " .. (Game.ToyHandRaise and tostring(select(2, pcall(Game.ToyHandRaise))) or "missing"))
 """
 VMC_CHECK_XML = '<?xml version="1.0" encoding="utf-8"?>\n<Context>\n</Context>\n'
 

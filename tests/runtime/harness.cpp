@@ -1,6 +1,7 @@
 // Runs the host runtime outside the game, against the fixture hooked by the real generator.
 // harness.exe <toy folder> [reverse | list | section names, each at most once]
 #include "harness.h"
+#include "CivHostPath.h"
 #include "fake_engine.h"
 
 #include <stdio.h>
@@ -29,12 +30,16 @@ void TestHandHooks();
 void TestHandHookFaults();
 void TestPossibleConflicts();
 void TestSkippedOriginal();
+void TestPaths();
+void TestActiveMods();
+void TestLuaFunctions();
 
 namespace
 {
 	int s_failures = 0;
 	std::vector<std::string> s_log;
 	int s_faults = 0;
+	bool s_lastFaultShuttingDown = false;
 	std::string s_dir;
 
 	void LogSink(const char* line)
@@ -43,10 +48,11 @@ namespace
 		printf("      log: %s\n", line);
 	}
 
-	void FaultSink(int, const char* name, int hookId, unsigned int code)
+	void FaultSink(int, const char* name, bool shuttingDown, unsigned int code)
 	{
 		++s_faults;
-		printf("      fault sink: %s, hook %d, code 0x%08X\n", name, hookId, code);
+		s_lastFaultShuttingDown = shuttingDown;
+		printf("      fault sink: %s%s, code 0x%08X\n", name, shuttingDown ? ", shutting down" : "", code);
 	}
 
 	struct Section
@@ -79,6 +85,9 @@ namespace
 		{"hand-placed hook faults", &TestHandHookFaults},
 		{"possible conflicts", &TestPossibleConflicts},
 		{"skipped original", &TestSkippedOriginal},
+		{"paths", &TestPaths},
+		{"active mods", &TestActiveMods},
+		{"lua functions", &TestLuaFunctions},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 
@@ -196,7 +205,7 @@ bool IsQuarantined(const char* fileName)
 
 bool IsInMemory(const char* fileName)
 {
-	return GetModuleHandleA(OutFile(fileName).c_str()) != 0;
+	return GetModuleHandleW(CivWide(OutFile(fileName)).c_str()) != 0;
 }
 
 void ClearLog()
@@ -227,9 +236,14 @@ int FaultCount()
 	return s_faults;
 }
 
+bool LastFaultWhileShuttingDown()
+{
+	return s_lastFaultShuttingDown;
+}
+
 FARPROC ToyExport(const char* fileName, const char* function)
 {
-	HMODULE module = GetModuleHandleA(OutFile(fileName).c_str());
+	HMODULE module = GetModuleHandleW(CivWide(OutFile(fileName)).c_str());
 	return module ? GetProcAddress(module, function) : 0;
 }
 
@@ -238,31 +252,35 @@ int Call(int (*fn)(), int fallback)
 	return fn ? fn() : fallback;
 }
 
-int main(int argc, char** argv)
+// Wide arguments, because the out folder's path joins the UTF-8 paths Bazaar works with.
+int wmain(int argc, wchar_t** wideArgs)
 {
-	s_dir = argc > 1 ? std::string(argv[1]) + "\\" : std::string();
+	std::vector<std::string> argv;
+	for (int a = 0; a < argc; ++a)
+		argv.push_back(CivUtf8(wideArgs[a]));
+	s_dir = argc > 1 ? argv[1] + "\\" : std::string();
 	CivHostSetLogSink(&LogSink);
 	CivHostSetFaultSink(&FaultSink);
 
-	if (argc == 3 && strcmp(argv[2], "list") == 0)
+	if (argc == 3 && argv[2] == "list")
 	{
 		for (int i = 0; i < kSectionCount; ++i)
 			printf("%s\n", kSections[i].name);
 		return 0;
 	}
-	const bool reverse = argc == 3 && strcmp(argv[2], "reverse") == 0;
+	const bool reverse = argc == 3 && argv[2] == "reverse";
 	if (argc > 2 && !reverse)
 	{
 		for (int a = 2; a < argc; ++a)
 		{
 			bool found = false;
 			for (int i = 0; i < kSectionCount; ++i)
-				if (strcmp(argv[a], kSections[i].name) == 0)
+				if (argv[a] == kSections[i].name)
 				{
 					Run(kSections[i]);
 					found = true;
 				}
-			Check(found, (std::string("a section is called ") + argv[a]).c_str());
+			Check(found, ("a section is called " + argv[a]).c_str());
 		}
 	}
 	else

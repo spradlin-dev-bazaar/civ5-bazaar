@@ -10,6 +10,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "generator"))
 
@@ -182,17 +183,120 @@ class RegistryTest(unittest.TestCase):
         registry = generate.Registry(self.path)
         _, new_id, new_name = registry.claim(function("A", result_type="bool"))
         hooks = [{"hook_id": new_id, "signature": "bool A()"}]
-        generate.write_plugin_header(types.SimpleNamespace(build_dir=self.folder), registry, hooks)
-        with open(os.path.join(self.folder, "sdk", "CivHooks.h")) as f:
-            header = f.read()
-        self.assertIn("\tnamespace %s { enum { ID = %d }; } // bool A()\n" % (new_name, new_id), header)
+        header, _ = generate.plugin_header(registry, hooks, {new_id}, "Engine.h")
+        self.assertIn("\tstruct %s { enum { ID = %d }; }; // bool A()\n" % (new_name, new_id), header)
         self.assertIn(
             "\t// A (id 0) is no longer a hook point: its function changed, and its hook is now %s.\n" % new_name,
             header,
         )
         self.assertIn("\t// B (id 1) is no longer a hook point.\n", header)
-        self.assertNotIn("namespace A {", header)
-        self.assertNotIn("namespace B {", header)
+        self.assertNotIn("struct A ", header)
+        self.assertNotIn("struct B ", header)
+        self.assertEqual(generate.header_hooks(header), [(new_name, new_id, False)])
+
+    def test_the_plugin_header_gives_each_hook_point_its_types_and_marks_the_lines_that_declare_them(self):
+        self.write("")
+        registry = generate.Registry(self.path)
+        fn = function("Score", cls="CvPlayer", const=True, params=["bool"], result_type="int")
+        fn["result"] = {"kind": "scalar"}
+        fn["signature"] = "int CvPlayer::Score(bool) const"
+        _, fn["hook_id"], name = registry.claim(fn)
+        header, type_lines = generate.plugin_header(registry, [fn], set(), "Engine.h")
+        lines = header.split("\n")
+        first = "\tstruct %s { enum { ID = %d }; // int CvPlayer::Score(bool) const" % (name, fn["hook_id"])
+        start = lines.index(first)
+        self.assertEqual(lines[start + 1 : start + 6], ["\t\t" + t for t in generate.plugin_typedefs(fn)] + ["\t};"])
+        self.assertEqual(type_lines, dict((start + 2 + i, fn["hook_id"]) for i in range(4)))
+        self.assertIn('#include "Engine.h"', header)
+        self.assertEqual(generate.header_hooks(header), [(name, fn["hook_id"], True)])
+
+    def test_a_hook_points_types_are_spelled_as_a_plugin_names_them(self):
+        method = function("Score", "Score(bool)", "CvPlayer", ["Game", ""], const=True, params=["bool"])
+        method["result_type"] = "int"
+        method["result"] = {"kind": "scalar"}
+        self.assertEqual(
+            generate.plugin_typedefs(method),
+            [
+                "typedef int (*Original)(const Game::CvPlayer *, bool);",
+                "typedef bool (*Before)(const Game::CvPlayer *, bool, CivHookSlot< int >::Type);",
+                "typedef void (*After)(const Game::CvPlayer *, bool, CivHookSlot< int >::Type);",
+                "typedef int (*Replace)(Original, const Game::CvPlayer *, bool);",
+            ],
+        )
+        static = function("Make", cls="CvUnit", static=True, params=["std::vector<std::vector<int>>"])
+        static["result"] = {"kind": "void"}
+        self.assertEqual(
+            generate.plugin_typedefs(static),
+            [
+                "typedef void (*Original)(std::vector<std::vector<int> >);",
+                "typedef bool (*Before)(std::vector<std::vector<int> >);",
+                "typedef void (*After)(std::vector<std::vector<int> >);",
+                "typedef void (*Replace)(Original, std::vector<std::vector<int> >);",
+            ],
+        )
+
+    def test_a_hook_points_qualified_types_and_the_functions_own_types_name_types_from_outside_their_class(self):
+        method = function("Feel", "Feel(Mood)", "Unit", ["Game"], const=True, params=["Mood"], result_type="int")
+        method["result"] = {"kind": "scalar"}
+        method.update(canonical_class="Game::Unit", canonical_params=["Game::Unit::Mood"], canonical_result="int")
+        self.assertEqual(
+            generate.plugin_typedefs(method, qualified=True)[0],
+            "typedef int (*Original)(const Game::Unit *, Game::Unit::Mood);",
+        )
+        self.assertEqual(generate.function_types(method), ("int", ["const Game::Unit *", "Game::Unit::Mood"]))
+
+    def test_a_hook_point_fails_on_an_error_in_its_types_or_on_types_other_than_its_functions(self):
+        type_lines = {12: 7, 13: 7, 20: 8, 21: 8}
+        expected = {7: ("int", ["int"]), 8: ("void", [])}
+        self.assertEqual(generate.failing_hooks(({21}, {12: ("int", ["int"])}), type_lines, expected), {8})
+        self.assertEqual(generate.failing_hooks((set(), {12: ("int", ["long"])}), type_lines, expected), {7})
+        with self.assertRaises(RuntimeError):
+            generate.failing_hooks(({3}, {}), type_lines, expected)
+
+    def test_a_hook_point_is_spelled_as_written_then_qualified_then_left_without_types_and_a_late_failure_stops(self):
+        self.write("")
+        registry = generate.Registry(self.path)
+        hooks = []
+        for name in ("Feel", "Rest"):
+            fn = function(name, name + "(Mood)", "Unit", ["Game"], params=["Mood"], result_type="int")
+            fn.update(result={"kind": "scalar"}, signature="int Game::Unit::%s(Mood)" % name)
+            fn.update(canonical_class="Game::Unit", canonical_params=["Game::Unit::Mood"], canonical_result="int")
+            _, fn["hook_id"], fn["hook_name"] = registry.claim(fn)
+            hooks.append(fn)
+        feel, rest = hooks[0]["hook_name"], hooks[1]["hook_name"]
+        project = types.SimpleNamespace(plugin_include="Engine.h")
+        rounds = []
+
+        def failing(names):
+            def check(project, path):
+                with open(path) as f:
+                    lines = f.read().split("\n")
+                rounds.append(lines)
+                struct = None
+                errors = set()
+                for number, line in enumerate(lines, 1):
+                    struct = line.split()[1] if line.startswith("\tstruct ") else struct
+                    if "(*Original)" in line and struct in names(len(rounds)):
+                        errors.add(number)
+                return errors, {}
+
+            return check
+
+        with mock.patch.object(generate.analyze, "check_plugin_header", failing(lambda n: [feel])):
+            text, untyped, qualified = generate.checked_plugin_header(project, registry, hooks)
+        self.assertEqual((untyped, qualified), ({hooks[0]["hook_id"]}, set()))
+        self.assertIn("\t\ttypedef int (*Original)(Game::Unit *, Mood);", rounds[0])
+        self.assertIn("\t\ttypedef int (*Original)(Game::Unit *, Game::Unit::Mood);", rounds[1])
+        self.assertEqual([has_types for _, _, has_types in generate.header_hooks(text)], [False, True])
+        del rounds[:]
+        with mock.patch.object(generate.analyze, "check_plugin_header", failing(lambda n: [feel] if n == 1 else [])):
+            _, untyped, qualified = generate.checked_plugin_header(project, registry, hooks)
+        self.assertEqual((untyped, qualified), (set(), {hooks[0]["hook_id"]}))
+        del rounds[:]
+        late = failing(lambda n: [feel] if n < 3 else [rest])
+        with mock.patch.object(generate.analyze, "check_plugin_header", late):
+            with self.assertRaises(RuntimeError):
+                generate.checked_plugin_header(project, registry, hooks)
 
     def test_a_repeated_id_name_or_function_is_refused(self):
         for text in (

@@ -152,7 +152,7 @@ void TestKeptInMemory()
 	const int faults = FaultCount();
 
 	Check(CivHostSetPlugins(OutFiles(withoutKept)) == CIV_PLUGINS_CHANGED, "the list changes even when a plugin cannot be unloaded");
-	Check(FaultCount() == faults + 1, "a plugin whose shutdown faults is reported");
+	Check(FaultCount() == faults + 1 && LastFaultWhileShuttingDown(), "a plugin whose shutdown faults is reported as such");
 	Check(IsInMemory("toy_kept.dll"), "a plugin whose shutdown faults stays in memory");
 	Check(CivHostSetPlugins(OutFiles(withKept)) == CIV_PLUGINS_CHANGED, "a plugin left in memory can be listed again");
 	Check(HasStatus("toy_kept.dll", CIV_PLUGIN_STILL_IN_MEMORY), "a plugin left in memory is refused when listed again");

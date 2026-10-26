@@ -5,6 +5,7 @@
 // Include it after CvGame.h: it relies on the engine's types and on the Windows headers of the precompiled header.
 
 #include <stdio.h>
+#include <string>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -42,16 +43,23 @@ namespace CivTurnBench
 		return ticks * 1000.0 / f.QuadPart;
 	}
 
+	// build-dll.cmd bench compiles none of the host's files, so this uses only Windows and the C runtime.
 	inline void Write(const char* line)
 	{
-		char path[MAX_PATH];
-		const DWORD length = GetModuleFileNameA(reinterpret_cast<HMODULE>(&__ImageBase), path, MAX_PATH);
-		char* slash = strrchr(path, '\\');
-		if (length == 0 || length >= MAX_PATH || !slash)
+		wchar_t dll[MAX_PATH];
+		const DWORD length = GetModuleFileNameW(reinterpret_cast<HMODULE>(&__ImageBase), dll, MAX_PATH);
+		if (length == 0 || length >= MAX_PATH)
 			return;
-		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "CivTurnBench.csv");
+		std::wstring path(dll, length);
+		const size_t slash = path.find_last_of(L'\\');
+		if (slash == std::wstring::npos)
+			return;
+		// tests/ingame/package.py tells a benchmark build by this name, spelled in single bytes, inside the DLL.
+		const char* const name = "CivTurnBench.csv";
+		path.erase(slash + 1);
+		path.append(name, name + strlen(name));
 		FILE* f = 0;
-		if (fopen_s(&f, path, "a") == 0 && f)
+		if (_wfopen_s(&f, path.c_str(), L"a") == 0 && f)
 		{
 			fprintf(f, "%s\n", line);
 			fclose(f);

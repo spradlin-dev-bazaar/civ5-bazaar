@@ -82,13 +82,20 @@ class ListTest(unittest.TestCase):
                 f.write("10\tCvPlot_area\tCvPlot::area()\tint\n")
             hooks = [
                 {"hook_id": 0, "signature": "void CvCity::init()"},
-                {"hook_id": 10, "signature": "int CvPlot::area()"},
+                {
+                    "hook_id": 10,
+                    "signature": "int CvPlot::area()",
+                    "class": "CvPlot",
+                    "namespaces": [],
+                    "static_method": False,
+                    "const": False,
+                    "params": [],
+                    "result": {"kind": "scalar"},
+                    "result_type": "int",
+                },
             ]
-            generate.write_plugin_header(
-                types.SimpleNamespace(build_dir=folder), generate.Registry(registry_path), hooks
-            )
-            with open(os.path.join(folder, "sdk", "CivHooks.h")) as f:
-                self.assertEqual(release.hooks_from(f.read()), ["0\tCvCity_init", "10\tCvPlot_area"])
+            header, _ = generate.plugin_header(generate.Registry(registry_path), hooks, {0}, "Engine.h")
+            self.assertEqual(release.hooks_from(header), ["0\tCvCity_init", "10\tCvPlot_area"])
 
     def test_exported_names_are_read_without_their_undecorated_forms(self):
         text = "       3 number of functions\n       3 number of names\n" + DUMPBIN
@@ -158,6 +165,12 @@ class DifferenceTest(unittest.TestCase):
             layout_record(("A", 4), ("B", 4)), layout_record(("A", 8), ("B", 4), ("C", 4))
         )
         self.assertEqual((found.added, found.removed), (["class C"], ["class A"]))
+
+    def test_an_enum_value_that_moved_is_removed_and_one_added_at_the_end_is_added(self):
+        then = release.layouts.format_record((0, 3), [("enum E::A", "enum E::A = 0"), ("enum E::B", "enum E::B = 1")])
+        now = then.replace("E::B = 1", "E::B = 2") + "enum E::C = 3\n\n"
+        found = release.layout_difference(then, now)
+        self.assertEqual((found.added, found.removed), (["enum E::C"], ["enum E::B"]))
 
     def test_identical_layouts_differ_in_nothing(self):
         found = release.layout_difference(layout_record(("A", 4)), layout_record(("A", 4)))

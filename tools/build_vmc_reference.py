@@ -14,6 +14,7 @@ import re
 import sys
 from collections import namedtuple
 from pathlib import Path
+from xml.etree import ElementTree
 
 REPO = Path(__file__).resolve().parents[1]
 VMC = REPO / "mod" / "vmc"
@@ -44,38 +45,69 @@ OPTION_TEST = re.compile(r"(?<![!\w])MOD_(\w+)")
 IF_HEAD = re.compile(r"\bif\s*\(")
 PUSH = re.compile(r"->Push\((.*?)\);")
 SIGNATURE = re.compile(r"GameEvents\.(\w+)\.Add\(function\(([^)]*)\)\s*(.*?)\s*end\)\s*(\(v\d+\))?")
-XML_TOKEN = re.compile(r"<!--(?P<comment>.*?)-->|(?P<row><Row\b[^>]*>)|(?P<gap>\n[ \t]*\n)", re.S)
-ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
+DEFAULT_VALUE = re.compile(r"\s*=[^,]*")
+BLANK_LINE = re.compile(r"\n[ \t]*\n")
+# The rest of a base-game call after the event's name: its arguments, then the variable it fills with the answer.
+FILLED_ANSWER = re.compile(r"\s*,[^,;]*,\s*(\w+)\s*\)")
+# The engine's own test calls, made from Lua functions in CvLuaGame.cpp, not events the game fires.
+NOT_EVENTS = {"TestEvent", "TestAccumulator"}
+EXTRA_NOTES = {
+    "PlayerCanAdoptTenet": "VMC also fires it to ask whether the player can adopt an ideology, with the ideology's "
+    "policy branch ID as `iTenet` (CvPolicyClasses.cpp). A handler cannot tell which it is asked, so blocking a tenet "
+    "by its ID can also block the ideology whose branch has that ID.",
+    "PlayerCanAdoptIdeology": "To block an ideology, subscribe to `PlayerCanAdoptTenet`: VMC asks that event about "
+    "ideologies too, with the ideology's policy branch ID as `iTenet` (CvPolicyClasses.cpp).",
+}
+FALSE_BY_DEFAULT = (
+    "**Answer `false` by default**: the game acts only when every handler answers `true`, so answer `false` in every "
+    "case the mod does not mean to change."
+)
 
 Option = namedtuple("Option", "name kind default notes")
 # options: the options the code checks around the call; blocks: those whose `#if defined(MOD_...)` code it sits in,
 # which says whose code it is but not that the option is checked.
 Site = namedtuple("Site", "file options blocks pushed")
-Engine = namedtuple("Engine", "types kinds vmc_sites base_sites")
+Engine = namedtuple("Engine", "types kinds vmc_sites base_sites acts_on_true unused")
 
 
 def read_version():
-    modinfo = next(VMC.glob("*.modinfo")).read_text(encoding="utf-8-sig")
-    return re.search(r'<Mod\b[^>]*\bversion="(\d+)"', modinfo).group(1)
+    return str(int(ElementTree.parse(next(VMC.glob("*.modinfo"))).getroot().attrib["version"]))
+
+
+def option_nodes(element):
+    """The comments, rows and text between them, in file order, without going into a row."""
+    yield "text", element.text or ""
+    for child in element:
+        if child.tag is ElementTree.Comment:
+            yield "comment", child.text or ""
+        elif child.tag == "Row":
+            yield "row", child.attrib
+        else:
+            yield from option_nodes(child)
+        yield "text", child.tail or ""
 
 
 def read_options():
-    """Each option row in file order, with the comments just above it and any comment after it on the same line.
+    """Each option row in file order, with the comments just above it and any comment after it on the same line; a
+    blank line drops the comments above it, and comments outside the root element are not read.
 
     Class 0 rows hold numbers that other options use; every other row is an on/off switch."""
-    text = (VMC / "CustomModOptions.xml").read_text(encoding="utf-8-sig", errors="replace")
-    options, pending, row_end = [], [], None
-    for token in XML_TOKEN.finditer(text):
-        if token.group("gap"):
-            pending, row_end = [], None
-        elif token.group("row"):
-            attributes = dict(ATTRIBUTE.findall(token.group("row")))
-            kind = "number" if attributes.get("Class") == "0" else "switch"
-            options.append(Option(attributes["Name"], kind, attributes.get("Value", "0"), pending))
-            pending, row_end = [], token.end()
+    parser = ElementTree.XMLParser(target=ElementTree.TreeBuilder(insert_comments=True))
+    root = ElementTree.parse(VMC / "CustomModOptions.xml", parser).getroot()
+    options, pending, on_row_line = [], [], False
+    for kind, value in option_nodes(root):
+        if kind == "text":
+            if BLANK_LINE.search(value):
+                pending = []
+            if "\n" in value:
+                on_row_line = False
+        elif kind == "row":
+            option_kind = "number" if value.get("Class") == "0" else "switch"
+            options.append(Option(value["Name"], option_kind, value.get("Value", "0"), pending))
+            pending, on_row_line = [], True
         else:
-            note = " ".join(part.strip() for part in token.group("comment").splitlines()).strip().rstrip("-").strip()
-            if row_end is not None and "\n" not in text[row_end : token.start()]:
+            note = " ".join(part.strip() for part in value.splitlines()).strip().rstrip("-").strip()
+            if on_row_line:
                 options[-1].notes.append(note)
             elif not note.startswith("Row "):
                 pending.append(note)
@@ -166,6 +198,30 @@ def pushed_before(lines, number):
     return pushed
 
 
+def answer_reading(code, end, answer):
+    """How the code after a test-all call, from end, reads the answer: "refuses" when any false refuses (the answer
+    compared with false, or used as it is), "acts" when the game acts on true from every handler, "unused" when the
+    statement the call opens does not look at it, or None for a shape this script does not know. answer is the variable
+    a base-game call fills, or None for a VMC call, whose answer is compared where it is made."""
+    if answer is None:
+        refuses = re.compile(r"[^;{]*?==\s*GAMEEVENTRETURN_FALSE")
+        acts = re.compile(r"[^;{]*?==\s*GAMEEVENTRETURN_TRUE")
+    else:
+        stop = code.find(";", end)
+        following = code[end : stop if stop >= 0 else len(code)]
+        if not following.strip(" \t\r\n){"):
+            return None
+        if not re.search(r"\b%s\b" % re.escape(answer), following):
+            return "unused"
+        a = re.escape(answer)
+        refuses = re.compile(r"[^;]*?(?:\bif\s*\(\s*(?:%s\s*==\s*false|!\s*%s)\s*\)|\b\w+\s*=\s*%s\s*;)" % (a, a, a))
+        acts = re.compile(r"[^;]*?\bif\s*\(\s*%s\s*(?:==\s*true\s*)?\)" % a)
+    refused, acted = refuses.match(code, end), acts.match(code, end)
+    if refused and not (acted and acted.end() < refused.end()):
+        return "refuses"
+    return "acts" if acted else None
+
+
 def read_engine(option_names):
     """The argument types VMC declares for each event, how each event is called, and where."""
     sources = [path for path in sorted(ENGINE.rglob("*")) if path.suffix.lower() in (".cpp", ".h")]
@@ -179,7 +235,7 @@ def read_engine(option_names):
             match = MOD_MACRO.match(line)
             if match:
                 macros.add(match.group(1))
-    kinds, vmc_sites, base_sites = {}, {}, {}
+    kinds, vmc_sites, base_sites, readings, unused, skipped = {}, {}, {}, {}, {}, set()
     for path, raw in files:
         pairs = compiled(raw, macros)
         lines = [line for line, _ in pairs]
@@ -192,13 +248,56 @@ def read_engine(option_names):
                     continue
                 kind, name = match.groups()
                 name = by_macro.get(name, name) if call is VMC_CALL else name
+                if name in NOT_EVENTS:
+                    skipped.add(name)
+                    continue
                 kinds.setdefault(name, set()).add(KINDS[kind])
                 number = text.count("\n", 0, match.start())
+                if KINDS[kind] == "test-all":
+                    reading = test_all_reading(code, match.end(), call is VMC_CALL)
+                    if reading is None:
+                        raise SystemExit(
+                            "build_vmc_reference: %s line %d reads a test-all event's answer in a way this script "
+                            "does not know; add its shape to answer_reading" % (path.name, number + 1)
+                        )
+                    if reading == "unused":
+                        unused.setdefault(name, []).append(path.name)
+                    else:
+                        readings.setdefault(name, set()).add(reading)
                 options = sorted(o for o in tested_options(code, braces, match.start()) if o in option_names)
                 blocks = sorted(b[4:] for b in pairs[number][1] if b[4:] in option_names)
                 pushed = pushed_before(lines, number) if call is BASE_CALL else []
                 sites.setdefault(name, []).append(Site(path.name, options, blocks, pushed))
-    return Engine(types, kinds, vmc_sites, base_sites)
+    problems = read_problems(readings, skipped, set(kinds) | set(types))
+    if problems:
+        raise SystemExit("build_vmc_reference: " + "; ".join(problems))
+    acts_on_true = {name for name, seen in readings.items() if seen == {"acts"}}
+    return Engine(types, kinds, vmc_sites, base_sites, acts_on_true, unused)
+
+
+def test_all_reading(code, end, vmc_call):
+    """answer_reading for the test-all call that ends at end: a VMC call compares its answer where it is made, and a
+    base-game call fills a variable first."""
+    if vmc_call:
+        return answer_reading(code, end, None)
+    filled = FILLED_ANSWER.match(code, end)
+    return filled and answer_reading(code, filled.end(), filled.group(1))
+
+
+def read_problems(readings, skipped, events):
+    """Why what read_engine read cannot be trusted: an event read both ways, or a hand list naming something the engine
+    no longer has."""
+    problems = []
+    mixed = sorted(name for name, seen in readings.items() if len(seen) > 1)
+    if mixed:
+        problems.append("test-all events read one way at one call and the other way at another: " + ", ".join(mixed))
+    gone = sorted(NOT_EVENTS - skipped)
+    if gone:
+        problems.append("NOT_EVENTS names test calls the engine no longer makes: " + ", ".join(gone))
+    unknown = sorted(name for name in EXTRA_NOTES if name not in events)
+    if unknown:
+        problems.append("EXTRA_NOTES names events the engine no longer has: " + ", ".join(unknown))
+    return problems
 
 
 def closest(event, engine):
@@ -268,10 +367,13 @@ def option_event(signature, option, engine):
     if not match:
         return "- `%s`" % signature, None
     event, arguments, body, version = match.groups()
-    parts = [describe(event, engine) + "."]
-    if body.startswith("return"):
-        parts.append("Handlers %s." % body.rstrip(";").strip())
+    arguments = DEFAULT_VALUE.sub("", arguments.strip())
     in_code = event if event in engine.kinds or event in engine.types else closest(event, engine) or event
+    parts = [describe(event, engine) + "."]
+    # VMC's notes show a handler that changes nothing; only a value event's says what kind of value it returns.
+    if body.startswith("return") and engine.kinds.get(in_code) == {"value"}:
+        parts.append("VMC's example handler returns `%s`." % body[len("return") :].rstrip(";").strip())
+    parts += notes_on(in_code, engine)
     parts += also_needs(in_code, option, engine)
     listed = len([a for a in arguments.split(",") if a.strip()])
     declared = engine.types.get(in_code)
@@ -288,7 +390,22 @@ def option_event(signature, option, engine):
         )
     if version:
         parts.append("Since VMC %s." % version.strip("()"))
-    return "- `GameEvents.%s.Add(function(%s) ... end)`: %s" % (event, arguments.strip(), " ".join(parts)), event
+    return "- `GameEvents.%s.Add(function(%s) ... end)`: %s" % (event, arguments, " ".join(parts)), event
+
+
+def notes_on(event, engine):
+    notes = [FALSE_BY_DEFAULT] if event in engine.acts_on_true else []
+    if event in engine.unused:
+        calls = engine.unused[event]
+        notes.append(
+            "The game ignores the answer at %s of the places it asks it (%s)."
+            % ("one" if len(calls) == 1 else len(calls), ", ".join(sorted(set(calls))))
+        )
+    return notes + ([EXTRA_NOTES[event]] if event in EXTRA_NOTES else [])
+
+
+def with_notes(line, event, engine):
+    return " ".join([line] + notes_on(event, engine))
 
 
 def option_sections(options, engine):
@@ -319,10 +436,14 @@ def unlisted_events(engine, listed):
         sites = engine.vmc_sites[event]
         switch = " or ".join(sorted({site_condition(site) for site in sites}))
         arguments = ", ".join(TYPES.get(t, t) for t in engine.types.get(event, "")) or "none"
-        out.append(
-            "- `%s` (%s), fired in %s %s. Arguments: %s."
-            % (event, describe(event, engine), files_of(sites), switch, arguments)
+        line = "- `%s` (%s), fired in %s %s. Arguments: %s." % (
+            event,
+            describe(event, engine),
+            files_of(sites),
+            switch,
+            arguments,
         )
+        out.append(with_notes(line, event, engine))
     return out
 
 
@@ -341,16 +462,14 @@ def base_events(engine, defaults):
                 all_on(checked or inside),
                 " (on by default)" if all(defaults[o] != "0" for o in checked or inside) else "",
             )
-        out.append(
-            "- `%s` (%s), fired in %s. Arguments: %s%s"
-            % (
-                event,
-                describe(event, engine),
-                files_of(sites),
-                ", ".join("`%s`" % a for a in arguments) if arguments else "none",
-                note,
-            )
+        line = "- `%s` (%s), fired in %s. Arguments: %s%s." % (
+            event,
+            describe(event, engine),
+            files_of(sites),
+            ", ".join("`%s`" % a for a in arguments) if arguments else "none",
+            note,
         )
+        out.append(with_notes(line, event, engine))
     return out
 
 
