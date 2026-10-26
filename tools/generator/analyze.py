@@ -400,7 +400,7 @@ def check_plugin_header(project, header):
     typedef's canonical types by line: (result, parameters)."""
     header = os.path.normcase(os.path.abspath(header))
     tu = parse_as_plugin(project, header)
-    known = known_errors()
+    known = common.known_errors()
     lines = set()
     for d in tu.diagnostics:
         path = os.path.abspath(d.location.file.name) if d.location.file else ""
@@ -428,15 +428,10 @@ def check_plugin_header(project, header):
     return lines, originals
 
 
-def known_errors(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "known-parse-errors.txt")):
-    with open(path, encoding="utf-8") as f:
-        return set(tuple(line.rstrip("\n").split("\t", 1)) for line in f if line.strip() and not line.startswith("#"))
-
-
 def project_errors(project, results):
     """New parse errors in the project outside function bodies: they can hide functions, so the build must stop.
     Errors inside a body cannot, since the generator never needs a body's contents."""
-    known = known_errors()
+    known = common.known_errors()
     return {
         (e[0], e[1], e[2])
         for r in results

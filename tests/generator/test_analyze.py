@@ -28,20 +28,8 @@ class ProjectErrorsTest(unittest.TestCase):
             (os.path.join(tempfile.gettempdir(), "sdk", "windows.h"), 1, "unknown type name", False),
         ]
         project = types.SimpleNamespace(contains=lambda path: path.startswith(root + os.sep))
-        with mock.patch.object(analyze, "known_errors", lambda: {("CvDatabaseUtility.h", "expected expression")}):
+        with mock.patch.object(common, "known_errors", lambda: {("CvDatabaseUtility.h", "expected expression")}):
             self.assertEqual(analyze.project_errors(project, [{"errors": errors}]), {(header, 5, "expected ';'")})
-
-
-class KnownErrorsTest(unittest.TestCase):
-    def test_each_line_is_a_file_name_and_a_message_and_comments_are_skipped(self):
-        folder = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, folder)
-        path = os.path.join(folder, "known.txt")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("# why each is harmless\n\nCvDatabaseUtility.h\texpected expression\nA.h\tinvalid\tname\n")
-        self.assertEqual(
-            analyze.known_errors(path), {("CvDatabaseUtility.h", "expected expression"), ("A.h", "invalid\tname")}
-        )
 
 
 class CanonicalParametersTest(unittest.TestCase):
@@ -81,7 +69,7 @@ class CheckPluginHeaderTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             analyze.check_plugin_header(self.project, header)
         known = {("Engine.h", "expected expression")}
-        with mock.patch.object(analyze, "known_errors", lambda: known):
+        with mock.patch.object(common, "known_errors", lambda: known):
             self.assertEqual(analyze.check_plugin_header(self.project, header), (set(), {}))
 
     def test_each_original_typedef_gives_its_types_and_an_error_gives_its_line(self):

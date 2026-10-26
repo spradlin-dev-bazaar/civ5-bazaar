@@ -1,14 +1,17 @@
 """Check that the classes plugins are built against keep their layout.
 
-Plugins compile the engine's headers into themselves, so each class's size, the position of each field and the order
-of its virtual functions are baked into every plugin. This compiles every header the SDK ships with the compiler's own
-layout report, once with the plugins' defines and once with the host's, and compares the plugins' report with the
-committed record: a class that changed or is gone fails the build, and a new one is added to the record. It also
-compiles CivHooks.h on its own, as a plugin would, apart from the report, whose hook point structs are no layouts.
+Plugins compile the engine's headers into themselves, so each class's size, the position and type of each field, the
+order and parameters of its virtual functions, and each enum's values are baked into every plugin (class templates
+are checked only through the sizes and positions of their uses). This compiles every
+header the SDK ships with the compiler's own layout report, once with the plugins' defines and once with the host's,
+adds what libclang reads of the types (layout_types.py), and compares that with the committed record: a class or enum
+value that changed or is gone fails the build, and a new one is added to the record. It also compiles CivHooks.h on
+its own, as a plugin would, apart from the report, whose hook point structs are no layouts.
 
 usage: layouts.py            (run by build-hooked.cmd)
-       layouts.py --accept   (run by build-hooked.cmd accept-layouts: save the current layouts as the record; from 1.0
-                              on, a changed class is refused unless the major version went up)
+       layouts.py --accept   (run by build-hooked.cmd accept-layouts: save the current layouts as the record; a
+                              changed class or enum value is refused unless CIV_HOST_API_MAJOR is 0 while no 1.0
+                              release is tagged, or one more than the last release's major after that)
 """
 
 import difflib
@@ -18,6 +21,7 @@ import subprocess
 import sys
 
 import common
+import layout_types
 
 RECORD = os.path.join(common.HERE, "class-layouts.txt")
 API_HEADER = os.path.join(common.HOST_DIR, "CivPluginApi.h")
@@ -26,10 +30,13 @@ NOT_COMPILED = {"cvdllfastarifacebase.h", os.path.join("lua", "cvluascopedindire
 
 CLASS_HEADER = re.compile(r"^class (.+)\tsize\(\d+\):$")
 TABLE_HEADER = re.compile(r"^(\S.*::\$v[fb]table@.*):$")
+TYPES_HEADER = re.compile(r"^(types .+):$")
+ENUM_VALUE = re.compile(r"^(enum .+) = -?\d+$")
 API_LINE = re.compile(r"^api (\d+)\.(\d+)$")
 RELEASE_TAGS = "v[0-9]*"
 API_NUMBER = r"^(#define CIV_HOST_API_%s )(\d+)(?=\r?$)"
-MAX_CLASSES_SHOWN = 15
+MAX_SHOWN = 15
+SET_BACK = "set it back to the major number in VERSION, run build-hooked.cmd again and commit the new record."
 MAX_DIFF_LINES = 12
 
 
@@ -124,17 +131,25 @@ def compile_unit(unit, defines, includes, extra, how):
     return out
 
 
+def block_header(line):
+    m = CLASS_HEADER.match(line)
+    if m:
+        return "class " + m.group(1)
+    for pattern in (TABLE_HEADER, TYPES_HEADER, ENUM_VALUE):
+        m = pattern.match(line)
+        if m:
+            return m.group(1)
+    return None
+
+
 def parse_report(text):
-    """The report's blocks as sorted (key, text) pairs: one per class and one per virtual function table."""
+    """The report's blocks as sorted (key, text) pairs: one per class and one per virtual function table, and in the
+    record also layout_types.py's, one per class's types and one per enum value."""
     blocks = []
     key, lines = None, []
     for line in text.splitlines():
         line = line.rstrip()
-        m = CLASS_HEADER.match(line)
-        header = "class " + m.group(1) if m else None
-        if not header:
-            m = TABLE_HEADER.match(line)
-            header = m.group(1) if m else None
+        header = block_header(line)
         if header:
             if key:
                 blocks.append((key, "\n".join(lines)))
@@ -177,10 +192,22 @@ def compare(recorded, current):
     return lost, new
 
 
-def accept_allowed(recorded_version, version):
-    """Before 1.0 a changed class may be accepted on purpose; 1.0 freezes the layouts, and only a later major version
-    may change them."""
-    return version[0] == 0 or version[0] > max(recorded_version[0], 1)
+def released_major(tag):
+    """The last release's major version, or None when no release tag is here."""
+    released = re.match(r"v(\d+)", tag or "")
+    return int(released.group(1)) if released else None
+
+
+def accept_allowed(recorded_version, version, tag):
+    """Before 1.0 a change may be accepted on purpose under a 0.x number. 1.0 freezes the layouts; from then on only the
+    major version after the last release's may change them, as often as needed until it is released. Without a release
+    tag here, a change is allowed only while the record and the number are both still at 0."""
+    released = released_major(tag)
+    if released is None:
+        return version[0] == 0 and recorded_version[0] == 0
+    if released == 0:
+        return version[0] == 0
+    return version[0] == released + 1
 
 
 def shared_names(*reports):
@@ -193,26 +220,37 @@ def shared_names(*reports):
     return shared
 
 
+def label(key):
+    if key.startswith("types "):
+        return "field types and virtual functions of " + key[len("types ") :]
+    if key.startswith("enum "):
+        return "enum value " + key[len("enum ") :]
+    return key
+
+
 def describe(lost, shared):
     out = []
-    for key, old, now in lost[:MAX_CLASSES_SHOWN]:
+    for key, old, now in lost[:MAX_SHOWN]:
         nested = " (one of several classes of this name, nested in different classes)" if key in shared else ""
         if not now:
-            out.append("  gone: %s%s" % (key, nested))
+            out.append("  gone: %s%s" % (label(key), nested))
             continue
-        out.append("  changed: %s%s" % (key, nested))
+        out.append("  changed: %s%s" % (label(key), nested))
         closest = max(now, key=lambda text: difflib.SequenceMatcher(None, old, text).ratio())
         diff = list(difflib.unified_diff(old.splitlines(), closest.splitlines(), "record", "now", lineterm="", n=1))[2:]
         out += ["    " + line for line in diff[:MAX_DIFF_LINES]]
         if len(diff) > MAX_DIFF_LINES:
             out.append("    ...")
-    if len(lost) > MAX_CLASSES_SHOWN:
-        out.append("  and %d more" % (len(lost) - MAX_CLASSES_SHOWN))
+    if len(lost) > MAX_SHOWN:
+        out.append("  and %d more" % (len(lost) - MAX_SHOWN))
     return out
 
 
 def print_lost(lost, recorded, current):
-    print("These classes differ from the record in %s, which every plugin was built against:" % common.shown(RECORD))
+    print(
+        "These classes or enum values differ from the record in %s, which every plugin was built against:"
+        % common.shown(RECORD)
+    )
     print("\n".join(describe(lost, shared_names(recorded, current))))
 
 
@@ -229,24 +267,25 @@ def last_release_tag():
     return done.stdout.strip() if done.returncode == 0 else None
 
 
-def frozen_advice(recorded_version, tag):
-    """The way out when a changed class is refused, which cannot tell a released major version from one still being
-    worked on."""
-    released = re.match(r"v(\d+)", tag or "")
-    if recorded_version[0] == 0 and not (released and int(released.group(1)) >= 1):
+def frozen_advice(tag):
+    """The way out when a changed class is refused. VERSION must keep agreeing with CivPluginApi.h, so the changed
+    number goes back once the record is saved, and release.py prepare --major raises it for the release."""
+    released = released_major(tag)
+    if released is None:
+        return ["No release tag is here, so the last release is not known: run git fetch --tags, then build again."]
+    if released == 0:
         return [
-            "1.0 freezes the layouts the 0.x versions left, and no 1.0 release is tagged yet. To change a class",
-            "for it, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h back to 0, run build-hooked.cmd accept-layouts,",
-            "then set it to 1 again and rebuild every plugin.",
+            "1.0 freezes the layouts the 0.x releases left, and no 1.0 release is tagged yet. To change a class or",
+            "enum value before then, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to 0 and run build-hooked.cmd",
+            "accept-layouts. Then " + SET_BACK,
+            "Rebuild every plugin.",
         ]
     return [
-        "From 1.0 on, a class can change only in a new major version. Either:",
-        "- raise CIV_HOST_API_MAJOR in host\\CivPluginApi.h, then run build-hooked.cmd accept-layouts and rebuild every"
-        " plugin; or",
-        "- if you already raised it and accepted another change for that version, and it is not released yet, put back",
-        "  the record of the last release with: git checkout %s -- %s"
-        % (tag or "<last release tag>", common.shown(RECORD)),
-        "  then run build-hooked.cmd accept-layouts, which accepts all of the new version's changes together.",
+        "From 1.0 on, a class or enum value can change only in a new major version, which release.py prepare --major",
+        "starts. To accept the change for it, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to %d, one more than the"
+        % (released + 1),
+        "last release's, and run build-hooked.cmd accept-layouts. Then " + SET_BACK,
+        "Rebuild every plugin.",
     ]
 
 
@@ -284,9 +323,9 @@ def current_layouts(project):
             "A header lays out these classes differently for the host than for plugins, because of a define only one"
             " side sets:"
         ]
-        lines += ["  " + key for key in keys[:MAX_CLASSES_SHOWN]]
-        if len(keys) > MAX_CLASSES_SHOWN:
-            lines.append("  and %d more" % (len(keys) - MAX_CLASSES_SHOWN))
+        lines += ["  " + key for key in keys[:MAX_SHOWN]]
+        if len(keys) > MAX_SHOWN:
+            lines.append("  and %d more" % (len(keys) - MAX_SHOWN))
         for side, only in [
             ("the host sets, in the generated engine project", set(defines) - set(common.PLUGIN_DEFINES)),
             ("plugins set, in tools\\generator\\common.py", set(common.PLUGIN_DEFINES) - set(defines)),
@@ -294,7 +333,7 @@ def current_layouts(project):
             if only:
                 lines.append("Defines only %s: %s" % (side, ", ".join(sorted(only))))
         raise RuntimeError("\n".join(lines))
-    return plugin
+    return sorted(plugin + layout_types.read(unit, includes))
 
 
 def check(project):
@@ -304,17 +343,21 @@ def check(project):
     lost, new = compare(recorded, current)
     if lost:
         print_lost(lost, recorded, current)
+        tag = last_release_tag()
         if not any(now for _, _, now in lost):
-            print("A gone class can be accepted at any version, once no plugin uses it:")
-            print("run build-hooked.cmd accept-layouts.")
-        elif accept_allowed(recorded_version, version):
+            print("Once no plugin uses what is gone, run build-hooked.cmd accept-layouts. From 1.0 on, the release")
+            print("without it must be a new major version.")
+        elif accept_allowed(recorded_version, version, tag):
             print("To change them on purpose, run build-hooked.cmd accept-layouts, then rebuild every plugin.")
         else:
-            print("\n".join(frozen_advice(recorded_version, last_release_tag())))
+            print("\n".join(frozen_advice(tag)))
         return 1
     if new or not recorded_version:
         write_record(recorded_version or version, recorded + new)
-    print("class layouts: %d match %s, %d new added to it" % (len(recorded), common.shown(RECORD), len(new)))
+    print(
+        "class layouts and enum values: %d match %s, %d new added to it"
+        % (len(recorded), common.shown(RECORD), len(new))
+    )
     return 0
 
 
@@ -324,15 +367,16 @@ def accept(project):
     recorded_version, recorded = read_record(version)
     lost, _ = compare(recorded, current)
     changed = any(now for _, _, now in lost)
-    if changed and not accept_allowed(recorded_version, version):
+    tag = last_release_tag()
+    if changed and not accept_allowed(recorded_version, version, tag):
         print_lost(lost, recorded, current)
-        print("\n".join(frozen_advice(recorded_version, last_release_tag())))
+        print("\n".join(frozen_advice(tag)))
         return 1
     saved = version if changed or not recorded_version else recorded_version
     write_record(saved, current)
-    print("Saved %d layouts as the record for API %d.%d." % (len(current), saved[0], saved[1]))
+    print("Saved %d class layouts and enum values as the record for API %d.%d." % (len(current), saved[0], saved[1]))
     if changed:
-        print("Rebuild every plugin.")
+        print("Rebuild every plugin. If you changed CIV_HOST_API_MAJOR for this, " + SET_BACK)
     return 0
 
 

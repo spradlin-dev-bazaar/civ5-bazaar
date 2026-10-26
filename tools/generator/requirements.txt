@@ -1,4 +1,6 @@
 # Python tools: the hook generator (libclang), the docs step (Pygments, Markdown) and the lint check.
+# tools/generator/class-layouts.txt holds types as this libclang spells them; another version may spell them all
+# differently, which once the layouts are frozen needs a new major version.
 libclang==18.1.1
 markdown==3.10.3
 pygments==2.21.0

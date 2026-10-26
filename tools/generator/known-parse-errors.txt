@@ -2,3 +2,11 @@
 # CvDatabaseUtility.h names a template parameter 'default', which MSVC accepts and clang does not; templates get no hooks.
 CvDatabaseUtility.h	invalid parameter name: 'default' is a keyword
 CvDatabaseUtility.h	expected expression
+# FirePlace's headers, whose errors only the layout check stops on (MSVC compiles them): errors inside templates,
+# which the record leaves out.
+FFastAllocator.h	use of class template 'FFastAllocator' requires template arguments
+FFastList.h	expected member name or ';' after declaration specifiers
+FFastList.h	expected ')'
+FFastList.h	use of undeclared identifier 'rhs'
+FFastList.h	'explicit' can only appear on non-static member functions
+FFastList.h	typedef 'TYPE' cannot be referenced with a class specifier

@@ -166,6 +166,12 @@ class DifferenceTest(unittest.TestCase):
         )
         self.assertEqual((found.added, found.removed), (["class C"], ["class A"]))
 
+    def test_an_enum_value_that_moved_is_removed_and_one_added_at_the_end_is_added(self):
+        then = release.layouts.format_record((0, 3), [("enum E::A", "enum E::A = 0"), ("enum E::B", "enum E::B = 1")])
+        now = then.replace("E::B = 1", "E::B = 2") + "enum E::C = 3\n\n"
+        found = release.layout_difference(then, now)
+        self.assertEqual((found.added, found.removed), (["enum E::C"], ["enum E::B"]))
+
     def test_identical_layouts_differ_in_nothing(self):
         found = release.layout_difference(layout_record(("A", 4)), layout_record(("A", 4)))
         self.assertEqual((found.added, found.removed), ([], []))

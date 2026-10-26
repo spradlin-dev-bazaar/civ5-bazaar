@@ -33,6 +33,10 @@ CITY = "class CvCity\tsize(4):\n\t+---\n 0\t| m_iID\n\t+---\n"
 FIRST = "class iterator\tsize(4):\n\t+---\n 0\t| _Ptr\n\t+---\n"
 SECOND = "class iterator\tsize(8):\n\t+---\n 0\t| _Ptr\n 4\t| _Mycont\n\t+---\n"
 THIRD = "class iterator\tsize(12):\n\t+---\n 0\t| _Ptr\n 4\t| _Mycont\n 8\t| _Index\n\t+---\n"
+UNIT_TYPES = (
+    "types CvUnit:\n field m_iX: int\n field m_iY: int\n virtual Range int () __attribute__((thiscall)) const\n"
+)
+VALUES = "enum UnitAITypes::NO_UNITAI = -1\nenum UnitAITypes::UNITAI_SETTLE = 0\n"
 
 
 def report(*blocks):
@@ -58,6 +62,17 @@ class ParseReportTest(unittest.TestCase):
         blocks = dict(layouts.parse_report(report(UNIT, UNIT_TABLE)))
         self.assertTrue(blocks["CvUnit::$vftable@"].endswith("CvUnit::Range this adjustor: 0"))
         self.assertNotIn("all-headers.cpp", "".join(blocks.values()))
+
+    def test_a_class_s_types_are_a_block_and_each_enum_value_is_one_even_on_the_next_line(self):
+        blocks = dict(layouts.parse_report(report(UNIT, UNIT_TYPES, VALUES)))
+        self.assertEqual(
+            sorted(blocks),
+            ["class CvUnit", "enum UnitAITypes::NO_UNITAI", "enum UnitAITypes::UNITAI_SETTLE", "types CvUnit"],
+        )
+        self.assertEqual(blocks["types CvUnit"], UNIT_TYPES.rstrip("\n"))
+        self.assertEqual(layouts.label("types CvUnit"), "field types and virtual functions of CvUnit")
+        self.assertEqual(layouts.label("enum NO_UNITAI"), "enum value NO_UNITAI")
+        self.assertEqual(blocks["enum UnitAITypes::UNITAI_SETTLE"], "enum UnitAITypes::UNITAI_SETTLE = 0")
 
     def test_line_endings_and_trailing_spaces_do_not_change_a_block(self):
         plain = layouts.parse_report(report(UNIT))
@@ -126,7 +141,7 @@ class DescribeTest(unittest.TestCase):
 
 class RecordTest(unittest.TestCase):
     def test_a_record_reads_back_as_written(self):
-        blocks = layouts.parse_report(report(UNIT, UNIT_TABLE, CITY))
+        blocks = layouts.parse_report(report(UNIT, UNIT_TABLE, CITY, UNIT_TYPES, VALUES))
         self.assertEqual(layouts.parse_record(layouts.format_record((0, 3), blocks)), ((0, 3), blocks))
 
     def test_a_record_without_its_api_line_is_refused(self):
@@ -136,17 +151,29 @@ class RecordTest(unittest.TestCase):
 
 class AcceptAllowedTest(unittest.TestCase):
     def test_before_1_0_a_change_may_always_be_accepted(self):
-        self.assertTrue(layouts.accept_allowed((0, 3), (0, 4)))
+        for tag in (None, "v0.3.0"):
+            self.assertTrue(layouts.accept_allowed((0, 3), (0, 4), tag), tag)
 
     def test_1_0_freezes_the_layouts_of_the_0_x_releases(self):
-        self.assertFalse(layouts.accept_allowed((0, 9), (1, 0)))
+        for tag in (None, "v0.9.0", "v1.0.0"):
+            self.assertFalse(layouts.accept_allowed((0, 9), (1, 0), tag), tag)
 
-    def test_within_a_major_version_from_1_0_on_a_change_is_refused(self):
-        self.assertFalse(layouts.accept_allowed((1, 0), (1, 4)))
-        self.assertFalse(layouts.accept_allowed((2, 0), (2, 1)))
+    def test_within_a_released_major_version_a_change_is_refused(self):
+        self.assertFalse(layouts.accept_allowed((0, 9), (1, 4), "v1.3.0"))
+        self.assertFalse(layouts.accept_allowed((2, 0), (2, 1), "v2.0.0"))
 
-    def test_a_later_major_version_may_change_them(self):
-        self.assertTrue(layouts.accept_allowed((1, 4), (2, 0)))
+    def test_the_major_version_after_the_last_release_s_may_change_them_again_until_released(self):
+        self.assertTrue(layouts.accept_allowed((1, 4), (2, 0), "v1.4.0"))
+        self.assertTrue(layouts.accept_allowed((2, 0), (2, 0), "v1.4.0"))
+
+    def test_a_number_raised_past_it_or_put_back_to_0_after_1_0_is_refused(self):
+        self.assertFalse(layouts.accept_allowed((1, 4), (3, 0), "v1.4.0"))
+        self.assertFalse(layouts.accept_allowed((1, 4), (0, 4), "v1.4.0"))
+
+    def test_without_a_release_tag_only_a_record_and_number_still_at_0_may_change(self):
+        self.assertFalse(layouts.accept_allowed((1, 4), (2, 0), None))
+        self.assertFalse(layouts.accept_allowed((0, 4), (2, 0), None))
+        self.assertFalse(layouts.accept_allowed((1, 4), (0, 4), None))
 
 
 class ShippedHeadersTest(unittest.TestCase):
@@ -238,11 +265,13 @@ class RunTest(unittest.TestCase):
         self.project = types.SimpleNamespace(build_dir=folder, mirror_dir=folder)
         self.version = (0, 3)
         self.host_defines = list(layouts.common.PLUGIN_DEFINES)
+        self.types = []
+        self.tag = "v0.3.0"
         for target, name, value in [
             (layouts, "RECORD", os.path.join(folder, "class-layouts.txt")),
             (layouts, "api_version", lambda: self.version),
             (layouts, "host_defines", lambda project: self.host_defines),
-            (layouts, "last_release_tag", lambda: "v1.4.0"),
+            (layouts, "last_release_tag", lambda: self.tag),
             (layouts.common, "engine_project", lambda: self.project),
         ]:
             patcher = mock.patch.object(target, name, value)
@@ -254,9 +283,14 @@ class RunTest(unittest.TestCase):
         texts = iter([plugin, host if host is not None else plugin])
         out = io.StringIO()
         with mock.patch.object(layouts, "compile_report", lambda *args: next(texts)):
-            with mock.patch.object(layouts, "check_hooks_header", lambda *args: None), redirect_stdout(out):
-                code = layouts.main(["--accept"] if step == "accept" else [])
+            with mock.patch.object(layouts.layout_types, "read", self.read_types):
+                with mock.patch.object(layouts, "check_hooks_header", lambda *args: None), redirect_stdout(out):
+                    code = layouts.main(["--accept"] if step == "accept" else [])
         return code, out.getvalue()
+
+    def read_types(self, unit, includes):
+        self.read_with = (unit, includes)
+        return self.types
 
     def check(self, plugin, host=None):
         return self.run_step("check", plugin, host)
@@ -268,9 +302,10 @@ class RunTest(unittest.TestCase):
         return layouts.read_record((0, 0))
 
     def freeze(self, *blocks):
-        """A record saved before 1.0, and the version moved to 1.0."""
+        """A record saved before 1.0, and the version moved to 1.4, the last release's."""
         self.check(report(*blocks))
-        self.version = (1, 0)
+        self.version = (1, 4)
+        self.tag = "v1.4.0"
 
     def test_the_first_check_saves_the_record_with_the_current_version(self):
         self.assertEqual(self.check(report(UNIT))[0], 0)
@@ -290,18 +325,44 @@ class RunTest(unittest.TestCase):
         self.assertIn("run build-hooked.cmd accept-layouts, then rebuild every plugin", out)
         self.assertEqual(self.saved()[1], layouts.parse_report(report(UNIT, CITY)))
 
-    def test_a_changed_class_once_frozen_says_both_ways_out_with_the_last_release(self):
+    def test_a_changed_class_once_frozen_says_to_raise_the_number_past_the_last_release_and_put_it_back(self):
         self.freeze(UNIT)
         out = self.check(report(GROWN))[1]
-        self.assertIn("raise CIV_HOST_API_MAJOR", out)
-        self.assertIn("git checkout v1.4.0 -- ", out)
+        self.assertIn("CIV_HOST_API_MAJOR in host\\CivPluginApi.h to 2, one more than the", out)
+        self.assertIn("Then set it back to the major number in VERSION", out)
 
-    def test_a_gone_class_fails_and_says_it_can_be_accepted_at_any_version(self):
+    def test_two_changes_for_the_next_major_version_are_both_accepted_with_the_number_put_back_between(self):
+        self.freeze(UNIT, CITY)
+        moved = CITY.replace("m_iID", "m_iOwner")
+        for current in (report(GROWN, CITY), report(GROWN, moved)):
+            self.assertEqual(self.check(current)[0], 1)
+            self.version = (2, 0)
+            self.assertIn("To change them on purpose", self.check(current)[1])
+            code, out = self.accept(current)
+            self.assertEqual(code, 0)
+            self.assertIn("If you changed CIV_HOST_API_MAJOR for this, set it back to the major number in VERSION", out)
+            self.version = (1, 4)
+            self.assertEqual(self.check(current)[0], 0)
+        self.assertEqual(self.saved(), ((2, 0), layouts.parse_report(report(GROWN, moved))))
+
+    def test_the_types_libclang_reads_join_the_record_and_a_change_to_them_fails(self):
+        self.types = layouts.parse_report(UNIT_TYPES + VALUES)
+        self.check(report(UNIT))
+        self.assertEqual(self.saved()[1], layouts.parse_report(report(UNIT, UNIT_TYPES, VALUES)))
+        unit, includes = self.read_with
+        self.assertEqual(os.path.basename(unit), "all-headers.cpp")
+        self.assertEqual(includes, layouts.include_dirs(self.project))
+        self.types = layouts.parse_report(UNIT_TYPES.replace("m_iY: int", "m_iY: float") + VALUES)
+        code, out = self.check(report(UNIT))
+        self.assertEqual(code, 1)
+        self.assertIn("changed: field types and virtual functions of CvUnit", out)
+
+    def test_a_gone_class_fails_and_says_the_release_without_it_is_a_new_major_version(self):
         self.freeze(UNIT, CITY)
         code, out = self.check(report(UNIT))
         self.assertEqual(code, 1)
         self.assertIn("gone: class CvCity", out)
-        self.assertIn("can be accepted at any version", out)
+        self.assertIn("From 1.0 on, the release\nwithout it must be a new major version", out)
 
     def test_a_layout_the_host_sees_differently_fails_and_names_the_defines_that_differ(self):
         self.host_defines = self.host_defines + ["CVGAMECOREDLL_EXPORTS"]
@@ -328,7 +389,7 @@ class RunTest(unittest.TestCase):
         self.version = (0, 4)
         code, out = self.accept(report(GROWN))
         self.assertEqual(code, 0)
-        self.assertIn("Rebuild every plugin.", out)
+        self.assertIn("Rebuild every plugin. If you changed CIV_HOST_API_MAJOR for this, set it back", out)
         self.assertEqual(self.saved(), ((0, 4), layouts.parse_report(report(GROWN))))
 
     def test_accept_with_no_record_saves_one(self):
@@ -346,17 +407,18 @@ class RunTest(unittest.TestCase):
         code, out = self.accept(report(GROWN))
         self.assertEqual(code, 1)
         self.assertIn("changed: class CvUnit", out)
-        self.assertIn("raise CIV_HOST_API_MAJOR", out)
+        self.assertIn("set CIV_HOST_API_MAJOR", out)
         self.assertEqual(self.saved(), ((0, 3), layouts.parse_report(report(UNIT))))
 
-    def test_without_a_release_tag_the_advice_says_where_to_put_one(self):
-        self.assertIn("git checkout <last release tag> -- ", "\n".join(layouts.frozen_advice((1, 0), None)))
+    def test_without_a_release_tag_the_advice_says_to_fetch_the_tags(self):
+        self.assertIn("git fetch --tags", "\n".join(layouts.frozen_advice(None)))
 
-    def test_until_1_0_is_tagged_a_0_x_record_is_changed_by_going_back_to_0(self):
-        for tag in (None, "v0.9.0"):
-            self.assertIn("back to 0", "\n".join(layouts.frozen_advice((0, 9), tag)), tag)
-        self.assertNotIn("back to 0", "\n".join(layouts.frozen_advice((0, 9), "v1.0.0")))
-        self.assertNotIn("back to 0", "\n".join(layouts.frozen_advice((0, 9), "v1-beta")))
+    def test_until_1_0_is_tagged_a_change_is_made_under_0(self):
+        self.assertIn("CivPluginApi.h to 0 and run", "\n".join(layouts.frozen_advice("v0.9.0")))
+        for tag in ("v1.0.0", "v1-beta"):
+            advice = "\n".join(layouts.frozen_advice(tag))
+            self.assertNotIn("to 0 and run", advice, tag)
+            self.assertIn("CivPluginApi.h to 2,", advice, tag)
 
     def test_accept_of_a_gone_class_is_allowed_once_frozen_and_keeps_the_version(self):
         self.freeze(UNIT, CITY)

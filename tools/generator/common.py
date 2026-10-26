@@ -47,9 +47,12 @@ LAYOUT_DEFINES = ["_SECURE_SCL=0", "_HAS_ITERATOR_DEBUGGING=0"]
 
 ENGINE_DEFINES = ["FXS_IS_DLL", "WIN32", "NDEBUG", "_WINDOWS", "_USRDLL", "FINAL_RELEASE", "_CRT_SECURE_NO_WARNINGS"]
 
-# Clang reads the engine as the host build compiles it: with its export define, and what cl defines by itself for /MD
-# and /EHsc.
-CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS", "_MT", "_DLL", "_CPPUNWIND"]
+# What cl defines by itself for /MD and /EHsc.
+CL_DEFINES = ["_MT", "_DLL", "_CPPUNWIND"]
+
+# Clang reads the engine as the host build compiles it, with its export define. The layout defines are set here too,
+# since parse-shims\msvc-leniency.h reads standard headers before CvGameCoreDLLPCH.h can set them.
+CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS"] + LAYOUT_DEFINES + CL_DEFINES
 
 PLUGIN_DEFINES = ["CIV_HOST_API=__declspec(dllimport)"] + LAYOUT_DEFINES + ENGINE_DEFINES
 
@@ -80,30 +83,44 @@ class Project:
         return os.path.join(self.mirror_root, os.path.basename(self.root))
 
     def contains(self, path):
-        if not path:
-            return False
-        return os.path.normcase(os.path.abspath(path)).startswith(os.path.normcase(self.root) + os.sep)
+        return under(path, [self.root])
 
     def clang_args(self):
-        args = [
-            "-x",
-            "c++",
-            "--target=i686-pc-windows-msvc",
-            "-fms-extensions",
-            "-fms-compatibility",
-            "-fms-compatibility-version=15.00",
-            "-fdelayed-template-parsing",
-            "-nostdlibinc",
-            "-Wno-everything",
-            "-ferror-limit=0",
-            "-include",
-            os.path.join(HERE, "parse-shims", "msvc-leniency.h"),
-        ]
-        args += ["-D" + d for d in CLANG_DEFINES]
-        for inc in VS2008_INCLUDE:
-            args += ["-isystem", inc]
-        args += ["-I" + inc for inc in self.include_dirs]
-        return args
+        return clang_arguments(CLANG_DEFINES, self.include_dirs)
+
+
+def under(path, folders):
+    if not path:
+        return False
+    path = os.path.normcase(os.path.abspath(path))
+    return any(path.startswith(os.path.normcase(os.path.abspath(folder)) + os.sep) for folder in folders)
+
+
+def clang_arguments(defines, include_dirs):
+    args = [
+        "-x",
+        "c++",
+        "--target=i686-pc-windows-msvc",
+        "-fms-extensions",
+        "-fms-compatibility",
+        "-fms-compatibility-version=15.00",
+        "-fdelayed-template-parsing",
+        "-nostdlibinc",
+        "-Wno-everything",
+        "-ferror-limit=0",
+        "-include",
+        os.path.join(HERE, "parse-shims", "msvc-leniency.h"),
+    ]
+    args += ["-D" + d for d in defines]
+    for inc in VS2008_INCLUDE:
+        args += ["-isystem", inc]
+    args += ["-I" + inc for inc in include_dirs]
+    return args
+
+
+def known_errors(path=os.path.join(HERE, "known-parse-errors.txt")):
+    with open(path, encoding="utf-8") as f:
+        return set(tuple(line.rstrip("\n").split("\t", 1)) for line in f if line.strip() and not line.startswith("#"))
 
 
 def shown(path):

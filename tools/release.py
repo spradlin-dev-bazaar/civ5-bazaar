@@ -253,7 +253,9 @@ def ordered_difference(what, then, now):
 
 def layout_difference(then_text, now_text):
     lost, new = layouts.compare(layouts.parse_record(then_text)[1], layouts.parse_record(now_text)[1])
-    return Difference("class layouts", sorted(set(key for key, _ in new)), sorted(set(key for key, _, _ in lost)))
+    return Difference(
+        "class layouts and enum values", sorted(set(key for key, _ in new)), sorted(set(key for key, _, _ in lost))
+    )
 
 
 def differences(tag, hooks, exports):
