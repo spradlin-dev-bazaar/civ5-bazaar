@@ -279,7 +279,20 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 
 **P2.5 — releases for plugin and Lua mod authors.** A release script for the plugin template and the Lua mod template, as described under Releasing a plugin or Lua mod. Exit: the script and its tests on main, and a plugin and a Lua mod made from the templates each released with it through the real build.
 
-**P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The first public release, 1.0, of the host and SDK from this repository, the MCP plugin's first release from its own, and the Workshop pages. The layouts and the hook numbers freeze at that release.
+**P2.6 — ready for 1.0.** 1.0.0 is the first stable, public release, so the bugs and enhancements chosen for it are fixed first, and no release is made until every one of them is closed:
+- #20 and #38: the layout check also catches a field that changes type and a virtual function whose parameters change, and its advice for a changed class works with the release script, since 1.0 freezes the layouts;
+- #1: Bazaar loads each plugin from the folder of the mod that is turned on, not the first file of that name it finds in MODS;
+- #10: `CivHooks.h` declares the exact shape of each hook function, so a wrong one fails to compile instead of crashing the game;
+- #22: plugins' Lua functions run inside the crash guard;
+- #4: a plugin crash shows a pop-up in the middle of the screen;
+- #33: Bazaar finds the MODS folder and its plugins whatever characters their paths hold;
+- #9: `Bazaar.log` starts afresh each time the game starts;
+- #19: the small bugs in the Claude Code plugin's scripts, event list and evals are fixed;
+- #46: the docs home page names the site once in its title.
+
+Then a last look at everything plugins rely on, since it freezes at 1.0; the release of 1.0.0 with `prepare --major`, checked in the game with a save from 0.4; and the public launch: the repository goes public, and Bazaar's two Workshop items get 1.0.0 and go public. From 1.0.0 on, the layouts and the hook numbers are frozen. Exit: 1.0.0 released and public on GitHub and the Workshop, with every issue above closed.
+
+**P3 — the rest.** The city-state explorer fix and the captured-city seen-by fix, each a Lua mod on a VMC hook where one exists and a plugin where not. Calmer AI and the friendship and denounce rules are done, in the reduced-aggression mod's own repository. The MCP plugin's first public release, from its own repository.
 
 ## Risks
 
