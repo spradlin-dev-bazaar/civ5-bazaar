@@ -1,5 +1,6 @@
 #include "CivHostCrash.h"
 #include "CivHostHooks.h"
+#include "CivHostPath.h"
 #include "CivHostRuntime.h"
 
 #include <windows.h>
@@ -102,18 +103,6 @@ namespace
 	const char* FileName(const std::string& path)
 	{
 		return path.c_str() + (path.find_last_of("\\/") + 1);
-	}
-
-	bool SamePath(const std::string& a, const std::string& b)
-	{
-		return _stricmp(a.c_str(), b.c_str()) == 0;
-	}
-
-	std::string FullPath(const std::string& requested)
-	{
-		char full[MAX_PATH];
-		const DWORD length = GetFullPathNameA(requested.c_str(), MAX_PATH, full, 0);
-		return (length > 0 && length < MAX_PATH) ? std::string(full) : requested;
 	}
 
 	// A plugin registers and logs from its entry point, before the host has copied its name.
@@ -226,7 +215,7 @@ namespace
 		for (size_t i = 0; i < s_useBoth.size(); ++i)
 		{
 			const CivFilePair& pair = s_useBoth[i];
-			if ((SamePath(pair.first, a) && SamePath(pair.second, b)) || (SamePath(pair.first, b) && SamePath(pair.second, a)))
+			if ((CivSameText(pair.first, a) && CivSameText(pair.second, b)) || (CivSameText(pair.first, b) && CivSameText(pair.second, a)))
 				return true;
 		}
 		return false;
@@ -611,7 +600,7 @@ namespace
 	bool AlreadyListed(const std::string& path)
 	{
 		for (size_t i = 0; i < s_plugins.size(); ++i)
-			if (SamePath(s_plugins[i].path, path))
+			if (CivSameText(s_plugins[i].path, path))
 				return true;
 		return false;
 	}
@@ -619,7 +608,7 @@ namespace
 	const KeptPlugin* KeptInMemory(const std::string& path)
 	{
 		for (size_t i = 0; i < s_kept.size(); ++i)
-			if (SamePath(s_kept[i].path, path))
+			if (CivSameText(s_kept[i].path, path))
 				return &s_kept[i];
 		return 0;
 	}
@@ -687,7 +676,7 @@ namespace
 	// Windows maps the file without running any of it or loading the DLLs it imports, so a refused plugin never runs.
 	bool RefusedForApiVersion(CivPluginRecord& rec)
 	{
-		HMODULE image = LoadLibraryExA(rec.path.c_str(), 0, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+		HMODULE image = LoadLibraryExW(CivWide(rec.path).c_str(), 0, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
 		if (!image)
 		{
 			Refuse(rec, CIV_PLUGIN_FILE_NOT_LOADED, Format("Windows could not open the file (error %lu).", GetLastError()));
@@ -726,7 +715,7 @@ namespace
 
 	void LoadOne(const std::string& requested)
 	{
-		const std::string path = FullPath(requested);
+		const std::string path = CivFullPath(requested);
 		const int index = (int)s_plugins.size();
 		CivPluginRecord blank;
 		blank.path = path;
@@ -748,7 +737,7 @@ namespace
 			return;
 
 		// Lets a plugin's own helper DLLs load from its folder rather than the game's.
-		HMODULE module = LoadLibraryExA(path.c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+		HMODULE module = LoadLibraryExW(CivWide(path).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
 		if (!module)
 		{
 			char problem[256];
@@ -859,7 +848,7 @@ namespace
 		if (paths.size() != s_plugins.size())
 			return false;
 		for (size_t i = 0; i < paths.size(); ++i)
-			if (!SamePath(FullPath(paths[i]), s_plugins[i].path))
+			if (!CivSameText(CivFullPath(paths[i]), s_plugins[i].path))
 				return false;
 		return true;
 	}

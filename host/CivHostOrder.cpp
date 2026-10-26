@@ -1,21 +1,15 @@
 #include "CivHostOrder.h"
-
-#include <string.h>
+#include "CivHostPath.h"
 
 namespace
 {
 	const char* const kLoad = "load";
 	const char* const kSkip = "skip";
 
-	bool SameFile(const std::string& a, const std::string& b)
-	{
-		return _stricmp(a.c_str(), b.c_str()) == 0;
-	}
-
 	bool Contains(const std::vector<std::string>& files, const std::string& file)
 	{
 		for (size_t i = 0; i < files.size(); ++i)
-			if (SameFile(files[i], file))
+			if (CivSameText(files[i], file))
 				return true;
 		return false;
 	}
@@ -57,7 +51,7 @@ namespace
 			{
 				const std::string& a = order[i].file;
 				const std::string& b = order[i].useBothWith[j];
-				const std::string partner = SameFile(a, file) ? b : (SameFile(b, file) ? a : std::string());
+				const std::string partner = CivSameText(a, file) ? b : (CivSameText(b, file) ? a : std::string());
 				if (!partner.empty() && !Contains(partners, partner))
 					partners.push_back(partner);
 			}
@@ -70,7 +64,7 @@ namespace
 	{
 		for (size_t i = 0; i < loaded.size(); ++i)
 		{
-			if ((*taken)[i] || !SameFile(loaded[i].file, file))
+			if ((*taken)[i] || !CivSameText(loaded[i].file, file))
 				continue;
 			(*taken)[i] = true;
 			*row = loaded[i];
@@ -88,7 +82,7 @@ std::vector<CivOrderEntry> CivOrderListedFiles(const std::vector<std::string>& l
 	{
 		for (size_t l = 0; l < listedFiles.size(); ++l)
 		{
-			if (placed[l] || !SameFile(listedFiles[l], wanted[w].file))
+			if (placed[l] || !CivSameText(listedFiles[l], wanted[w].file))
 				continue;
 			placed[l] = true;
 			CivOrderEntry entry = wanted[w];
@@ -115,7 +109,7 @@ std::vector<CivOrderEntry> CivKeepUnlisted(const std::vector<CivOrderEntry>& ord
 	{
 		bool listed = false;
 		for (size_t k = 0; k < kept.size() && !listed; ++k)
-			listed = SameFile(kept[k].file, saved[s].file);
+			listed = CivSameText(kept[k].file, saved[s].file);
 		if (!listed)
 			kept.push_back(saved[s]);
 	}

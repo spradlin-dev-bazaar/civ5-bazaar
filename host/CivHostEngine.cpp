@@ -3,15 +3,15 @@
 
 #include "CivHostEngine.h"
 #include "CivHostOrder.h"
+#include "CivHostPath.h"
 #include "CivHostRuntime.h"
 #include "CivHostSetup.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
 // shlobj.h does not compile under the engine's trimmed windows.h, so declare the one call we need.
-extern "C" __declspec(dllimport) HRESULT __stdcall SHGetFolderPathA(HWND, int, HANDLE, DWORD, LPSTR);
+extern "C" __declspec(dllimport) HRESULT __stdcall SHGetFolderPathW(HWND, int, HANDLE, DWORD, LPWSTR);
 #pragma comment(lib, "shell32.lib")
 
 namespace
@@ -26,9 +26,9 @@ namespace
 	{
 		if (s_userFolder.empty())
 		{
-			char docs[MAX_PATH];
-			if (SHGetFolderPathA(NULL, kCsidlPersonal, NULL, 0, docs) == S_OK)
-				s_userFolder = std::string(docs) + "\\My Games\\Sid Meier's Civilization 5";
+			wchar_t docs[MAX_PATH];
+			if (SHGetFolderPathW(NULL, kCsidlPersonal, NULL, 0, docs) == S_OK)
+				s_userFolder = CivUtf8(docs) + "\\My Games\\Sid Meier's Civilization 5";
 		}
 		return s_userFolder;
 	}
@@ -43,7 +43,7 @@ namespace
 			return;
 		const bool fresh = GetEnvironmentVariableA(kLogStarted, NULL, 0) == 0;
 		FILE* f = 0;
-		if (fopen_s(&f, (UserFolder() + "\\Logs\\Bazaar.log").c_str(), fresh ? "w" : "a") == 0 && f)
+		if (_wfopen_s(&f, CivWide(UserFolder() + "\\Logs\\Bazaar.log").c_str(), fresh ? L"w" : L"a") == 0 && f)
 		{
 			if (fresh)
 				SetEnvironmentVariableA(kLogStarted, "1");
@@ -54,27 +54,22 @@ namespace
 
 	bool FindFile(const std::string& dir, const std::string& name, int depth, std::string* found)
 	{
-		WIN32_FIND_DATAA data;
-		HANDLE h = FindFirstFileA((dir + "\\*").c_str(), &data);
-		if (h == INVALID_HANDLE_VALUE)
-			return false;
-		bool ok = false;
-		do
+		const std::vector<CivFolderEntry> entries = CivFolderEntries(dir, "*");
+		for (size_t i = 0; i < entries.size(); ++i)
 		{
-			const std::string entry = data.cFileName;
-			if (entry == "." || entry == "..")
-				continue;
-			const std::string path = dir + "\\" + entry;
-			if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-				ok = depth > 0 && FindFile(path, name, depth - 1, found);
-			else if (_stricmp(entry.c_str(), name.c_str()) == 0)
+			const std::string path = dir + "\\" + entries[i].name;
+			if (entries[i].folder)
+			{
+				if (depth > 0 && FindFile(path, name, depth - 1, found))
+					return true;
+			}
+			else if (CivSameText(entries[i].name, name))
 			{
 				*found = path;
-				ok = true;
+				return true;
 			}
-		} while (!ok && FindNextFileA(h, &data));
-		FindClose(h);
-		return ok;
+		}
+		return false;
 	}
 
 	void Notify(const std::string& summary, const std::string& message)
@@ -181,7 +176,7 @@ namespace
 		{
 			const char* file = rows.GetText("File");
 			if (file && *file)
-				files->push_back(file);
+				files->push_back(CivUtf8(CivWide(file)));
 		}
 		return true;
 	}
@@ -195,19 +190,13 @@ namespace
 	{
 		if (UserFolder().empty())
 			return std::vector<CivOrderEntry>();
-		FILE* f = 0;
-		const errno_t error = fopen_s(&f, OrderFile().c_str(), "rb");
-		if (error != 0 || !f)
+		std::string text;
+		if (!CivReadFile(OrderFile(), &text))
 		{
-			if (error != ENOENT)
+			if (CivExists(OrderFile()))
 				LogLine(("Could not read " + OrderFile() + ", so the plugins load in the order the mods list them.").c_str());
 			return std::vector<CivOrderEntry>();
 		}
-		std::string text;
-		char buffer[4096];
-		for (size_t n; (n = fread(buffer, 1, sizeof(buffer), f)) > 0;)
-			text.append(buffer, n);
-		fclose(f);
 		return CivParseOrder(text);
 	}
 
@@ -216,18 +205,18 @@ namespace
 	{
 		if (UserFolder().empty())
 			return false;
-		CreateDirectoryA((UserFolder() + "\\ModUserData").c_str(), NULL);
+		CreateDirectoryW(CivWide(UserFolder() + "\\ModUserData").c_str(), NULL);
 		const std::string path = OrderFile();
-		const std::string temp = path + ".new";
+		const std::wstring temp = CivWide(path + ".new");
 		const std::string text = CivFormatOrder(order);
 		FILE* f = 0;
-		bool saved = fopen_s(&f, temp.c_str(), "wb") == 0 && f;
+		bool saved = _wfopen_s(&f, temp.c_str(), L"wb") == 0 && f;
 		if (saved)
 		{
 			saved = fwrite(text.data(), 1, text.size(), f) == text.size();
 			saved = fclose(f) == 0 && saved;
 		}
-		saved = saved && MoveFileExA(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+		saved = saved && MoveFileExW(temp.c_str(), CivWide(path).c_str(), MOVEFILE_REPLACE_EXISTING);
 		if (!saved)
 			LogLine(("Could not save the plugin order to " + path + ".").c_str());
 		return saved;
@@ -410,26 +399,23 @@ namespace
 		return mods;
 	}
 
-	std::string FolderOf(const char* path)
+	std::string FolderOf(const std::string& path)
 	{
-		const std::string full = path;
-		return full.substr(0, full.find_last_of("\\/"));
+		return path.empty() ? path : path.substr(0, path.find_last_of("\\/"));
 	}
 
 	// The DLL sits in the host mod's own folder.
 	std::string OwnFolder()
 	{
 		MEMORY_BASIC_INFORMATION info;
-		char path[MAX_PATH];
-		if (!VirtualQuery((const void*)&CivHostOnFrontEndCall, &info, sizeof(info)) || !GetModuleFileNameA((HMODULE)info.AllocationBase, path, MAX_PATH))
+		if (!VirtualQuery((const void*)&CivHostOnFrontEndCall, &info, sizeof(info)))
 			return std::string();
-		return FolderOf(path);
+		return FolderOf(CivModuleFile(info.AllocationBase));
 	}
 
 	std::string GameFolder()
 	{
-		char path[MAX_PATH];
-		return GetModuleFileNameA(NULL, path, MAX_PATH) ? FolderOf(path) : std::string();
+		return FolderOf(CivModuleFile(NULL));
 	}
 
 	// Pushes the copied screen's path, without extension, for LoadNewContext; nil when it could not be copied.

@@ -1,4 +1,5 @@
 #include "CivHostCrash.h"
+#include "CivHostPath.h"
 
 #include <dbghelp.h>
 #include <stdarg.h>
@@ -163,7 +164,8 @@ namespace
 	}
 
 	// Without a .pdb, dbghelp names the nearest export; a record left by a freed DLL names that DLL's functions.
-	// No C++ objects may live in this frame, or __try is not allowed.
+	// No C++ objects may live in this frame, or __try is not allowed. dbghelp names modules in the system's code page, so
+	// the module's own name is read in it too.
 	bool LookUp(DWORD64 address, char* name, size_t nameSize, char* file, size_t fileSize, DWORD* line)
 	{
 		__try
@@ -219,11 +221,12 @@ namespace
 	std::string ModuleOffset(DWORD64 address)
 	{
 		MEMORY_BASIC_INFORMATION mbi;
-		char path[MAX_PATH];
-		if (VirtualQuery((LPCVOID)(DWORD_PTR)address, &mbi, sizeof(mbi)) && mbi.AllocationBase
-			&& GetModuleFileNameA((HMODULE)mbi.AllocationBase, path, MAX_PATH))
-			return Text("%s+0x%08X", FileNameOf(path), (unsigned)(address - (DWORD64)(DWORD_PTR)mbi.AllocationBase));
-		return Text("0x%08X", (unsigned)address);
+		if (!VirtualQuery((LPCVOID)(DWORD_PTR)address, &mbi, sizeof(mbi)) || !mbi.AllocationBase)
+			return Text("0x%08X", (unsigned)address);
+		const std::string path = CivModuleFile(mbi.AllocationBase);
+		if (path.empty())
+			return Text("0x%08X", (unsigned)address);
+		return Text("%s+0x%08X", FileNameOf(path.c_str()), (unsigned)(address - (DWORD64)(DWORD_PTR)mbi.AllocationBase));
 	}
 
 	// A return address points just past its call, which may already be the next line or function.

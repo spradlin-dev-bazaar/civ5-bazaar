@@ -4,6 +4,7 @@
 #include "CivHostCrash.h"
 #include "CivHostHand.h"
 #include "CivHostHooks.h"
+#include "CivHostPath.h"
 #include "fake_engine.h"
 
 #include <dbghelp.h>
@@ -93,7 +94,7 @@ void TestLoading()
 	Check(ReportRow("toy_no_version.dll").problems.find("which Bazaar") != std::string::npos, "the Plugins screen says the plugin does not say which Bazaar it was built for");
 	Check(!LogHas("[Toy No Version]"), "a plugin that does not export its API version never runs");
 	Check(HasStatus("toy_newer_imports.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a newer host that uses a function this host lacks is refused by its version, not by a Windows load error");
-	const HMODULE unloadable = LoadLibraryExA(OutFile("toy_newer_imports.dll").c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+	const HMODULE unloadable = LoadLibraryExW(CivWide(OutFile("toy_newer_imports.dll")).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
 	Check(!unloadable, "Windows itself cannot load toy_newer_imports.dll, so only its version could have refused it");
 	if (unloadable)
 		FreeLibrary(unloadable);
@@ -243,7 +244,7 @@ void TestQuarantine()
 
 	// toy_fault_before's crash makes the crash log record the DLL loaded behind Bazaar's back, before it is freed.
 	StartWithNone();
-	const HMODULE behind = LoadLibraryExA(OutFile("toy_fault.dll").c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+	const HMODULE behind = LoadLibraryExW(CivWide(OutFile("toy_fault.dll")).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
 	const char* const recorder[] = {"toy_fault_before.dll"};
 	StartWith(recorder);
 	unit.add(2, 3);

@@ -1,4 +1,5 @@
 #include "CivHostSetup.h"
+#include "CivHostPath.h"
 
 #include <windows.h>
 #include <ctype.h>
@@ -11,18 +12,6 @@ namespace
 	const char* const kXml = "AdvancedSetup.xml";
 	const char* const kLua = "AdvancedSetup.lua";
 	const char* const kCopyName = "BazaarNextSetup";
-
-	bool SameText(const std::string& a, const std::string& b)
-	{
-		return _stricmp(a.c_str(), b.c_str()) == 0;
-	}
-
-	std::string FullPath(const std::string& path)
-	{
-		char full[MAX_PATH];
-		const DWORD length = GetFullPathNameA(path.c_str(), MAX_PATH, full, 0);
-		return (length > 0 && length < MAX_PATH) ? std::string(full) : path;
-	}
 
 	std::string Decode(const std::string& text)
 	{
@@ -117,28 +106,11 @@ namespace
 			const std::string path = Decode(encoded);
 			const size_t slash = path.find_last_of("\\/");
 			const std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
-			if (Attribute(attributes, "import") == "1" && SameText(name, *fileName))
+			if (Attribute(attributes, "import") == "1" && CivSameText(name, *fileName))
 				*found = path;
 			return true;
 		}
 	};
-
-	bool ReadText(const std::string& path, std::string* text)
-	{
-		FILE* f = 0;
-		if (fopen_s(&f, path.c_str(), "rb") != 0 || !f)
-			return false;
-		char buffer[4096];
-		for (size_t n; (n = fread(buffer, 1, sizeof(buffer), f)) > 0;)
-			text->append(buffer, n);
-		fclose(f);
-		return true;
-	}
-
-	bool Exists(const std::string& path)
-	{
-		return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
-	}
 
 	std::string WindowsPath(const std::string& path)
 	{
@@ -162,30 +134,21 @@ namespace
 	std::vector<InstalledMod> InstalledMods(const std::string& modsFolder)
 	{
 		std::vector<InstalledMod> mods;
-		WIN32_FIND_DATAA folder;
-		HANDLE folders = FindFirstFileA((modsFolder + "\\*").c_str(), &folder);
-		if (folders == INVALID_HANDLE_VALUE)
-			return mods;
-		do
+		const std::vector<CivFolderEntry> folders = CivFolderEntries(modsFolder, "*");
+		for (size_t f = 0; f < folders.size(); ++f)
 		{
-			const std::string name = folder.cFileName;
-			if (!(folder.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || name == "." || name == "..")
+			if (!folders[f].folder)
 				continue;
-			const std::string path = modsFolder + "\\" + name;
-			WIN32_FIND_DATAA file;
-			HANDLE files = FindFirstFileA((path + "\\*.modinfo").c_str(), &file);
-			if (files == INVALID_HANDLE_VALUE)
-				continue;
-			do
+			const std::string path = modsFolder + "\\" + folders[f].name;
+			const std::vector<CivFolderEntry> files = CivFolderEntries(path, "*.modinfo");
+			for (size_t i = 0; i < files.size(); ++i)
 			{
 				InstalledMod mod;
 				mod.folder = path;
-				if (ReadText(path + "\\" + file.cFileName, &mod.modinfo) && CivModIdentity(mod.modinfo, &mod.id, &mod.version))
+				if (CivReadFile(path + "\\" + files[i].name, &mod.modinfo) && CivModIdentity(mod.modinfo, &mod.id, &mod.version))
 					mods.push_back(mod);
-			} while (FindNextFileA(files, &file));
-			FindClose(files);
-		} while (FindNextFileA(folders, &folder));
-		FindClose(folders);
+			}
+		}
 		return mods;
 	}
 
@@ -193,14 +156,14 @@ namespace
 	std::string ImportedByActiveMod(const std::vector<InstalledMod>& installed, const std::string& ownFolder,
 		const std::vector<CivActiveMod>& active, const std::string& fileName)
 	{
-		const std::string own = FullPath(ownFolder);
+		const std::string own = CivFullPath(ownFolder);
 		std::string source;
 		for (size_t a = 0; a < active.size(); ++a)
 		{
 			for (size_t i = 0; i < installed.size(); ++i)
 			{
 				const InstalledMod& mod = installed[i];
-				if (!SameText(mod.id, active[a].id) || mod.version != active[a].version || SameText(FullPath(mod.folder), own))
+				if (!CivSameText(mod.id, active[a].id) || mod.version != active[a].version || CivSameText(CivFullPath(mod.folder), own))
 					continue;
 				const std::string file = CivImportedFile(mod.modinfo, fileName);
 				if (!file.empty())
@@ -237,7 +200,7 @@ CivReplacedSetup CivCopyReplacedSetup(const std::string& modsFolder, const std::
 	const std::string gameSetup = gameFolder + "\\Assets\\UI\\FrontEnd\\GameSetup\\";
 	const std::string expansionSetup = gameFolder + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\";
 	if (result.xmlSource.empty())
-		result.xmlSource = expansion1 && Exists(expansionSetup + kXml) ? expansionSetup + kXml : gameSetup + kXml;
+		result.xmlSource = expansion1 && CivExists(expansionSetup + kXml) ? expansionSetup + kXml : gameSetup + kXml;
 	if (result.luaSource.empty())
 		result.luaSource = gameSetup + kLua;
 
@@ -247,8 +210,8 @@ CivReplacedSetup CivCopyReplacedSetup(const std::string& modsFolder, const std::
 	for (int i = 0; i < 2; ++i)
 	{
 		// CopyFile keeps the source's attributes, and it cannot write over a read-only copy left by an earlier visit.
-		SetFileAttributesA(targets[i].c_str(), FILE_ATTRIBUTE_NORMAL);
-		if (!CopyFileA(sources[i].c_str(), targets[i].c_str(), FALSE))
+		SetFileAttributesW(CivWide(targets[i]).c_str(), FILE_ATTRIBUTE_NORMAL);
+		if (!CopyFileW(CivWide(sources[i]).c_str(), CivWide(targets[i]).c_str(), FALSE))
 		{
 			char reason[64];
 			_snprintf_s(reason, sizeof(reason), _TRUNCATE, " (Windows error %lu)", GetLastError());

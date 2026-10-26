@@ -4,6 +4,8 @@
 // CivTurnBench.csv beside this DLL: a new game plays long enough to make a test save, a loaded save plays the benchmark.
 // Include it after CvGame.h: it relies on the engine's types and on the Windows headers of the precompiled header.
 
+#include "CivHostPath.h"
+
 #include <stdio.h>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
@@ -44,14 +46,12 @@ namespace CivTurnBench
 
 	inline void Write(const char* line)
 	{
-		char path[MAX_PATH];
-		const DWORD length = GetModuleFileNameA(reinterpret_cast<HMODULE>(&__ImageBase), path, MAX_PATH);
-		char* slash = strrchr(path, '\\');
-		if (length == 0 || length >= MAX_PATH || !slash)
+		const std::string dll = CivModuleFile(&__ImageBase);
+		const size_t slash = dll.find_last_of('\\');
+		if (slash == std::string::npos)
 			return;
-		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "CivTurnBench.csv");
 		FILE* f = 0;
-		if (fopen_s(&f, path, "a") == 0 && f)
+		if (_wfopen_s(&f, CivWide(dll.substr(0, slash + 1) + "CivTurnBench.csv").c_str(), L"a") == 0 && f)
 		{
 			fprintf(f, "%s\n", line);
 			fclose(f);

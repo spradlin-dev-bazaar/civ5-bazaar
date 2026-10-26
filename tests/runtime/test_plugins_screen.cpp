@@ -1,6 +1,7 @@
 // The Plugins screen's host logic, which needs no plugins: the player's order and the Advanced Setup screen it replaced.
 #include "harness.h"
 #include "CivHostOrder.h"
+#include "CivHostPath.h"
 #include "CivHostSetup.h"
 
 #include <stdio.h>
@@ -19,10 +20,10 @@ namespace
 	void WriteText(const std::string& path, const std::string& text)
 	{
 		for (size_t slash = path.find('\\', 3); slash != std::string::npos; slash = path.find('\\', slash + 1))
-			CreateDirectoryA(path.substr(0, slash).c_str(), 0);
-		SetFileAttributesA(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+			CreateDirectoryW(CivWide(path.substr(0, slash)).c_str(), 0);
+		SetFileAttributesW(CivWide(path).c_str(), FILE_ATTRIBUTE_NORMAL);
 		FILE* f = 0;
-		if (fopen_s(&f, path.c_str(), "wb") == 0 && f)
+		if (_wfopen_s(&f, CivWide(path).c_str(), L"wb") == 0 && f)
 		{
 			fwrite(text.data(), 1, text.size(), f);
 			fclose(f);
@@ -32,14 +33,7 @@ namespace
 	std::string ReadText(const std::string& path)
 	{
 		std::string text;
-		FILE* f = 0;
-		if (fopen_s(&f, path.c_str(), "rb") == 0 && f)
-		{
-			char buffer[256];
-			for (size_t n; (n = fread(buffer, 1, sizeof(buffer), f)) > 0;)
-				text.append(buffer, n);
-			fclose(f);
-		}
+		CivReadFile(path, &text);
 		return text;
 	}
 
@@ -195,7 +189,8 @@ void TestReplacedSetup()
 			== "Fish & Chips/AdvancedSetup.lua",
 		"an escaped character in a path is read back");
 
-	const std::string root = OutFile("setup_test");
+	// The folder name has Cyrillic letters, which no Western code page has.
+	const std::string root = OutFile("setup_test \xD0\x9C\xD0\xBE\xD0\xB4\xD1\x8B");
 	const std::string mods = root + "\\MODS";
 	const std::string own = mods + "\\Bazaar (v 1)";
 	const std::string game = root + "\\Game";
@@ -221,11 +216,11 @@ void TestReplacedSetup()
 	Check(ReadText(copy + ".lua") == "ras lua", "the copied script is that mod's too");
 	Check(first.xmlSource == rasXml, "it says which file it copied");
 
-	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_READONLY);
+	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_READONLY);
 	// This copy is read-only too, and the next copy must still overwrite it.
 	CivCopyReplacedSetup(mods, game, own, withRas, true);
 	Check(!CivCopyReplacedSetup(mods, game, own, withRas, true).copy.empty(), "a read-only source does not stop the next copy");
-	SetFileAttributesA(rasXml.c_str(), FILE_ATTRIBUTE_NORMAL);
+	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_NORMAL);
 
 	std::vector<CivActiveMod> withoutRas(withRas.begin() + 1, withRas.end());
 	CivCopyReplacedSetup(mods, game, own, withoutRas, true);
