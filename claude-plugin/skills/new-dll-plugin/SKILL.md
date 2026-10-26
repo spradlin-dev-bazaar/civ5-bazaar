@@ -1,6 +1,6 @@
 ---
 name: new-dll-plugin
-description: Create, build or port a C++ DLL plugin for Bazaar, the multi-DLL mod loader for Civilization V. Covers starting from the Bazaar SDK's template, finding and writing hooks on the game's functions, adding Lua functions, and building with the template's build script. Use this whenever someone wants to change how Civ 5 plays with C++ under Bazaar, write or fix a Bazaar plugin, hook a CvPlayer, CvCity or CvUnit function, or turn an existing Civ 5 DLL mod (a modified CvGameCore_Expansion2.dll) into a Bazaar plugin, even if they do not say "plugin".
+description: Create, build or port a C++ DLL plugin for Bazaar, the multi-DLL mod loader for Civilization V. Covers starting from the Bazaar SDK's template, finding and writing hooks on the game's functions, adding Lua functions, building with the template's build script, and making releases for the Steam Workshop. Use this whenever someone wants to change how Civ 5 plays with C++ under Bazaar, write or fix a Bazaar plugin, hook a CvPlayer, CvCity or CvUnit function, or turn an existing Civ 5 DLL mod (a modified CvGameCore_Expansion2.dll) into a Bazaar plugin, even if they do not say "plugin".
 argument-hint: "<Display Name>" [what it should do]
 ---
 
@@ -25,10 +25,10 @@ powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CLAUDE_SK
 - **`-DisplayName`** is what players see: the mod's name in the Mods menu, the `Build` folder's and the package's name, and the name the plugin reports to Bazaar. Ask the user for it if they have not given one.
 - **The file name** (the DLL's and the project's name, with no spaces) comes from the display name, so `Score Doubler` becomes `ScoreDoubler`. Pass `-FileName` only when the user wants a different one. No other mod may ship a DLL with the same name, because Bazaar finds plugins by file name.
 - **`-Destination`** is the folder to make the plugin folder in; it defaults to the current folder. The script refuses a folder inside the SDK, because the SDK build deletes and rebuilds the SDK folder. Keep the path short: Visual C++ 2008 fails once a path inside the plugin folder passes 260 characters, with PRJ0020 at the link step. If that happens, make the plugin in a folder with a shorter path, rather than shortening the plugin's name.
-- **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`.
+- **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `release.cmd` refuses to make a release until it is changed.
 - **`-Sdk`** is needed only when `BAZAAR_SDK` is not set.
 
-The script copies the template without its build output, renames the files, puts the names into the text files, writes a new mod ID on the `<Guid>` line (`<ProjectGuid>` stays), and sets the teaser, description and authors. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause.
+The script copies the template without its build output, renames the files, puts the names into the text files, writes a new mod ID on the `<Guid>` line (`<ProjectGuid>` stays), and sets the teaser, description and authors; the description also replaces the template's sentence in `workshop-description.txt`. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause.
 
 Then delete the template's example hooks that the plugin does not need, as the guide's Step 2 describes.
 
@@ -45,6 +45,10 @@ Then delete the template's example hooks that the plugin does not need, as the g
 - Run `build.cmd` by its full path, with `BAZAAR_SDK` set for that session only. From PowerShell: `$env:BAZAAR_SDK = '<SDK folder>'; & '<full path of the plugin folder>\build.cmd'`. From Git Bash: `BAZAAR_SDK='<SDK folder>' cmd //c '<full path of the plugin folder>\build.cmd'`; write `//c`, because Git Bash turns `/c` into a drive path, and give the full path, because `cmd` does not find `build.cmd` by its bare name there. Set it permanently only if the user asks, since that changes their Windows settings. Fix what the build reports; the guide's Step 1 table explains its messages.
 - Report the files it made (`Build\<Display Name>\` and `Packages\<Display Name> (v N).civ5mod`). Then tell the user how to test in the game: copy `Build\<Display Name>`, the built mod, into MODS (not the folder the script made, which holds the source); enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and the plugin; look for `Plugin <name> <version> loaded` in `Bazaar.log`.
 - Do not copy anything into MODS or start the game unless the user asks: installing mods is theirs to do.
+
+## 5. Releases
+
+When the user wants to publish, follow the guide's Publishing section: set the release in `VERSION`, add its notes to the top of `CHANGES.txt` in BBCode, and run `release.cmd` by its full path, as with `build.cmd`. It sets the version, builds, checks the package and keeps it in `Releases\<release>\`. If it refuses, read its message and fix the cause. Never delete or rename anything in `Releases\` to get past a check: it is the record of what was released. Uploading to the Steam Workshop is the user's step, in ModBuddy. If the plugin folder has no `release.cmd`, it was made from an older Bazaar SDK: tell the user that releases need the newest one, and follow that SDK's guide.
 
 ## Porting an existing DLL mod
 

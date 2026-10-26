@@ -1,0 +1,4 @@
+[h1]Template Lua Mod[/h1]
+A minimal Lua mod for the Bazaar Multi-DLL Mod Loader.
+
+Requires Bazaar 0.3.0 or newer. Subscribe to Bazaar Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required) too.

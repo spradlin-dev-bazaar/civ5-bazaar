@@ -432,6 +432,7 @@ def prepare(major):
         new_major, new_minor, _ = version.numbers(new.release)
         layouts.set_api_version(new_major, new_minor)
         version.set_plugin_version(new.release)
+        version.set_template_bazaar(version.oldest_bazaar(new.release))
         require_numbers_agree()
         restore_history(tag)
         build_docs.build(common.engine_project(), build_docs.DEFAULT_OUT, release=new.release)

@@ -1,4 +1,5 @@
-"""Lay out the plugin SDK from the hooked host build, then build a copy of its template plugin using nothing else.
+"""Lay out the plugin SDK from the hooked host build, then check it: make a plugin from its template with the DLL
+skill's scaffold script, and release that plugin with the template's release script, against the SDK alone.
 
 usage: build_sdk.py   (after build-hooked.cmd; the SDK goes to sdk/out/Bazaar SDK)
 """
@@ -20,7 +21,9 @@ HOST_LIB = os.path.join(common.HOST_OUTPUT, "CvGameCore_Expansion2.lib")
 HOOKS_HEADER = os.path.join(PROJECT.build_dir, "sdk", "CivHooks.h")
 OUT = os.path.join(HERE, "out")
 SDK = os.path.join(OUT, "Bazaar SDK")
-TEMPLATE_CHECK = os.path.join(OUT, "Template check")
+CHECK_NAME = "TemplateCheck"
+TEMPLATE_CHECK = os.path.join(OUT, CHECK_NAME)
+NEW_DLL_PLUGIN = os.path.join(common.REPO, "claude-plugin", "skills", "new-dll-plugin", "scripts", "new-dll-plugin.ps1")
 
 # The generator points includes that leave the engine folder at the originals on this machine, and marks where each
 # header's own text starts with a #line naming the original. Neither may reach another machine.
@@ -142,10 +145,15 @@ def main(args):
     if leaks:
         print("These SDK files name folders on this machine: %s" % ", ".join(leaks))
         return 1
-    shutil.copytree(os.path.join(SDK, "plugin-template"), TEMPLATE_CHECK)
+    scaffold = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", NEW_DLL_PLUGIN]
+    scaffold += ["-DisplayName", "Template Check", "-FileName", CHECK_NAME, "-Sdk", SDK, "-Destination", OUT]
+    scaffold += ["-Author", "Bazaar"]
     env = dict(os.environ, BAZAAR_SDK=SDK)
-    if subprocess.run(["cmd", "/c", os.path.join(TEMPLATE_CHECK, "build.cmd")], env=env).returncode != 0:
-        print("The template plugin did not build against the SDK.")
+    if (
+        subprocess.run(scaffold).returncode != 0
+        or subprocess.run(["cmd", "/c", os.path.join(TEMPLATE_CHECK, "release.cmd")], env=env).returncode != 0
+    ):
+        print("The template plugin, made with the DLL skill's scaffold script, did not release against the SDK.")
         return 1
     print(SDK)
     return 0

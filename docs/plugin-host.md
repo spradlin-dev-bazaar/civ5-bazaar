@@ -165,7 +165,7 @@ A folder shipped with each host release (also the thing other developers downloa
 - `lib/` the host's import library, `CvGameCore_Expansion2.lib`, and the Firaxis libraries;
 - `CivPlugin.vsprops` the compiler and linker settings of the host build, with paths through the `BAZAAR_SDK` environment variable;
 - `README.md`, the plugin-writing guide (sdk/README.md), and `hand-placed-hooks.md`;
-- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook and one Lua method: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, and a `build.cmd` that builds the DLL, the mod folder and the Workshop package.
+- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook and one Lua method: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, a `build.cmd` that builds the DLL, the mod folder and the Workshop package, and a `release.cmd` that makes its releases, with its `VERSION`, `CHANGES.txt` and Workshop description (see Releasing a plugin or Lua mod).
 
 Not in it yet: plugins cannot reach private and protected members, because the compiler names private functions differently from public ones, so the host would need to export them under their public names too. The list of functions written in headers and the generated reference come with the documentation site.
 
@@ -227,7 +227,7 @@ The seat/playback code pokes the game executable's memory by pattern scan; that 
 A release is made on the developer's machine, because the host, the SDK and the docs all need Visual C++ 2008. A script, `tools/release.py`, does the repeatable work, so anyone can run it. A Claude Code skill in this repository, `.claude/skills/release`, walks through the steps around it that need judgment. The repository's .gitignore lets .claude/skills/ through, since .claude folders are often ignored.
 
 1. **Choose the number.** The script compares the current build with the previous release: the hook list and the host's exported names, saved at that release, and `CivPluginApi.h` and the class layout record as they were at its tag. If anything was added, removed or changed, the middle number goes up; otherwise the last one does. Anything removed or changed is listed, since every plugin must then be rebuilt: before 1.0 that is allowed, and from 1.0 on the script stops unless it is run with --major, which starts a new major version. The first release has nothing to compare with and keeps the number already in `VERSION`.
-2. **Prepare.** On a branch of its own, the release raises the version in `VERSION` at the top of the repository, which holds the release version and the version of Bazaar's mod, a whole number that goes up by one each release. The VMC Bootstrap keeps VMC's own version, 97, because Bazaar depends on exactly that version; so does VMC's save-format number in CustomMods.h, which only a VMC update changes. The API version in `CivPluginApi.h` and the Claude plugin's version in `plugin.json` follow it, and the script refuses to build when they disagree. The docs step saves the new function history, and the script saves the new lists. The tests and the lint run, and the branch goes to main through a pull request.
+2. **Prepare.** On a branch of its own, the release raises the version in `VERSION` at the top of the repository, which holds the release version and the version of Bazaar's mod, a whole number that goes up by one each release. The VMC Bootstrap keeps VMC's own version, 97, because Bazaar depends on exactly that version; so does VMC's save-format number in CustomMods.h, which only a VMC update changes. The API version in `CivPluginApi.h` and the Claude plugin's version in `plugin.json` follow it, and so does the Bazaar release the SDK's plugin template says it needs, in its `VERSION` and its Workshop description: the first release with this API version, such as 0.4.0 for 0.4.2. The script refuses to build when any of them disagree. The Lua mod template's Bazaar release is set by hand instead, since a Lua mod needs only the Bazaar features it uses. The docs step saves the new function history, and the script saves the new lists. The tests and the lint run, and the branch goes to main through a pull request.
 3. **Build.** From main, with nothing uncommitted, the script builds the host, lays out and checks the SDK, builds the docs, and writes the release's files, each carrying LICENSE and NOTICE:
    - Bazaar's two mods as `.civ5mod` packages, Bazaar itself and its VMC Bootstrap;
    - the SDK zip;
@@ -240,6 +240,19 @@ A release is made on the developer's machine, because the host, the SDK and the 
 7. **Workshop.** Every release, pre-releases included, is uploaded to the Steam Workshop by hand in ModBuddy: Bazaar's package each time, with the release's section of `workshop/changes.txt` as the change note, and the VMC Bootstrap only when it has changed. Before 1.0 the Workshop items stay private; they go public with 1.0, when the repository does. The Workshop page points to the GitHub release for the SDK and docs.
 
 One check before the second release, when Bazaar's mod version first goes up: whether a save made with the first release still loads after the player updates to the second, since Civ 5 records each mod's version in the save. If it does not, Bazaar's mod version cannot go up with every release, and step 2 changes.
+
+### Releasing a plugin or Lua mod
+
+Plugin and Lua mod authors get a release script of their own, `release.ps1`, in the plugin template in the SDK and in the Lua mod template in the Claude Code plugin; the two copies are the same file, and a check in this repository keeps them so. A `release.cmd` beside it starts it, since Windows does not run PowerShell scripts by default. It assumes no git, GitHub or other hosting, and leaves the Workshop upload to the author, in ModBuddy.
+
+- `VERSION` holds the release number in the author's own scheme: either a whole number, which is also the mod's version, or semantic versioning, with a second line for the mod's version, which the script raises by one each release because the game takes only a whole number. Another line names the oldest Bazaar release the mod needs.
+- Before building, the script writes the version from `VERSION` into the `.civ5proj` and, for a plugin, into a small header the DLL is built with, so the author changes it in one place. It checks that the mod's version is higher than every released one; that nothing of the template is left, such as its mod ID or its name; and, for a plugin, that the SDK is not newer than the Bazaar release `VERSION` names.
+- It builds with the template's `build.cmd`, then checks the package: a mod that changes the game's database must affect saved games, and a plugin's DLL must be named in a `DllPlugins` row and declare the API version it was built for.
+- It keeps each release's package in `Releases\<version>\` and never overwrites one.
+- `CHANGES.txt` holds the change notes in BBCode, newest first, to paste into the Workshop update; the script warns when the new version has no section.
+- Each template also has a Workshop description in BBCode, `workshop-description.txt`, to paste into ModBuddy. It says "Requires Bazaar X or newer.", and the script stops when that differs from the Bazaar release `VERSION` names.
+
+The SDK guide's Publishing section and the two Claude Code skills say how to use it.
 
 ## Phases
 
@@ -263,6 +276,8 @@ Exit: every item above seen working in a real game, and the timing numbers in th
 **P1.6 — releases.** After P1.5 merges: the Markdown copy of the docs, the release script, the skill and the Action that publishes the docs, as described under Making a release. Exit: the release script, the skill and the docs Action on main, and a trial build that makes all four files. The first pre-release, made from main with each file installed or opened from the release and checked, and its docs site published by the Action and opened there, follows once main holds the plugin API the game is played with.
 
 **P2 — MCP as a plugin.** Move `Claude/` from civ5-mods into the plugin's own repository, wire hooks, Lua registration, packaging. Exit: every existing tool and the log window work exactly as in v47, verified by playing a few turns with a model and reloading a save.
+
+**P2.5 — releases for plugin and Lua mod authors.** A release script for the plugin template and the Lua mod template, as described under Releasing a plugin or Lua mod. Exit: the script and its tests on main, and a plugin and a Lua mod made from the templates each released with it through the real build.
 
 **P3 — the rest.** Explorer fix, captured-city seen-by fix, friendship/denounce rules and calmer AI as Lua mods on VMC hooks where one exists, native plugins where not; the calmer-AI fix is the natural first replace plugin, since it replaces one diplomacy function. The first public release, 1.0, of the host and SDK from this repository, the MCP plugin's first release from its own, and the Workshop pages. The layouts and the hook numbers freeze at that release.
 

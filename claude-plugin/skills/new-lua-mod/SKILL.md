@@ -1,6 +1,6 @@
 ---
 name: new-lua-mod
-description: Create or build a Lua mod for Civilization V that runs under Bazaar, the multi-DLL mod loader, using VMC's extra Lua events (GameEvents) or the base game's. Covers finding the event, switching on the VMC option it needs, starting from this skill's Lua mod template, and building the mod and its Workshop package. Use this whenever someone wants a Civ 5 Lua mod for Bazaar, wants to react to a game event in Lua, mentions GameEvents, CustomModOptions or a VMC event, or asks for something a Lua mod can do without C++, even if they do not say "Lua mod".
+description: Create or build a Lua mod for Civilization V that runs under Bazaar, the multi-DLL mod loader, using VMC's extra Lua events (GameEvents) or the base game's. Covers finding the event, switching on the VMC option it needs, starting from this skill's Lua mod template, building the mod, and making releases of it for the Steam Workshop. Use this whenever someone wants a Civ 5 Lua mod for Bazaar, wants to react to a game event in Lua, mentions GameEvents, CustomModOptions or a VMC event, or asks for something a Lua mod can do without C++, even if they do not say "Lua mod".
 argument-hint: "<Display Name>" [what it should do]
 ---
 
@@ -37,10 +37,10 @@ powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CLAUDE_SK
 
 - **`-DisplayName`** is what players see in the Mods menu; it also names the `Build` folder and the package. Ask the user for it if they have not given one. The file name comes from it, so `Turn Logger` becomes `TurnLogger`; pass `-FileName` only when the user wants a different one.
 - **`-Options`** lists the VMC options to switch on, comma-separated and spelled exactly as the reference names them, or `none` when the mod uses only base-game events. The script requires it. It refuses a name VMC does not have, because a misspelled option fails silently and the event just never fires. It also refuses an option that holds a number; set one of those with its own `UPDATE` line, as the reference shows.
-- **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`.
+- **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `release.cmd` refuses to make a release until it is changed.
 - **`-Destination`** is the folder to make the mod folder in; it defaults to the current folder. Keep the path short: ModBuddy's build fails once a path inside the mod folder passes 260 characters.
 
-The script copies the template, renames it, gives the mod a new ID on the `<Guid>` line (`<ProjectGuid>` stays), sets the teaser, description and authors, and writes the SQL. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause. If the mod turns out to need another option later, add an `UPDATE` line of the same form to the `.sql`, with the option's name exactly as the reference gives it.
+The script copies the template, renames it, gives the mod a new ID on the `<Guid>` line (`<ProjectGuid>` stays), sets the teaser, description and authors (the description also goes into `workshop-description.txt`), and writes the SQL. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause. If the mod turns out to need another option later, add an `UPDATE` line of the same form to the `.sql`, with the option's name exactly as the reference gives it.
 
 The template's project file makes the mod depend on Bazaar, which also makes the game load it after VMC's database files, so the SQL finds `CustomModOptions`. It also marks the mod as affecting saved games. Keep that: the SQL is a database change, and a loaded save applies the database changes only of the mods it lists.
 
@@ -70,6 +70,10 @@ The template's project file makes the mod depend on Bazaar, which also makes the
 
 - Report the files it made (`Build\<Display Name>\`, holding the `.modinfo`, `.lua` and `.sql`, and `Packages\<Display Name> (v N).civ5mod`). Then tell the user how to test in the game: copy `Build\<Display Name>`, the built mod, into MODS (not the folder the script made, which holds the project files); enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and the mod; and, if the mod prints, turn on logging and look in `Logs\Lua.log`.
 - Do not copy anything into MODS or start the game unless the user asks: installing mods is theirs to do.
+
+## 5. Releases
+
+When the user wants to publish, set the release in `VERSION`, add its notes to the top of `CHANGES.txt` in BBCode, and run `release.cmd` by its full path, as with `build.cmd`. Its `release` line is a whole number, which is also the mod's version, or a semantic version such as `1.2.0`, for which the script keeps a `mod` line itself. The `bazaar` line is the oldest Bazaar release the mod needs; the template's line already names the oldest release with all of VMC's events, so raise it only if the mod uses something newer, and change the "Requires Bazaar … or newer." sentence in `workshop-description.txt` with it. The script sets the version, builds, checks the package and keeps it in `Releases\<release>\`. If it refuses, read its message and fix the cause. Never delete or rename anything in `Releases\` to get past a check: it is the record of what was released. Uploading to the Steam Workshop is the user's step, in ModBuddy: select the package in `Releases\<release>\`, paste `workshop-description.txt` as the description and the `CHANGES.txt` section as the change note.
 
 ## Mods made for VMC itself
 
