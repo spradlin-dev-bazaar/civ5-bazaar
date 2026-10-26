@@ -8,6 +8,7 @@ Hook ids live in a registry file: an id, once given, always means the same funct
 built against an older host keep working.
 """
 
+import glob
 import json
 import os
 import re
@@ -736,14 +737,8 @@ def write_engine_build_files(project):
     )
     proj = replace_once(proj, 'AdditionalOptions="/EHsc"', 'AdditionalOptions="/EHsc /MP /bigobj /wd4251 /wd4275"')
     extra = []
-    for path in [
-        os.path.join(common.HOST_DIR, "CivHostRuntime.cpp"),
-        os.path.join(common.HOST_DIR, "CivHostCrash.cpp"),
-        os.path.join(common.HOST_DIR, "CivHostHand.cpp"),
-        os.path.join(common.HOST_DIR, "CivHostOrder.cpp"),
-        os.path.join(common.HOST_DIR, "CivHostSetup.cpp"),
-        os.path.join(common.HOST_DIR, "CivHostEngine.cpp"),
-        os.path.join(project.mirror_dir, "CivHookTable.cpp"),
+    for path in sorted(glob.glob(os.path.join(common.HOST_DIR, "*.cpp"))) + [
+        os.path.join(project.mirror_dir, "CivHookTable.cpp")
     ]:
         extra.append(
             '\t\t<File RelativePath="%s">\n'

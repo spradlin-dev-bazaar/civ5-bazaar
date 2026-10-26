@@ -1,4 +1,4 @@
-The host's own code, compiled into the host DLL:
+The host's own code, compiled into the host DLL. Every `.cpp` file here is built into it, and the runtime tests build all of them but `CivHostEngine.cpp`.
 
 - `CivPluginApi.h`: the contract with plugin DLLs.
 - `CivHostRuntime`: loading and unloading plugins, running their hooks, and catching their crashes.
