@@ -663,6 +663,7 @@ def html_problems(site):
         THING + "index.html": [
             '<a href="Inline.html" title="Thing::Inline() const">Inline() const</a> <span class="badge">'
         ],
+        "index.html": ["<title>Bazaar developer reference</title>"],
     }
     problems = []
     for path, texts in wanted.items():
