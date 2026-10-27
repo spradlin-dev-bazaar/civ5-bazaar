@@ -1,4 +1,4 @@
-release 0.4.1
+release 0.5.0
 0	CustomMods_eventHook
 1	CustomMods_eventTestAll
 2	CustomMods_eventTestAny
@@ -3104,7 +3104,6 @@ release 0.4.1
 3104	CvDllDatabaseUtility_DecrementReference
 3105	CvDllDatabaseUtility_GetReferenceCount
 3106	CvDllDatabaseUtility_Destroy
-3107	CvDllDatabaseUtility_CacheGameDatabaseData
 3108	CvDllDatabaseUtility_FlushGameDatabaseData
 3109	CvDllDatabaseUtility_PerformDatabasePostProcessing
 3110	CvDllDatabaseUtility_PrefetchGameData
@@ -3278,8 +3277,6 @@ release 0.4.1
 3278	CvDllGame_UpdateTestEndTurn
 3279	CvDllGame_Read
 3280	CvDllGame_Write
-3281	CvDllGame_ReadSupportingClassData
-3282	CvDllGame_WriteSupportingClassData
 3283	CvDllGame_WriteReplay
 3284	CvDllGame_CanMoveUnitTo
 3285	CvDllGame_NetMessageStaticsReset
@@ -4723,9 +4720,7 @@ release 0.4.1
 4724	CvGame_getNumReplayMessages
 4725	CvGame_getReplayMessage
 4726	CvGame_Read
-4727	CvGame_ReadSupportingClassData
 4728	CvGame_Write
-4729	CvGame_WriteSupportingClassData
 4730	CvGame_writeReplay
 4731	CvGame_saveReplay
 4732	CvGame_showEndGameSequence

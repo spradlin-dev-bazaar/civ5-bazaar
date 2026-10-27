@@ -7,7 +7,7 @@
 #endif
 
 #define CIV_HOST_API_MAJOR 0
-#define CIV_HOST_API_MINOR 4
+#define CIV_HOST_API_MINOR 5
 
 #include <string.h>
 

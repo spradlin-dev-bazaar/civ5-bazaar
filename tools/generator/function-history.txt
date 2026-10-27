@@ -1,4 +1,4 @@
-release	0.4.1
+release	0.5.0
 AppendToLog(CvString &, CvString &, CvString, CvString) @CvEconomicAI.cpp	ec95342116785ed6			
 AppendToLog(CvString &, CvString &, CvString, float) @CvEconomicAI.cpp	9ecda06675a848e4			
 AppendToLog(CvString &, CvString &, CvString, int) @CvEconomicAI.cpp	adb2228a01664de0			
@@ -5329,7 +5329,7 @@ CvGame::LogGameState(bool)	4582fb965fd3becc
 CvGame::NetMessageStaticsReset()	2467d529282beb71			
 CvGame::PopulateDigSite(CvPlot &, EraTypes, GreatWorkArtifactClass)	80da8ca182834d6b			
 CvGame::Read(FDataStream &)	4a76923e437356b1			
-CvGame::ReadSupportingClassData(FDataStream &)	5bbf8bf2f349030e			
+CvGame::ReadSupportingClassData(FDataStream &)	64cb63fbaf57a328			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|9736|9748|
 CvGame::ReviveActivePlayer()	658ee3148a264319			
 CvGame::SelectSettler()	c6120c0cdcbd315c			
 CvGame::SetAdvisorMessageHasBeenSeen(const char *, bool)	c0b939c39d96fc35			
@@ -5360,7 +5360,7 @@ CvGame::TunerEverConnected() const	315925103d4fda41
 CvGame::TurnTimerSync(float, float)	ac0a33e4754d0247			
 CvGame::UpdatePlayers()	4e775adf3bf0ce33			
 CvGame::Write(FDataStream &) const	cc3103c3d3f2cd2f			
-CvGame::WriteSupportingClassData(FDataStream &)	0167c66b66976e73			
+CvGame::WriteSupportingClassData(FDataStream &)	aa4a2920f75db12f			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|9931|9947|
 CvGame::addDestroyedCityName(const CvString &)	fbb37f7d13dce0c3			
 CvGame::addGreatPersonBornName(const CvString &)	cc658ec4903fb353			
 CvGame::addPlayer(PlayerTypes, LeaderHeadTypes, CivilizationTypes)	277690671c672db9			
@@ -5401,8 +5401,8 @@ CvGame::countTotalNukeUnits()	c55bfae6c77195b0
 CvGame::cycleCities(bool, bool)	2c24259663f7cf72			
 CvGame::cyclePlotUnits(CvPlot *, bool, bool, int)	379a16382a433b10			
 CvGame::cycleUnits(bool, bool, bool)	ba038e71d907cf88			
-CvGame::doControl(ControlTypes)	09376a784027fba4			
-CvGame::doTurn()	09454aee0c28934b			
+CvGame::doControl(ControlTypes)	70bd00d1edeb8d5d			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|3318|3704|
+CvGame::doTurn()	6f02bb75416a0391			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|7601|7797|
 CvGame::doUpdateCacheOnTurn()	b43bc4d66946e1b2			
 CvGame::endTurnTimerReset()	f2d07c9605125e35			
 CvGame::endTurnTimerSemaphoreDecrement()	493af750333a92c9			
@@ -5500,7 +5500,7 @@ CvGame::incrementGameTurn()	d5ffb5cec61157a9
 CvGame::incrementProjectCreatedCount(ProjectTypes, int)	a54ebc06d30ea06d			
 CvGame::incrementUnitClassCreatedCount(UnitClassTypes)	8edd8b8010c8f024			
 CvGame::incrementUnitCreatedCount(UnitTypes)	1532e388bc81647a			
-CvGame::init(HandicapTypes)	6843b1880f24f3a5			
+CvGame::init(HandicapTypes)	39308336b5a4bf6a			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|170|397|
 CvGame::init2()	8f32ae250785eb6e			
 CvGame::initDiplomacy()	3d33bfddffa15992			
 CvGame::initFreeState(CvGameInitialItemsOverrides &)	5f601a3bac11b58f			
@@ -5542,7 +5542,7 @@ CvGame::makeCircumnavigated()	e3ac930b09cd2234
 CvGame::makeNukesValid(bool)	f90b22f3cbcc9280			
 CvGame::makeSpecialUnitValid(SpecialUnitTypes)	f89886393158702d			
 CvGame::mouseoverUnit(CvUnit *, bool)	c304afd45ffca356			
-CvGame::regenerateMap()	b2009b79e4c9edcc			
+CvGame::regenerateMap()	e1b17abd6534eeea			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|842|897|
 CvGame::removeGreatPersonBornName(const CvString &)	9a8175910117b1ce			
 CvGame::removePlotExtraCost(int, int)	a0c2f9a43fe91edd			
 CvGame::removePlotExtraYield(int, int)	8e698db9bc8df72d			
@@ -5604,7 +5604,7 @@ CvGame::testVictory(VictoryTypes, TeamTypes, bool *) const	81d5234c6368e3cd
 CvGame::toggleDebugMode()	80a985aca295b179			
 CvGame::uninit()	11818c4d54ebd77b			
 CvGame::unitIsMoving()	f8ca22a61bf0ba67			
-CvGame::update()	5a07f12671c7cd67			
+CvGame::update()	41832d5d282870cb			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvGame.cpp|1451|1577|
 CvGame::updateCitySight(bool)	893e8599d4c9c045			
 CvGame::updateDebugModeCache()	dac03aec9c088288			
 CvGame::updateMoves()	f3a8b94ebc1ef04c	IsPluginControlledPlayer		
@@ -9361,7 +9361,7 @@ CvLuaFractal::lGetHeight(lua_State *)	93b914d005e55d32
 CvLuaFractal::pRegister(lua_State *)	24a413c7a69d6d5f			
 CvLuaGame::GetInstance(lua_State *, int)	f02c31f4d182971d			
 CvLuaGame::GetInstanceName()	727d1748a672b2b4			
-CvLuaGame::RegisterMembers(lua_State *)	324a3850c7bea49c			
+CvLuaGame::RegisterMembers(lua_State *)	6b32c53f8eaafac7			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/Lua/CvLuaGame.cpp|50|453|
 CvLuaGame::lAddPlayer(lua_State *)	45e4638f90612222			
 CvLuaGame::lAddReformation(lua_State *)	5f8395a43764957b			
 CvLuaGame::lAnyoneHasAnyNaturalWonder(lua_State *)	ad3a9974ef8566e2			
@@ -12127,7 +12127,7 @@ CvNotificationXMLEntries::GetNumNotifications()	f44b6444a04efc23
 CvNotificationXMLEntries::~CvNotificationXMLEntries()	58abdb580a10dbee			
 CvNotifications::Activate(Notification &)	eea7067f62859a7a			
 CvNotifications::Activate(int)	9fcf4d2ea3114d4d			
-CvNotifications::Add(NotificationTypes, const char *, const char *, int, int, int, int)	6817ab64217024e4	NotificationAdded		
+CvNotifications::Add(NotificationTypes, const char *, const char *, int, int, int, int)	b9850d1031792e78	NotificationAdded		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvNotifications.cpp|404|501|
 CvNotifications::AddByName(const char *, const char *, const char *, int, int, int, int)	ec2db2625ffc27fc			
 CvNotifications::AddToPlayer(PlayerTypes, NotificationTypes, const char *, const char *, int, int, int, int)	1c671dbbd3dd59de			
 CvNotifications::CvNotifications()	0563456076a0f8e6			
@@ -12196,7 +12196,7 @@ CvPlayer::AI_unitUpdate()	e1228cb55de87cfd
 CvPlayer::AI_updateFoundValues(bool)	10da8abeeae7d9be			
 CvPlayer::AddAPlot(CvPlot *)	c6771614c0fd2541			
 CvPlayer::AddDiplomacyEvent(const char *, PlayerTypes, int, int, int, int)	fc019346f880dc96			
-CvPlayer::AddIncomingUnit(PlayerTypes, CvUnit *)	1f7e5b697aa402c4			
+CvPlayer::AddIncomingUnit(PlayerTypes, CvUnit *)	722c28e12bb7823d	UnitReplaced		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvPlayer.cpp|19668|19725|UnitReplaced
 CvPlayer::AddMilitaryEvent(const char *, CvPlot *, PlayerTypes, int, int, int, int)	fc093d8a7acbe116			
 CvPlayer::AddNotification(NotificationTypes, const char *, const char *, CvPlot *, int, int)	ef789d33f56e907f			
 CvPlayer::AddNotification(NotificationTypes, const char *, const char *, int, int)	4204e4b9a4a95586			
@@ -12338,7 +12338,7 @@ CvPlayer::DoAdoptedGreatPersonCityStatePolicy()	32997faa3c5e506f
 CvPlayer::DoAnnounceReligionAdoption()	e0c00d5800c717db			
 CvPlayer::DoApplyNewAllyGPBonus()	1f7d27ce33c39b8e			
 CvPlayer::DoCityRevolt()	6c26436fadc7c66c			
-CvPlayer::DoCivilianReturnLogic(bool, PlayerTypes, int)	05f12afec01b8a78			
+CvPlayer::DoCivilianReturnLogic(bool, PlayerTypes, int)	69e6b916e818af46	UnitReplaced		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvPlayer.cpp|19380|19589|UnitReplaced
 CvPlayer::DoDeficit()	2ef3db1c3173c1e4			
 CvPlayer::DoDistanceGift(PlayerTypes, CvUnit *)	337a2a313ced7788			
 CvPlayer::DoForceDefPact(PlayerTypes)	c21cb01295cf4ea5			
@@ -12781,7 +12781,7 @@ CvPlayer::UpdateResearchAgreements(int)	37a3b8ce82513a9a
 CvPlayer::UpdateResourcesSiphoned()	c057fb9abafbf168			
 CvPlayer::UpdateUnitProductionMaintenanceMod()	e05419e0d636f1d8			
 CvPlayer::Write(FDataStream &) const	7cbb03c67f02a7ad			
-CvPlayer::acquireCity(CvCity *, bool, bool, bool)	e77d9bce13f65623	PopupRaised		
+CvPlayer::acquireCity(CvCity *, bool, bool, bool)	70dd98c34a3590f6	CityReplaced,PopupRaised		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvPlayer.cpp|1938|3136|CityReplaced
 CvPlayer::addAIOperation(int, PlayerTypes, int, CvCity *, CvCity *)	78c1d926ed6f1237			
 CvPlayer::addArmyAI()	b3923614b1fd878e			
 CvPlayer::addCity()	31f88e03034baef0			
@@ -13215,7 +13215,7 @@ CvPlayer::incrementMerchantsFromFaith()	1ab3221b8fd2f5a3
 CvPlayer::incrementMusiciansFromFaith()	b022646e92bb533c			
 CvPlayer::incrementScientistsFromFaith()	1b76b87b9af1b8bc			
 CvPlayer::incrementWritersFromFaith()	3c784232e1f9ba4d			
-CvPlayer::init(PlayerTypes)	97dce1f9f77e18be			
+CvPlayer::init(PlayerTypes)	6b8cb207c5252594			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvPlayer.cpp|546|716|
 CvPlayer::initCity(int, int, bool, bool, ReligionTypes, const char *)	5039080d396d4221			
 CvPlayer::initFreeState(CvGameInitialItemsOverrides &)	6a1cfb668826fac0			
 CvPlayer::initFreeUnits(CvGameInitialItemsOverrides &)	d74cb91e8d9a7517			
@@ -17338,8 +17338,8 @@ CvUnit::cityAttackModifier() const	bbe0ac6c83407029
 CvUnit::cityDefenseModifier() const	5338520690526ec0			
 CvUnit::clearCombat()	bfc91409cdbe9027			
 CvUnit::construct(BuildingTypes)	b405792da84a97ac			
-CvUnit::convert(CvUnit *, bool)	9f7129d6fa7e6a83			
-CvUnit::createCaptureUnit(const CvUnitCaptureDefinition &)	8a52015f36a2b520			
+CvUnit::convert(CvUnit *, bool)	f3e4544022339f7f	UnitReplaced		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvUnit.cpp|1319|1513|UnitReplaced
+CvUnit::createCaptureUnit(const CvUnitCaptureDefinition &)	27ec4018017ed1cc	UnitReplaced		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvUnit.cpp|1919|2083|UnitReplaced
 CvUnit::createGreatWork()	34aaba12c6a1afdf			
 CvUnit::currInterceptionProbability() const	eefdfd9883b5fb54			
 CvUnit::debugDump(const FAutoVariableBase &) const	7a331589a21dd8ce			
@@ -17634,7 +17634,7 @@ CvUnit::isWaiting() const	d517481d3f6c1715
 CvUnit::join(SpecialistTypes)	d00a2fd9ee827fdf			
 CvUnit::jumpToNearestValidPlot()	cefb65d55ec89673			
 CvUnit::jumpToNearestValidPlotWithinRange(int)	f7e470ff6567e45f			
-CvUnit::kill(bool, PlayerTypes)	a5c03fcd1af9c29f			
+CvUnit::kill(bool, PlayerTypes)	08e4b6c0e484b638			0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvUnit.cpp|1520|1836|
 CvUnit::lead(int)	9b5695db5493443b			
 CvUnit::load()	1b61e798dc8c4e92			
 CvUnit::loadUnit(CvUnit &)	c19ba3d9b5327739			
@@ -17707,7 +17707,7 @@ CvUnit::setStatsTravelled(int)	271d5700f7b708cc
 CvUnit::setTacticalMove(TacticalAIMoveTypes)	42f6f02bb1fe457e			
 CvUnit::setTransportUnit(CvUnit *)	9fc830f3e02a4486			
 CvUnit::setUnitName(const CvString)	ab73d95870ba979e			
-CvUnit::setXY(int, int, bool, bool, bool, bool, bool)	fc07e4e618ef9eca	PopupRaised		
+CvUnit::setXY(int, int, bool, bool, bool, bool, bool)	4dc96f8b75f1dfcc	PopupRaised		0.5.0|CvGameCoreSource/CvGameCoreDLL_Expansion2/CvUnit.cpp|15547|16440|
 CvUnit::setupGraphical()	06f704e927a612f9			
 CvUnit::shouldLoadOnMove(const CvPlot *) const	4d044984798173c1			
 CvUnit::specialCargo() const	4e561fec2d60e50c			
