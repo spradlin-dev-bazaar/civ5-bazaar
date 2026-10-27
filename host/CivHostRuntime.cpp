@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include <tlhelp32.h>
+#include <intrin.h>
 #include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -41,7 +42,13 @@ namespace
 	int s_loadingPlugin = -1;
 	const CivPluginInfo* s_loadingInfo = 0;
 	bool s_loadingConflict = false;
-	int s_pluginCallDepth = 0;
+	CivSaveDataFn s_pendingSave = 0;
+	CivLoadDataFn s_pendingLoad = 0;
+	std::string* s_saving = 0;
+	// A new one for every call of a save function, so a saving kept from an earlier call writes nowhere.
+	unsigned int s_saveToken = 0;
+	bool s_strayWriteLogged = false;
+	volatile LONG s_pluginCallDepth = 0;
 	bool* s_originalCalled = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
@@ -137,7 +144,7 @@ namespace
 	bool GuardedCall(CivHookThunk thunk, void* ctx, unsigned int* code)
 	{
 		bool ran = true;
-		++s_pluginCallDepth;
+		InterlockedIncrement(&s_pluginCallDepth);
 		__try
 		{
 			__try
@@ -151,7 +158,7 @@ namespace
 		}
 		__finally
 		{
-			--s_pluginCallDepth;
+			InterlockedDecrement(&s_pluginCallDepth);
 		}
 		if (!ran && *code == EXCEPTION_STACK_OVERFLOW)
 			_resetstkoflw();
@@ -345,8 +352,28 @@ namespace
 		return CIV_HOOK_OK;
 	}
 
+	int RegisterSaveData(int plugin, CivSaveDataFn save, CivLoadDataFn load)
+	{
+		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin || s_pendingSave)
+			return CIV_HOOK_NOT_ALLOWED;
+		if (!save || !load)
+			return CIV_HOOK_BAD_ID;
+		s_pendingSave = save;
+		s_pendingLoad = load;
+		return CIV_HOOK_OK;
+	}
+
+	void* CurrentSaveToken()
+	{
+		return s_saving ? reinterpret_cast<void*>(static_cast<UINT_PTR>(s_saveToken)) : 0;
+	}
+
 	void CommitPending(int plugin)
 	{
+		s_plugins[plugin].saveFn = s_pendingSave;
+		s_plugins[plugin].loadFn = s_pendingLoad;
+		s_pendingSave = 0;
+		s_pendingLoad = 0;
 		for (size_t i = 0; i < s_pending.size(); ++i)
 		{
 			const PendingHook& p = s_pending[i];
@@ -383,6 +410,8 @@ namespace
 	{
 		s_pending.clear();
 		s_possibleConflicts.clear();
+		s_pendingSave = 0;
+		s_pendingLoad = 0;
 	}
 
 	void PluginLog(int plugin, const char* message)
@@ -398,6 +427,22 @@ namespace
 			if (module && s_plugins[i].module == module)
 				return (int)i;
 		return -1;
+	}
+
+	void WriteSaveData(void* saving, const void* data, int size)
+	{
+		if (saving && saving == CurrentSaveToken())
+		{
+			if (data && size > 0)
+				s_saving->append(static_cast<const char*>(data), size);
+			return;
+		}
+		if (s_strayWriteLogged)
+			return;
+		s_strayWriteLogged = true;
+		const int plugin = PluginWithCode(_ReturnAddress());
+		Log("Plugin %s wrote save data outside its save function, or with the saving of an earlier save, so it was not saved. This is logged only once.",
+			plugin < 0 ? "?" : DisplayName(plugin));
 	}
 
 	// Serial 0 belongs to no plugin, so a function pushed with a wrong index refuses to run rather than unbalancing the
@@ -617,6 +662,24 @@ namespace
 		Log("Plugin %s: %s", rec.name.c_str(), problem.c_str());
 	}
 
+	bool RefusedForSaveKey(int plugin)
+	{
+		CivPluginRecord& rec = s_plugins[plugin];
+		if (!s_pendingSave)
+			return false;
+		for (int i = 0; i < plugin; ++i)
+		{
+			const CivPluginRecord& other = s_plugins[i];
+			if (!other.saveFn || !CivSameSaveKey(other, rec.modId, rec.pluginId))
+				continue;
+			const std::string id = rec.pluginId.empty() ? "no plugin ID" : "the plugin ID \"" + rec.pluginId + "\"";
+			Refuse(rec, CIV_PLUGIN_SAVE_ID_TAKEN, Format("%s, higher in the list, comes from the same mod and keeps its data in saves with %s too, so this plugin was not loaded, or their data would mix. Each plugin of a mod that keeps data in saves needs a plugin ID of its own; ask the plugin's author to fix this.",
+				other.name.c_str(), id.c_str()));
+			return true;
+		}
+		return false;
+	}
+
 	bool AlreadyListed(const std::string& path)
 	{
 		for (size_t i = 0; i < s_plugins.size(); ++i)
@@ -733,12 +796,13 @@ namespace
 		return false;
 	}
 
-	void LoadOne(const std::string& requested)
+	void LoadOne(const CivPluginFile& file)
 	{
-		const std::string path = CivFullPath(requested);
+		const std::string path = CivFullPath(file.path);
 		const int index = (int)s_plugins.size();
 		CivPluginRecord blank;
 		blank.path = path;
+		blank.modId = file.modId;
 		blank.name = CivFileName(path);
 		blank.serial = ++s_lastSerial;
 		const bool duplicate = AlreadyListed(path);
@@ -782,9 +846,11 @@ namespace
 		host->Log = &PluginLog;
 		host->RegisterHandHook = &RegisterHandHook;
 		host->PushLuaFunction = &PushLuaFunction;
+		host->RegisterSaveData = &RegisterSaveData;
+		host->WriteSaveData = &WriteSaveData;
 		s_plugins[index].module = module;
 		s_plugins[index].host = host;
-		CivPluginInfo info = { 0, 0 };
+		CivPluginInfo info = { 0, 0, 0 };
 		EntryCall call = { entry, host, &info, false };
 		DiscardPending();
 		s_loadingConflict = false;
@@ -797,6 +863,8 @@ namespace
 			rec.name = text;
 		CopyPluginText(info.version, text, sizeof(text));
 		rec.version = text;
+		CopyPluginText(info.id, text, sizeof(text));
+		rec.pluginId = text;
 
 		if (!ran)
 		{
@@ -812,6 +880,12 @@ namespace
 		{
 			DiscardPending();
 			Refuse(rec, CIV_PLUGIN_ENTRY_DECLINED, "Declined to load.");
+			Unload(index);
+			return;
+		}
+		if (RefusedForSaveKey(index))
+		{
+			DiscardPending();
 			Unload(index);
 			return;
 		}
@@ -865,12 +939,12 @@ namespace
 			s_plugins[plugin].name.c_str(), HookName(hookId));
 	}
 
-	bool SameAsListed(const std::vector<std::string>& paths)
+	bool SameAsListed(const std::vector<CivPluginFile>& files)
 	{
-		if (paths.size() != s_plugins.size())
+		if (files.size() != s_plugins.size())
 			return false;
-		for (size_t i = 0; i < paths.size(); ++i)
-			if (!CivSameText(CivFullPath(paths[i]), s_plugins[i].path))
+		for (size_t i = 0; i < files.size(); ++i)
+			if (!CivSameText(CivFullPath(files[i].path), s_plugins[i].path) || !CivSameText(files[i].modId, s_plugins[i].modId))
 				return false;
 		return true;
 	}
@@ -968,6 +1042,50 @@ namespace
 				return (int)i;
 		return -1;
 	}
+
+	struct SaveCall
+	{
+		CivSaveDataFn fn;
+		void* saving;
+	};
+
+	void SaveThunk(void* p)
+	{
+		SaveCall& c = *static_cast<SaveCall*>(p);
+		c.fn(c.saving);
+	}
+
+	// No C++ objects may live in this frame, or __try is not allowed.
+	bool GuardedSave(SaveCall* call, std::string* data, unsigned int* code)
+	{
+		bool ran = false;
+		if (++s_saveToken == 0)
+			++s_saveToken;
+		s_saving = data;
+		call->saving = CurrentSaveToken();
+		__try
+		{
+			ran = GuardedCall(&SaveThunk, call, code);
+		}
+		__finally
+		{
+			s_saving = 0;
+		}
+		return ran;
+	}
+
+	struct LoadCall
+	{
+		CivLoadDataFn fn;
+		const void* data;
+		int size;
+	};
+
+	void LoadThunk(void* p)
+	{
+		LoadCall& c = *static_cast<LoadCall*>(p);
+		c.fn(c.data, c.size);
+	}
 }
 
 // No C++ objects may live in this frame: a Lua error the plugin raises jumps out of it.
@@ -1007,6 +1125,36 @@ const std::vector<CivPluginRecord>& CivHostPlugins()
 	return s_plugins;
 }
 
+bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId)
+{
+	return CivSameText(plugin.modId, modId) && CivSameText(plugin.pluginId, pluginId);
+}
+
+bool CivHostCallSaveFunction(int plugin, std::string* data)
+{
+	data->clear();
+	if (!Alive(plugin) || !s_plugins[plugin].saveFn)
+		return false;
+	SaveCall call = { s_plugins[plugin].saveFn, 0 };
+	unsigned int code = 0;
+	if (GuardedSave(&call, data, &code))
+		return true;
+	data->clear();
+	Quarantine(plugin, false, "its save function", &code);
+	return false;
+}
+
+void CivHostCallLoadFunction(int plugin, const std::string* data)
+{
+	if (!Alive(plugin) || !s_plugins[plugin].loadFn)
+		return;
+	const bool none = !data || data->empty();
+	LoadCall call = { s_plugins[plugin].loadFn, none ? 0 : data->data(), none ? 0 : (int)data->size() };
+	unsigned int code = 0;
+	if (!GuardedCall(&LoadThunk, &call, &code))
+		Quarantine(plugin, false, "its load function", &code);
+}
+
 std::vector<CivPluginReportRow> CivHostReportRows()
 {
 	std::vector<CivPluginReportRow> rows;
@@ -1034,22 +1182,22 @@ std::vector<CivPluginReportRow> CivHostReportRows()
 	return rows;
 }
 
-void CivHostLoadPlugins(const std::vector<std::string>& paths)
+void CivHostLoadPlugins(const std::vector<CivPluginFile>& files)
 {
-	for (size_t i = 0; i < paths.size(); ++i)
-		LoadOne(paths[i]);
+	for (size_t i = 0; i < files.size(); ++i)
+		LoadOne(files[i]);
 }
 
-CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths, const CivFilePairs& useBoth)
+CivPluginListResult CivHostSetPlugins(const std::vector<CivPluginFile>& files, const CivFilePairs& useBoth)
 {
-	if (SameAsListed(paths) && useBoth == s_useBoth)
+	if (SameAsListed(files) && useBoth == s_useBoth)
 		return CIV_PLUGINS_UNCHANGED;
 	if (!CivHostUnloadPlugins())
 		return CIV_PLUGINS_BUSY;
 	s_useBoth = useBoth;
-	if (!paths.empty())
+	if (!files.empty())
 		Log("---- Loading plugins");
-	CivHostLoadPlugins(paths);
+	CivHostLoadPlugins(files);
 	return CIV_PLUGINS_CHANGED;
 }
 
@@ -1064,5 +1212,6 @@ bool CivHostUnloadPlugins()
 			Unload((int)i);
 	s_plugins.clear();
 	s_useBoth.clear();
+	s_strayWriteLogged = false;
 	return true;
 }

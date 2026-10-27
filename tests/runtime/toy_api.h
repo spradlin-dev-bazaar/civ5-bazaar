@@ -21,3 +21,13 @@ typedef void ToyBreakOnNextCallFn();
 typedef void ToyStartThreadFn(int throughRuntime);
 typedef void ToyLeaveThreadRunningFn();
 typedef int ToyExplodeLineFn();
+typedef void ToySaveSetFn(int value);
+typedef int ToySaveValueFn();
+typedef int ToySaveLoadsFn();
+typedef bool ToySaveHadDataFn();
+// 1 crashes the next save, 2 the next load.
+typedef void ToySaveCrashNextFn(int where);
+// The results of the registrations its entry function tried, in order; 4 tries one more now.
+typedef int ToySaveRegisteredFn(int attempt);
+// The next save also writes with the saving it was given in the save before.
+typedef void ToySaveWriteKeptFn();

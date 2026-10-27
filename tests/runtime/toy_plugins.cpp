@@ -27,6 +27,13 @@ TOY_EXPORT ToyBreakOnNextCallFn ToyBreakOnNextCall;
 TOY_EXPORT ToyStartThreadFn ToyStartThread;
 TOY_EXPORT ToyLeaveThreadRunningFn ToyLeaveThreadRunning;
 TOY_EXPORT ToyExplodeLineFn ToyExplodeLine;
+TOY_EXPORT ToySaveSetFn ToySaveSet;
+TOY_EXPORT ToySaveValueFn ToySaveValue;
+TOY_EXPORT ToySaveLoadsFn ToySaveLoads;
+TOY_EXPORT ToySaveHadDataFn ToySaveHadData;
+TOY_EXPORT ToySaveCrashNextFn ToySaveCrashNext;
+TOY_EXPORT ToySaveRegisteredFn ToySaveRegistered;
+TOY_EXPORT ToySaveWriteKeptFn ToySaveWriteKept;
 
 #if defined(TOY_NEWER) || defined(TOY_NEWER_IMPORTS)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1};
@@ -892,6 +899,105 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	host->PushLuaFunction(host->pluginIndex + 100, 0, &LuaTwo);
 	host->PushLuaFunction(-1, 0, &LuaTwo);
 	host->PushLuaFunction(host->pluginIndex - 1, 0, &LuaTwo);
+	return true;
+}
+
+#elif defined(TOY_SAVE) || defined(TOY_SAVE_SECOND) || defined(TOY_SAVE_TWIN)
+
+static int s_saveValue = 0;
+static int s_loads = 0;
+static bool s_hadData = false;
+static int s_crashNext = 0;
+static int s_registered[4] = {-1, -1, -1, -1};
+static void* s_keptSaving = 0;
+static bool s_writeKept = false;
+
+static void SaveData(void* saving)
+{
+	if (s_writeKept && s_keptSaving)
+		s_host->WriteSaveData(s_keptSaving, "z", 1);
+	s_writeKept = false;
+	s_keptSaving = saving;
+	CivSaveWriter out(s_host, saving);
+	if (s_crashNext == 1)
+	{
+		s_crashNext = 0;
+		out.WriteInt(12345);
+		int* volatile nowhere = 0;
+		*nowhere = 1;
+	}
+	out.WriteInt(s_saveValue);
+	out.WriteText("toy");
+}
+
+static void LoadData(const void* data, int size)
+{
+	++s_loads;
+	if (s_crashNext == 2)
+	{
+		s_crashNext = 0;
+		int* volatile nowhere = 0;
+		*nowhere = 1;
+	}
+	CivSaveReader in(data, size);
+	s_hadData = data != 0;
+	s_saveValue = in.ReadInt(0);
+	if (data && (in.ReadText("") != "toy" || in.ReadInt(77) != 77))
+		s_saveValue = -1;
+}
+
+TOY_EXPORT void ToySaveSet(int value)
+{
+	s_saveValue = value;
+}
+
+TOY_EXPORT int ToySaveValue()
+{
+	return s_saveValue;
+}
+
+TOY_EXPORT int ToySaveLoads()
+{
+	return s_loads;
+}
+
+TOY_EXPORT bool ToySaveHadData()
+{
+	return s_hadData;
+}
+
+TOY_EXPORT void ToySaveCrashNext(int where)
+{
+	s_crashNext = where;
+}
+
+TOY_EXPORT int ToySaveRegistered(int attempt)
+{
+	if (attempt < 4)
+		return s_registered[attempt];
+	return s_host->RegisterSaveData(s_host->pluginIndex, &SaveData, &LoadData);
+}
+
+TOY_EXPORT void ToySaveWriteKept()
+{
+	s_writeKept = true;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+#if defined(TOY_SAVE)
+	Describe(info, "Toy Save");
+#elif defined(TOY_SAVE_SECOND)
+	Describe(info, "Toy Save Second");
+	info->id = "second";
+#else
+	Describe(info, "Toy Save Twin");
+#endif
+	s_registered[0] = host->RegisterSaveData(host->pluginIndex, 0, &LoadData);
+	s_registered[1] = host->RegisterSaveData(host->pluginIndex, &SaveData, 0);
+	s_registered[2] = host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData);
+	s_registered[3] = host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData);
 	return true;
 }
 

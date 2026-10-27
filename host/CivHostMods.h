@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CivHostRuntime.h"
+
 #include <string>
 #include <vector>
 
@@ -41,5 +43,5 @@ struct CivNotLoaded
 };
 
 // A game loaded from a save keeps the DllPlugins rows of only the mods that affect saved games.
-std::vector<std::string> CivPluginPaths(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
+std::vector<CivPluginFile> CivPluginFiles(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
 	std::vector<CivNotLoaded>* notLoaded);

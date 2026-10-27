@@ -13,8 +13,8 @@
 
 void Check(bool ok, const char* what);
 std::string OutFile(const char* name);
-std::vector<std::string> OutFiles(const char* const* names, size_t count);
-template<size_t N> std::vector<std::string> OutFiles(const char* const (&names)[N])
+std::vector<CivPluginFile> OutFiles(const char* const* names, size_t count);
+template<size_t N> std::vector<CivPluginFile> OutFiles(const char* const (&names)[N])
 {
 	return OutFiles(names, N);
 }

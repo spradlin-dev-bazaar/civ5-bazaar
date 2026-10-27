@@ -2,11 +2,13 @@
 #include "CvNotifications.h"
 
 #include "CivHostEngine.h"
+#include "CivHostLock.h"
 #include "CivHostMods.h"
 #include "CivHostNotices.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
+#include "CivHostSaves.h"
 #include "CivHostSetup.h"
 
 #include <stdio.h>
@@ -36,9 +38,11 @@ namespace
 	// The game unloads and reloads this DLL at the main menu, which resets a static flag but not the process's environment,
 	// so the log is emptied once per run of the game rather than before each game.
 	const char* const kLogStarted = "BAZAAR_LOG_STARTED";
+	CivLock s_logLock;
 
 	void LogLine(const char* line)
 	{
+		CivLockHold hold(s_logLock);
 		if (UserFolder().empty())
 			return;
 		const bool fresh = GetEnvironmentVariableA(kLogStarted, NULL, 0) == 0;
@@ -77,6 +81,27 @@ namespace
 	const char* const kModsUnreadable = "Bazaar could not read the game's list of mods, so any plugins already loaded were left as they were.";
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
 	const char* const kNotSaved = "Bazaar could not save your plugin order, so the old order comes back when a game starts. Details are in Logs\\Bazaar.log.";
+	const char* const kPluginDataNotLoaded = "Plugin data not loaded";
+	const char* const kSaveOverWarning = " If you save over this game, that data is lost for good; save in a new slot to keep the old save as it is.";
+
+	// A damaged length must not crash the load; a part not read in full comes back empty, which counts as damaged.
+	std::string ReadSavePart(FDataStream& stream)
+	{
+		uint size = 0;
+		stream >> size;
+		std::string part;
+		try
+		{
+			part.resize(size);
+		}
+		catch (const std::exception&)
+		{
+			return std::string();
+		}
+		if (size && stream.ReadIt(size, &part[0]) != size)
+			return std::string();
+		return part;
+	}
 
 	std::string Lines(const std::vector<std::string>& lines)
 	{
@@ -273,12 +298,12 @@ namespace
 			return false;
 		}
 		std::vector<CivNotLoaded> notLoaded;
-		const std::vector<std::string> paths = CivPluginPaths(loading, mods, &notLoaded);
+		const std::vector<CivPluginFile> plugins = CivPluginFiles(loading, mods, &notLoaded);
 
 		CivHostSetLogSink(&LogLine);
 		CivHostSetFaultSink(&OnFault);
 		CivHostSetLuaPusher(&PushPluginLuaFunction);
-		const CivPluginListResult result = CivHostSetPlugins(paths, CivUseBothPairs(order));
+		const CivPluginListResult result = CivHostSetPlugins(plugins, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{
 			CivQueueNotice("Plugins not changed", kBusy);
@@ -462,6 +487,33 @@ void CivHostOnGameUpdate()
 		else
 			notifications->Add(NOTIFICATION_GENERIC, sending[i].message.c_str(), sending[i].summary.c_str(), -1, -1, -1);
 	}
+}
+
+void CivHostOnWriteSave(FDataStream& stream)
+{
+	const std::string part = CivHostSavePart();
+	stream << (uint)part.size();
+	stream.WriteIt((uint)part.size(), part.data());
+}
+
+void CivHostOnReadSave(FDataStream& stream, unsigned int version)
+{
+	if (version < CIV_HOST_SAVE_VERSION)
+	{
+		CivHostLoadPart(NULL);
+		return;
+	}
+	const std::string part = ReadSavePart(stream);
+	const std::string problem = CivHostLoadPart(&part);
+	if (problem.empty())
+		return;
+	LogLine(problem.c_str());
+	CivQueueNotice(kPluginDataNotLoaded, problem + kSaveOverWarning);
+}
+
+void CivHostOnNewGame()
+{
+	CivHostLoadPart(NULL);
 }
 
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.

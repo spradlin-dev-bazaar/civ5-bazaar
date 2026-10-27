@@ -27703,19 +27703,34 @@ class CivApiVersion	size(8):
  4	| minor
 	+---
 
-class CivHostInfo	size(20):
+class CivHostInfo	size(28):
 	+---
  0	| pluginIndex
  4	| RegisterHook
  8	| Log
 12	| RegisterHandHook
 16	| PushLuaFunction
+20	| RegisterSaveData
+24	| WriteSaveData
 	+---
 
-class CivPluginInfo	size(8):
+class CivPluginInfo	size(12):
 	+---
  0	| name
  4	| version
+ 8	| id
+	+---
+
+class CivSaveReader	size(8):
+	+---
+ 0	| m_data
+ 4	| m_left
+	+---
+
+class CivSaveWriter	size(8):
+	+---
+ 0	| m_host
+ 4	| m_saving
 	+---
 
 class Command	size(8):
@@ -54095,10 +54110,21 @@ types CivHostInfo:
  field Log: void (*)(int, const char *)
  field RegisterHandHook: int (*)(int, int, void *)
  field PushLuaFunction: void (*)(int, lua_State *, int (*)(lua_State *))
+ field RegisterSaveData: int (*)(int, void (*)(void *), void (*)(const void *, int))
+ field WriteSaveData: void (*)(void *, const void *, int)
 
 types CivPluginInfo:
  field name: const char *
  field version: const char *
+ field id: const char *
+
+types CivSaveReader:
+ field m_data: const char *
+ field m_left: int
+
+types CivSaveWriter:
+ field m_host: const CivHostInfo *
+ field m_saving: void *
 
 types CustomMods:
  field m_bGLOBAL_EARLY_COOP_WAR_LOCK: bool

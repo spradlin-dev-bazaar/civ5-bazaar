@@ -14,7 +14,7 @@ namespace
 
 	bool ChangePluginsNow()
 	{
-		return CivHostSetPlugins(std::vector<std::string>()) != CIV_PLUGINS_BUSY;
+		return CivHostSetPlugins(std::vector<CivPluginFile>()) != CIV_PLUGINS_BUSY;
 	}
 
 	void CallTwice()
@@ -99,6 +99,10 @@ void TestReload()
 	Check(CivHostSetPlugins(OutFiles(respelled)) == CIV_PLUGINS_UNCHANGED, "the same list, spelled differently, changes nothing");
 	Check(!LogHas("shutting down"), "the same list spelled differently shuts no plugin down");
 	Check(CivHostSetPlugins(OutFiles(reversed)) == CIV_PLUGINS_CHANGED, "the same plugins in another order count as a change");
+	std::vector<CivPluginFile> otherMod = OutFiles(reversed);
+	otherMod[0].modId = "{another mod}";
+	Check(CivHostSetPlugins(otherMod) == CIV_PLUGINS_CHANGED,
+		"the same files from another mod count as a change, since a plugin's data in saves is kept under its mod's ID");
 }
 
 void TestListWhileRunning()
@@ -120,7 +124,7 @@ void TestListWhileRunning()
 
 	breakOnNextCall();
 	Check(BreaksOut(&CallTwice), "an exception the host does not handle passes through to the caller");
-	Check(CivHostSetPlugins(std::vector<std::string>()) == CIV_PLUGINS_CHANGED, "the list can still change after that exception");
+	Check(CivHostSetPlugins(std::vector<CivPluginFile>()) == CIV_PLUGINS_CHANGED, "the list can still change after that exception");
 }
 
 void TestReplaceSwap()
@@ -170,14 +174,14 @@ void TestEntryBreak()
 	StartWithNone();
 	Check(BreaksOut(&LoadEntryBreak), "an exception the host does not handle passes out of a plugin's entry point");
 	Check(Call(TOY_FUNCTION("toy_entry_break.dll", ToyRegisterLate), -1) == CIV_HOOK_NOT_ALLOWED, "after that, the plugin no longer counts as loading");
-	Check(CivHostSetPlugins(std::vector<std::string>()) == CIV_PLUGINS_CHANGED, "the list still changes after that exception");
+	Check(CivHostSetPlugins(std::vector<CivPluginFile>()) == CIV_PLUGINS_CHANGED, "the list still changes after that exception");
 	Check(!IsInMemory("toy_entry_break.dll"), "the half-loaded plugin is unloaded at the next list change");
 }
 
 void TestThreads()
 {
 	const char* const threads[] = {"toy_threads.dll"};
-	const std::vector<std::string> none;
+	const std::vector<CivPluginFile> none;
 	StartWith(threads);
 	ToyStartThreadFn* start = TOY_FUNCTION("toy_threads.dll", ToyStartThread);
 	Check(start != 0, "the thread test plugin can start a thread");
@@ -209,7 +213,7 @@ void TestNoShutdown()
 	StartWith(names);
 	Check(HasStatus("toy_no_shutdown.dll", CIV_PLUGIN_LOADED), "a plugin without a shutdown function loads");
 	const int faults = FaultCount();
-	Check(CivHostSetPlugins(std::vector<std::string>()) == CIV_PLUGINS_CHANGED, "dropping a plugin that has no shutdown function from the list is accepted");
+	Check(CivHostSetPlugins(std::vector<CivPluginFile>()) == CIV_PLUGINS_CHANGED, "dropping a plugin that has no shutdown function from the list is accepted");
 	Check(!IsInMemory("toy_no_shutdown.dll"), "a plugin without a shutdown function is unloaded and released");
 	Check(FaultCount() == faults, "unloading a plugin without a shutdown function reports no fault");
 }

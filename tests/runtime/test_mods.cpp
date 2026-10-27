@@ -56,10 +56,12 @@ void TestActiveMods()
 	files.push_back("Plugin.dll");
 	files.push_back("Shared.dll");
 	std::vector<CivNotLoaded> notLoaded;
-	const std::vector<std::string> paths = CivPluginPaths(files, mods, &notLoaded);
-	Check(paths.size() == 3 && paths[0] == "C:\\MODS\\Second\\Own.dll", "each plugin is found in the mod that has it, in the order given");
-	Check(paths.size() == 3 && paths[1] == "C:\\MODS\\First (v 1)\\Plugin.dll", "a file two mods have is taken from the first");
-	Check(paths.size() == 3 && paths[2] == "C:\\MODS\\Saved\\Shared.dll",
+	const std::vector<CivPluginFile> found = CivPluginFiles(files, mods, &notLoaded);
+	Check(found.size() == 3 && found[0].path == "C:\\MODS\\Second\\Own.dll" && found[0].modId == "second",
+		"each plugin is found in the mod that has it, in the order given, with that mod's ID");
+	Check(found.size() == 3 && found[1].path == "C:\\MODS\\First (v 1)\\Plugin.dll" && found[1].modId == "first",
+		"a file two mods have is taken from the first");
+	Check(found.size() == 3 && found[2].path == "C:\\MODS\\Saved\\Shared.dll" && found[2].modId == "saved",
 		"a file two mods have is taken from the first that affects saved games, passing over one that does not");
 	Check(notLoaded.size() == 2 && notLoaded[0].file == "Gone.dll" && notLoaded[0].reason == CIV_REPORT_FILE_NOT_FOUND,
 		"a file no active mod has is not loaded, and says so");

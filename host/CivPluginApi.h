@@ -9,6 +9,10 @@
 #define CIV_HOST_API_MAJOR 0
 #define CIV_HOST_API_MINOR 4
 
+#include <string.h>
+
+#include <string>
+
 class CvUnit;
 
 enum CivHookKind
@@ -73,6 +77,9 @@ typedef void (*CivUnitOrdersCancelledFn)(CvUnit* unit, int reason);
 struct lua_State;
 typedef int (*CivLuaFunction)(lua_State* L);
 
+typedef void (*CivSaveDataFn)(void* saving);
+typedef void (*CivLoadDataFn)(const void* data, int size);
+
 struct CivHostInfo
 {
 	int pluginIndex;
@@ -84,6 +91,11 @@ struct CivHostInfo
 	// Pushes exactly one value onto L's stack: fn as a Lua function that runs inside Bazaar's crash guard. Once the
 	// plugin is off, or unloaded, calling it raises a Lua error instead.
 	void (*PushLuaFunction)(int pluginIndex, lua_State* L, CivLuaFunction fn);
+	// Only from CivPluginEntry, once. save runs at every save, one of them on another thread, so it must not use Lua. load
+	// runs whenever a game starts or a save loads, with data null when there is none, and replaces what the plugin held.
+	int (*RegisterSaveData)(int pluginIndex, CivSaveDataFn save, CivLoadDataFn load);
+	// Only inside the plugin's save function, with the saving it was given; each call adds to the data.
+	void (*WriteSaveData)(void* saving, const void* data, int size);
 };
 
 // The result parameter of a before-hook or after-hook on a function returning R: a reference to the value the caller
@@ -113,6 +125,70 @@ struct CivPluginInfo
 {
 	const char* name;
 	const char* version;
+	// Optional. Bazaar keeps a plugin's data in saves under its mod's ID and this id, so a mod with more than one plugin
+	// gives each its own. Changing it, or the mod's ID, loses the data in existing saves.
+	const char* id;
+};
+
+class CivSaveWriter
+{
+public:
+	CivSaveWriter(const CivHostInfo* host, void* saving) : m_host(host), m_saving(saving) {}
+
+	void Write(const void* data, int size) { m_host->WriteSaveData(m_saving, data, size); }
+	void WriteInt(int value) { Write(&value, sizeof(value)); }
+	void WriteText(const std::string& text)
+	{
+		WriteInt((int)text.size());
+		Write(text.data(), (int)text.size());
+	}
+
+private:
+	const CivHostInfo* m_host;
+	void* m_saving;
+};
+
+// Once the data runs out or a read fails, every later read gives back its fallback, so a newer plugin can read what an
+// older one saved.
+class CivSaveReader
+{
+public:
+	CivSaveReader(const void* data, int size) : m_data(static_cast<const char*>(data)), m_left(data && size > 0 ? size : 0) {}
+
+	bool Read(void* out, int size)
+	{
+		if (size < 0 || size > m_left)
+		{
+			m_left = 0;
+			return false;
+		}
+		memcpy(out, m_data, size);
+		m_data += size;
+		m_left -= size;
+		return true;
+	}
+	int ReadInt(int fallback)
+	{
+		int value;
+		return Read(&value, sizeof(value)) ? value : fallback;
+	}
+	std::string ReadText(const std::string& fallback)
+	{
+		const int size = ReadInt(-1);
+		if (size < 0 || size > m_left)
+		{
+			m_left = 0;
+			return fallback;
+		}
+		const std::string text(m_data, size);
+		m_data += size;
+		m_left -= size;
+		return text;
+	}
+
+private:
+	const char* m_data;
+	int m_left;
 };
 
 // Never changes, nor does its export name, and holds no pointers: every Bazaar reads it from plugin files of every

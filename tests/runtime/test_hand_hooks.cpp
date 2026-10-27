@@ -126,7 +126,7 @@ void TestPossibleConflicts()
 		"a plugin turned off for another reason is not offered Use both anyway");
 
 	StartWithNone();
-	const std::vector<std::string> paths = OutFiles(usesFirst);
+	const std::vector<CivPluginFile> paths = OutFiles(usesFirst);
 	CivHostSetPlugins(paths, CivFilePairs(1, CivFilePair("TOY_HAND_REPLACE.DLL", "toy_hand.dll")));
 	Check(HasStatus("toy_hand_replace.dll", CIV_PLUGIN_LOADED) && HasStatus("toy_hand.dll", CIV_PLUGIN_LOADED),
 		"a pair the player chose to use anyway loads together, matched in any case");
