@@ -52,7 +52,7 @@ Work from what `number` listed, `git log v<last release>..HEAD`, and the pull re
 
 1. With the developer's go-ahead, run `.venv\Scripts\python.exe tools\release.py publish --notes dist\notes-v<number>.md`. It tags the commit the files were built from, pushes the tag, and creates the GitHub release as a draft with the four files attached, marked as a pre-release while the version starts with 0. If it stops part way, follow its message: running it again is safe.
 2. The developer checks the draft on GitHub and publishes it. Publishing starts the GitHub Action that puts the docs site on GitHub Pages; check that the Action's run succeeded and that the site opens.
-3. After the first release, change the README's status line, which says nothing is released yet.
+3. After 0.5.0, the first public release, rewrite the README's Status section, which still calls Bazaar a pre-release.
 
 ## 7. Steam Workshop
 

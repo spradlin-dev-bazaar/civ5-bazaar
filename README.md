@@ -1,47 +1,69 @@
 # Bazaar Multi-DLL Mod Loader
 
-A DLL mod for Civilization V: Brave New World that lets you run more than one DLL mod at a time.
+A mod for Civilization V: Brave New World that lets you run more than one DLL mod at a time.
 
-Civ5 loads only one game DLL, so normally you can use only one DLL mod at once. This mod replaces the game DLL with a "host" that loads other DLL mods as plugins. Each plugin is its own mod, installed from the Steam Workshop or by hand, and you choose which plugins run and in what order.
+Civilization V loads only one game DLL, so normally only one DLL mod can run at a time. Bazaar replaces the game DLL with one that loads other DLL mods as plugins, so several can run in the same game. A plugin is a DLL mod made for Bazaar. A DLL mod made for the plain game, such as the Community Patch, does not run with Bazaar until it is remade as a plugin.
+
+Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mods that need VMC work with Bazaar too.
 
 ## Status
 
-The host includes VMC v97 and loads plugin DLLs. They can hook almost any engine function, or one of a few spots placed by hand inside engine functions, and the host survives a plugin that crashes. A Plugins screen orders and skips them. It has been tested in the game with small test plugins. The plugin SDK and its guide exist; the first real plugin, the MCP server, is next. Pre-releases are on the repository's Releases page, and the developer docs of the newest one are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
+Bazaar works and has been tested in the game, but it is still a pre-release, for trying out. The first public release will be 0.5.0. Before it, plugins get a way to keep their own data in saved games. The first real plugin, the MCP server, which lets an AI model play the game, comes out together with 0.5.0. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
 
-## How it will work
+## Installing
 
-- The host also includes whoward69's DLL-VMC (v97), with VMC's Lua events and switchable bug fixes. A mod that only needs a Lua event can stay a plain Lua mod.
-- A plugin is an ordinary mod with a DLL inside. It lists the host as a requirement, so the game won't let you turn it on without the host.
-- A Plugins screen shows which plugins loaded and any that failed or were refused, and lets you reorder them or skip any of them. It opens in place of Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup), and its Continue button then opens the usual Advanced Setup, or another mod's version of it such as Really Advanced Setup's.
-- If a plugin crashes, the host turns it off until you return to the main menu and tells you. The game keeps running.
-- From the first public release (1.0) on, a plugin built for an older host keeps working on newer hosts.
+You need Brave New World, on Windows.
 
-## For plugin authors
+1. From the newest release on the [Releases page](https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases), download both packages: `Bazaar-<version>.civ5mod` and `Bazaar-VMC-Bootstrap-97.civ5mod`. The second one holds VMC's database files, and Bazaar needs it.
+2. Put both in your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
+3. In the game's Mods menu, turn on Bazaar Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required), then the plugins you want.
 
-`sdk\build_sdk.py` builds the SDK each host release will come with: the game headers, the import library, the exact compiler settings the host uses, and a template plugin to start from. [sdk/README.md](sdk/README.md) explains how to write a plugin.
+## What it does
+
+- **More than one DLL mod at a time.** Each plugin is an ordinary mod with a DLL inside, from the Steam Workshop or installed by hand. It lists Bazaar as a requirement, so the game won't let you turn it on without Bazaar.
+- **A Plugins screen.** It shows which plugins loaded and any that failed or were refused, and lets you reorder them or skip any of them. It opens in place of Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup), and its Continue button then opens the usual Advanced Setup, or another mod's version of it such as Really Advanced Setup's.
+- **A crashing plugin doesn't end your game.** Bazaar turns that plugin off until you return to the main menu and tells you. The game keeps running.
+- **VMC included.** VMC's extra Lua events and options are there for the mods that use them. VMC also changes a few of the game's rules, as it does on its own: for example, the AI's anger at warmongering builds up much faster.
+
+## Limits
+
+- Windows only. Single player only.
+- It doesn't work with any other mod that replaces the game DLL, such as the Community Patch or whoward69's own VMC mod. Bazaar already includes VMC, so turn VMC's own mod off.
+- Another mod that replaces Advanced Setup, if installed after Bazaar, shows its own screen instead of the Plugins screen ([#55](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues/55)).
+
+## Getting help
+
+Ask on [Bazaar's Discord](https://discord.gg/zuRynuzNxr), or report a bug in [GitHub's issues](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues).
+
+## For mod makers
+
+If VMC's Lua events, or the game's own, do what you need, make a plain Lua mod: it works with Bazaar just as it would with VMC on its own. Write a plugin when you need C++. A plugin can run its own code before, after or instead of almost any function in the game's DLL, or at a few extra spots placed by hand inside some of them, and it can add Lua functions of its own.
+
+- **The SDK** comes with each release on the Releases page, as `Bazaar-SDK-<version>.zip`: the game's headers, the libraries to link against, Bazaar's compiler settings and a template plugin to start from. Its guide, [sdk/README.md](sdk/README.md), goes from what to install to publishing on the Steam Workshop.
+- **The developer docs** have a page for each game function plugins can hook. The newest release's docs are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/, and each release has them as `Bazaar-docs-<version>.zip`.
+- **With Claude Code**, add this repository's skills with `/plugin marketplace add spradlin-dev-bazaar/civ5-bazaar`, then `/plugin install civ5-bazaar@civ5-bazaar`. One skill makes DLL plugins, including from an existing DLL mod; the other makes Lua mods from its own template.
+
+A plugin runs only on Bazaar releases with the same major version as the one it was built for (the first number, such as the 1 in 1.2), from that release on: a plugin built for 1.2 runs on 1.5, but not on 1.1 or 2.0. Before 1.0, a new Bazaar may also change what plugins use, and plugins then need rebuilding with its SDK.
 
 ## Building and testing
 
 You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 
 1. Set up the Python tools once: `python -m venv .venv`, then `.venv\Scripts\pip install -r tools\generator\requirements.txt`.
-2. `build-dll.cmd` builds the plain game DLL from the Firaxis source.
-3. `build-hooked.cmd` generates the hook wrappers, checks that no class plugins use has changed its layout, and builds the host DLL.
-4. `tests\runtime\run.cmd` runs the automated tests, outside the game.
-5. `tests\ingame\package.py` lays out the host, VMC's files as a mod of their own, and the test plugins as mod folders in `tests\ingame\out\MODS`, ready to copy into the game's MODS folder. `pack.py` packs one of those folders into a package, for a test upload to the Steam Workshop; the packages a release ships come from `tools\release.py`.
-6. `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then checks it: it makes a plugin from the SDK's template with the DLL skill's scaffold script and releases it with the template's release script, against that folder alone.
-7. `build-docs.cmd` writes the developer documentation site into `CvGameCoreSource\BuildTemp\docs`; open its `index.html` in a browser. Beside each page is a Markdown copy, for coding models to search. `tests\docs\check_docs.py` checks the docs step against a small test engine. The front page's guide is `docs\task-guide.md`, the class summaries are `docs\class-summaries.md`, and notes on single functions are `docs\function-notes.md`, one `## name` section per function, shown on that function's page. In all three, `[[name]]` links to a function, class or hand-placed hook by name, and `[[name|text]]` shows other text for the link; the build stops if a name does not match exactly one of them.
+2. `build-hooked.cmd` makes the hook wrappers, checks that the game classes plugins rely on still have the same layout in memory, and builds Bazaar's DLL.
+3. `tests\runtime\run.cmd` runs the automated tests, outside the game. `.venv\Scripts\python.exe -m ruff check .` and `.venv\Scripts\python.exe -m ruff format --check .` check the Python code.
+4. `tests\ingame\package.py` lays out Bazaar, the VMC Bootstrap and the test plugins as mod folders in `tests\ingame\out\MODS`, to copy into the game's MODS folder. [tests/ingame/README.md](tests/ingame/README.md) says what each test plugin should show in the game.
 
-To measure how much the host slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and package with `package.py bench plain` or `package.py bench host`. Issue #3 has the results so far.
+Other jobs:
+
+- `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then checks it by making a plugin from its template and releasing it, using only that folder. That check builds a plugin, so it also needs what a plugin author needs (see [What you need](sdk/README.md#what-you-need)).
+- `build-docs.cmd` writes the developer docs into `CvGameCoreSource\BuildTemp\docs`; open its `index.html` in a browser. `tests\docs\check_docs.py` checks the docs build against a small test engine. [tools/docs/README.md](tools/docs/README.md) explains how to write the docs' own pages.
+- `tests\ingame\pack.py` packs one folder from `tests\ingame\out\MODS` into a package, for a test upload to the Steam Workshop.
+- To measure how much Bazaar slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and lay out with `package.py bench plain` or `package.py bench host`. `build-dll.cmd` builds the game DLL without Bazaar (Firaxis's source with VMC's changes); only this measurement needs it. [Issue #3](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues/3) has the results.
 
 ## Making a release
 
 A release is made on the developer's machine with `tools\release.py`, in four steps: `number`, `prepare`, `build` and `publish`. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: checking the release in the game, approving the release notes, and uploading to the Steam Workshop with the descriptions in `workshop\`. The plan explains each step under [Making a release](docs/plugin-host.md#making-a-release).
-
-## Limits
-
-- It can't run alongside another mod that replaces the game DLL, such as the Community Patch.
-- Single player only.
 
 ## Credits and licence
 
@@ -50,7 +72,3 @@ A release is made on the developer's machine with `tools\release.py`, in four st
 - Everything this repository adds: MIT. See [NOTICE](NOTICE) for exactly what that covers.
 
 The mod as a whole may not be sold.
-
-## Links
-
-- [Bazaar's Discord](https://discord.gg/zuRynuzNxr)
