@@ -1,5 +1,6 @@
 #include "CivHostHand.h"
 #include "CivHostHooks.h"
+#include "CivHostValues.h"
 #include "CivPluginApi.h"
 
 const int g_CivHandHookCount = CIV_HAND_HOOK_COUNT;
@@ -24,6 +25,10 @@ const char* CivHandHookName(int handHook)
 		return "DealResolved";
 	case CIV_HAND_UNIT_ORDERS_CANCELLED:
 		return "UnitOrdersCancelled";
+	case CIV_HAND_UNIT_REPLACED:
+		return "UnitReplaced";
+	case CIV_HAND_CITY_REPLACED:
+		return "CityReplaced";
 	case CIV_HAND_HOOK_COUNT:
 		break;
 	}
@@ -131,6 +136,43 @@ namespace
 		}
 	};
 
+	struct UnitReplaced
+	{
+		CivHookCtx civ_h;
+		int oldOwner;
+		int oldUnit;
+		CvUnit* newUnit;
+
+		static void Tell(void* p)
+		{
+			UnitReplaced& c = *static_cast<UnitReplaced*>(p);
+			reinterpret_cast<CivUnitReplacedFn>(c.civ_h.fn)(c.oldOwner, c.oldUnit, c.newUnit);
+		}
+	};
+
+	struct CityReplaced
+	{
+		CivHookCtx civ_h;
+		int oldOwner;
+		int oldCity;
+		CvCity* newCity;
+
+		static void Tell(void* p)
+		{
+			CityReplaced& c = *static_cast<CityReplaced*>(p);
+			reinterpret_cast<CivCityReplacedFn>(c.civ_h.fn)(c.oldOwner, c.oldCity, c.newCity);
+		}
+	};
+
+	struct CapturedFrom
+	{
+		int owner;
+		int unit;
+		bool taken;
+	};
+
+	std::vector<CapturedFrom> s_capturedFrom;
+
 	const char* Text(const char* text)
 	{
 		return text ? text : "";
@@ -176,4 +218,41 @@ void CivHandUnitOrdersCancelled(CvUnit* unit, int reason)
 {
 	OrdersCancelled c = { { 0, false }, unit, reason };
 	Announce(CIV_HAND_UNIT_ORDERS_CANCELLED, &OrdersCancelled::Tell, &c);
+}
+
+void CivHandUnitReplaced(int oldOwner, int oldUnit, CvUnit* newUnit)
+{
+	CivValuesReplaced(CIV_ON_UNIT, CivObjectKey(oldOwner, oldUnit), newUnit);
+	UnitReplaced c = { { 0, false }, oldOwner, oldUnit, newUnit };
+	Announce(CIV_HAND_UNIT_REPLACED, &UnitReplaced::Tell, &c);
+}
+
+void CivHandCityReplaced(int oldOwner, int oldCity, CvCity* newCity)
+{
+	CivValuesReplaced(CIV_ON_CITY, CivObjectKey(oldOwner, oldCity), newCity);
+	CityReplaced c = { { 0, false }, oldOwner, oldCity, newCity };
+	Announce(CIV_HAND_CITY_REPLACED, &CityReplaced::Tell, &c);
+}
+
+void CivHostCaptureFrom(int owner, int unit)
+{
+	CapturedFrom from = { owner, unit, false };
+	s_capturedFrom.push_back(from);
+}
+
+bool CivHostTakeCapturedFrom(int* owner, int* unit)
+{
+	if (s_capturedFrom.empty() || s_capturedFrom.back().taken)
+		return false;
+	CapturedFrom& from = s_capturedFrom.back();
+	*owner = from.owner;
+	*unit = from.unit;
+	from.taken = true;
+	return true;
+}
+
+void CivHostCaptureDone()
+{
+	if (!s_capturedFrom.empty())
+		s_capturedFrom.pop_back();
 }

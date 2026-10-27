@@ -2,6 +2,7 @@
 #include "CivHostHooks.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
+#include "CivHostValues.h"
 
 #include <windows.h>
 #include <tlhelp32.h>
@@ -368,8 +369,22 @@ namespace
 		return s_saving ? reinterpret_cast<void*>(static_cast<UINT_PTR>(s_saveToken)) : 0;
 	}
 
+	int DeclareValue(int plugin, int kind, int type, const char* name, int flags, const void* start)
+	{
+		std::string problem;
+		int value = -1;
+		if (s_loadingPlugin >= 0 && plugin == s_loadingPlugin)
+			value = CivValuesDeclare(plugin, kind, type, name, flags, start, &problem);
+		else
+			problem = "it was declared outside the plugin's entry function";
+		if (value < 0)
+			Log("Plugin %s: its value %s was refused because %s.", DisplayName(plugin), name ? name : "", problem.c_str());
+		return value;
+	}
+
 	void CommitPending(int plugin)
 	{
+		CivValuesCommitPending();
 		s_plugins[plugin].saveFn = s_pendingSave;
 		s_plugins[plugin].loadFn = s_pendingLoad;
 		s_pendingSave = 0;
@@ -412,6 +427,7 @@ namespace
 		s_possibleConflicts.clear();
 		s_pendingSave = 0;
 		s_pendingLoad = 0;
+		CivValuesDiscardPending();
 	}
 
 	void PluginLog(int plugin, const char* message)
@@ -665,12 +681,12 @@ namespace
 	bool RefusedForSaveKey(int plugin)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
-		if (!s_pendingSave)
+		if (!s_pendingSave && !CivValuesPending())
 			return false;
 		for (int i = 0; i < plugin; ++i)
 		{
 			const CivPluginRecord& other = s_plugins[i];
-			if (!other.saveFn || !CivSameSaveKey(other, rec.modId, rec.pluginId))
+			if ((!other.saveFn && !CivValuesDeclaredBy(i)) || !CivSameSaveKey(other, rec.modId, rec.pluginId))
 				continue;
 			const std::string id = rec.pluginId.empty() ? "no plugin ID" : "the plugin ID \"" + rec.pluginId + "\"";
 			Refuse(rec, CIV_PLUGIN_SAVE_ID_TAKEN, Format("%s, higher in the list, comes from the same mod and keeps its data in saves with %s too, so this plugin was not loaded, or their data would mix. Each plugin of a mod that keeps data in saves needs a plugin ID of its own; ask the plugin's author to fix this.",
@@ -836,6 +852,16 @@ namespace
 		host->PushLuaFunction = &PushLuaFunction;
 		host->RegisterSaveData = &RegisterSaveData;
 		host->WriteSaveData = &WriteSaveData;
+		host->DeclareValue = &DeclareValue;
+		host->FindValue = &CivFindValue;
+		host->GetIntValue = &CivGetIntValue;
+		host->SetIntValue = &CivSetIntValue;
+		host->GetInt64Value = &CivGetInt64Value;
+		host->SetInt64Value = &CivSetInt64Value;
+		host->GetDoubleValue = &CivGetDoubleValue;
+		host->SetDoubleValue = &CivSetDoubleValue;
+		host->GetTextValue = &CivGetTextValue;
+		host->SetTextValue = &CivSetTextValue;
 		return host;
 	}
 
@@ -1150,6 +1176,16 @@ const std::vector<CivPluginRecord>& CivHostPlugins()
 	return s_plugins;
 }
 
+void CivHostLogLine(const char* line)
+{
+	Log("%s", line);
+}
+
+const char* CivHostPluginName(int plugin)
+{
+	return DisplayName(plugin);
+}
+
 bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId)
 {
 	return CivSameText(plugin.modId, modId) && CivSameText(plugin.pluginId, pluginId);
@@ -1238,5 +1274,6 @@ bool CivHostUnloadPlugins()
 	s_plugins.clear();
 	s_useBoth.clear();
 	s_strayWriteLogged = false;
+	CivValuesForgetAll();
 	return true;
 }

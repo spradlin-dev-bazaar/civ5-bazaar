@@ -40,6 +40,13 @@ void TestSavesOfPluginsThatAreOff();
 void TestSaveCrashes();
 void TestDamagedSaves();
 void TestSaveReader();
+void TestValueDeclarations();
+void TestValueReadsAndWrites();
+void TestPublishedValues();
+void TestCarriedValues();
+void TestValuesOfResetPlayers();
+void TestValuesOfRefusedPlugins();
+void TestCapturedFrom();
 
 namespace
 {
@@ -102,6 +109,13 @@ namespace
 		{"save crashes", &TestSaveCrashes},
 		{"damaged saves", &TestDamagedSaves},
 		{"save reader", &TestSaveReader},
+		{"value declarations", &TestValueDeclarations},
+		{"value reads and writes", &TestValueReadsAndWrites},
+		{"published values", &TestPublishedValues},
+		{"carried values", &TestCarriedValues},
+		{"values of reset players", &TestValuesOfResetPlayers},
+		{"values of refused plugins", &TestValuesOfRefusedPlugins},
+		{"captured units", &TestCapturedFrom},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 
@@ -243,6 +257,14 @@ std::string LogLine(int index)
 bool LogHas(const char* text)
 {
 	return LogIndex(text) >= 0;
+}
+
+int LogCount(const char* text)
+{
+	int count = 0;
+	for (int i = LogIndex(text); i >= 0; i = LogIndex(text, i + 1))
+		++count;
+	return count;
 }
 
 int FaultCount()

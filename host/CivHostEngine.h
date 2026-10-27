@@ -17,6 +17,7 @@ void CivHostOnNewGame();
 #define CIV_HOST_SAVE_VERSION 2
 void CivHostOnWriteSave(FDataStream& stream);
 void CivHostOnReadSave(FDataStream& stream, unsigned int version);
+void CivHostOnPlayerReset(int player);
 // Front-end Lua has no other way into the DLL, so the Plugins screen calls UI.GetMapPreview("bazaar:<request>", ...),
 // which the engine passes here first. True, with the number of results pushed, when the call was for the host.
 bool CivHostOnFrontEndCall(lua_State* L, int* results);

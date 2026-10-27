@@ -34,6 +34,29 @@ TOY_EXPORT ToySaveHadDataFn ToySaveHadData;
 TOY_EXPORT ToySaveCrashNextFn ToySaveCrashNext;
 TOY_EXPORT ToySaveRegisteredFn ToySaveRegistered;
 TOY_EXPORT ToySaveWriteKeptFn ToySaveWriteKept;
+TOY_EXPORT ToyValuesDeclaredFn ToyValuesDeclared;
+TOY_EXPORT ToyValuesSetKillsFn ToyValuesSetKills;
+TOY_EXPORT ToyValuesKillsFn ToyValuesKills;
+TOY_EXPORT ToyValuesSetVeteranFn ToyValuesSetVeteran;
+TOY_EXPORT ToyValuesVeteranFn ToyValuesVeteran;
+TOY_EXPORT ToyValuesSetMoraleFn ToyValuesSetMorale;
+TOY_EXPORT ToyValuesMoraleFn ToyValuesMorale;
+TOY_EXPORT ToyValuesSetMottoFn ToyValuesSetMotto;
+TOY_EXPORT ToyValuesMottoFn ToyValuesMotto;
+TOY_EXPORT ToyValuesSetBigFn ToyValuesSetBig;
+TOY_EXPORT ToyValuesBigFn ToyValuesBig;
+TOY_EXPORT ToyValuesSetSpeedFn ToyValuesSetSpeed;
+TOY_EXPORT ToyValuesSpeedFn ToyValuesSpeed;
+TOY_EXPORT ToyValuesSetShortFn ToyValuesSetShort;
+TOY_EXPORT ToyValuesShortFn ToyValuesShort;
+TOY_EXPORT ToyValuesKillsWhenReplacedFn ToyValuesKillsWhenReplaced;
+TOY_EXPORT ToyValuesSetWideFn ToyValuesSetWide;
+TOY_EXPORT ToyValuesWideFn ToyValuesWide;
+TOY_EXPORT ToyReaderFoundFn ToyReaderFound;
+TOY_EXPORT ToyReaderKillsFn ToyReaderKills;
+TOY_EXPORT ToyReaderSetKillsFn ToyReaderSetKills;
+TOY_EXPORT ToyReaderMottoFn ToyReaderMotto;
+TOY_EXPORT ToyReaderReadIntFn ToyReaderReadInt;
 
 #if defined(TOY_NEWER) || defined(TOY_NEWER_IMPORTS)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1};
@@ -562,6 +585,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Describe(info, "Toy Decline");
 	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
+	host->DeclareValue(host->pluginIndex, CIV_ON_UNIT, CIV_VALUE_INT, "Kills", CIV_VALUE_PUBLISHED, 0);
 	return false;
 #else
 	Describe(info, "Toy Late Fault");
@@ -745,6 +769,20 @@ static void HeardOrdersCancelled(CvUnit* unit, int reason)
 	_snprintf_s(line, sizeof(line), _TRUNCATE, "orders cancelled %s %d", reinterpret_cast<FakeUnit*>(unit)->m_name.c_str(), reason);
 	s_host->Log(s_host->pluginIndex, line);
 }
+
+static void HeardUnitReplaced(int oldOwner, int oldUnit, CvUnit* newUnit)
+{
+	char line[128];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "unit replaced %d %d %s", oldOwner, oldUnit, reinterpret_cast<FakeUnit*>(newUnit)->m_name.c_str());
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+static void HeardCityReplaced(int oldOwner, int oldCity, CvCity* newCity)
+{
+	char line[128];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "city replaced %d %d %s", oldOwner, oldCity, newCity ? "by a new city" : "by nothing");
+	s_host->Log(s_host->pluginIndex, line);
+}
 #endif
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
@@ -756,6 +794,8 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	RegisterHand(CIV_HAND_POPUP_RAISED, (void*)&HeardPopup);
 	RegisterHand(CIV_HAND_DEAL_RESOLVED, (void*)&HeardDeal);
 	RegisterHand(CIV_HAND_UNIT_ORDERS_CANCELLED, (void*)&HeardOrdersCancelled);
+	RegisterHand(CIV_HAND_UNIT_REPLACED, (void*)&HeardUnitReplaced);
+	RegisterHand(CIV_HAND_CITY_REPLACED, (void*)&HeardCityReplaced);
 #else
 	Describe(info, "Toy Hand Second");
 #endif
@@ -998,6 +1038,192 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_registered[1] = host->RegisterSaveData(host->pluginIndex, &SaveData, 0);
 	s_registered[2] = host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData);
 	s_registered[3] = host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData);
+	return true;
+}
+
+#elif defined(TOY_VALUES)
+
+static CivValue<CvUnit, int> s_kills;
+static CivValue<CvUnit, bool> s_veteran;
+static CivValue<CvCity, double> s_morale;
+static CivValue<CvPlayer, std::string> s_motto;
+static CivValue<CvPlot, __int64> s_big;
+static CivValue<CvUnit, float> s_speed;
+static CivValue<CvUnit, unsigned short> s_short;
+static CivValue<CvUnit, unsigned int> s_wide;
+static int s_declared[5] = {-2, -2, -2, -2, -2};
+static int s_killsWhenReplaced = -1;
+
+TOY_EXPORT int ToyValuesDeclared(int attempt)
+{
+	if (attempt < 5)
+		return s_declared[attempt];
+	CivValue<CvUnit, int> late;
+	return late.Declare(s_host, "Late", 0) ? 1 : 0;
+}
+
+TOY_EXPORT bool ToyValuesSetKills(const void* unit, int kills)
+{
+	return s_kills.Set(static_cast<const CvUnit*>(unit), kills);
+}
+
+TOY_EXPORT int ToyValuesKillsWhenReplaced()
+{
+	return s_killsWhenReplaced;
+}
+
+TOY_EXPORT void ToyValuesSetWide(const void* unit, unsigned int n)
+{
+	s_wide.Set(static_cast<const CvUnit*>(unit), n);
+}
+
+TOY_EXPORT unsigned int ToyValuesWide(const void* unit)
+{
+	return s_wide.Get(static_cast<const CvUnit*>(unit));
+}
+
+static void HeardUnitReplaced(int, int, CvUnit* newUnit)
+{
+	s_killsWhenReplaced = s_kills.Get(newUnit);
+}
+
+TOY_EXPORT int ToyValuesKills(const void* unit)
+{
+	return s_kills.Get(static_cast<const CvUnit*>(unit));
+}
+
+TOY_EXPORT void ToyValuesSetVeteran(const void* unit, bool veteran)
+{
+	s_veteran.Set(static_cast<const CvUnit*>(unit), veteran);
+}
+
+TOY_EXPORT bool ToyValuesVeteran(const void* unit)
+{
+	return s_veteran.Get(static_cast<const CvUnit*>(unit));
+}
+
+TOY_EXPORT void ToyValuesSetMorale(const void* city, double morale)
+{
+	s_morale.Set(static_cast<const CvCity*>(city), morale);
+}
+
+TOY_EXPORT double ToyValuesMorale(const void* city)
+{
+	return s_morale.Get(static_cast<const CvCity*>(city));
+}
+
+TOY_EXPORT void ToyValuesSetMotto(const void* player, const char* motto)
+{
+	s_motto.Set(static_cast<const CvPlayer*>(player), motto);
+}
+
+TOY_EXPORT std::string ToyValuesMotto(const void* player)
+{
+	return s_motto.Get(static_cast<const CvPlayer*>(player));
+}
+
+TOY_EXPORT void ToyValuesSetBig(const void* plot, __int64 big)
+{
+	s_big.Set(static_cast<const CvPlot*>(plot), big);
+}
+
+TOY_EXPORT __int64 ToyValuesBig(const void* plot)
+{
+	return s_big.Get(static_cast<const CvPlot*>(plot));
+}
+
+TOY_EXPORT void ToyValuesSetSpeed(const void* unit, float speed)
+{
+	s_speed.Set(static_cast<const CvUnit*>(unit), speed);
+}
+
+TOY_EXPORT float ToyValuesSpeed(const void* unit)
+{
+	return s_speed.Get(static_cast<const CvUnit*>(unit));
+}
+
+TOY_EXPORT void ToyValuesSetShort(const void* unit, unsigned short n)
+{
+	s_short.Set(static_cast<const CvUnit*>(unit), n);
+}
+
+TOY_EXPORT unsigned short ToyValuesShort(const void* unit)
+{
+	return s_short.Get(static_cast<const CvUnit*>(unit));
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Values");
+	s_kills.Declare(host, "Kills", 0, CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER);
+	s_veteran.Declare(host, "Veteran", false);
+	s_morale.Declare(host, "Morale", 100.0, CIV_VALUE_CARRIES_OVER);
+	s_motto.Declare(host, "Motto", "none yet", CIV_VALUE_PUBLISHED);
+	s_big.Declare(host, "Big", 5000000000LL);
+	s_speed.Declare(host, "Speed", 1.5f);
+	s_short.Declare(host, "Short", 7);
+	s_wide.Declare(host, "Wide", 0);
+	CivValue<CvUnit, int> again;
+	s_declared[0] = again.Declare(host, "Kills", 0) ? 1 : 0;
+	s_declared[1] = again.Declare(host, "", 0) ? 1 : 0;
+	s_declared[2] = host->DeclareValue(host->pluginIndex, 9, CIV_VALUE_INT, "Odd kind", 0, 0);
+	s_declared[3] = host->DeclareValue(host->pluginIndex, CIV_ON_UNIT, 9, "Odd type", 0, 0);
+	s_declared[4] = host->DeclareValue(host->pluginIndex, CIV_ON_UNIT, CIV_VALUE_INT, "Odd flags", 64, 0);
+	RegisterHand(CIV_HAND_UNIT_REPLACED, (void*)&HeardUnitReplaced);
+	return true;
+}
+
+#elif defined(TOY_VALUES_READER)
+
+// Toy Values comes from this mod, with no plugin ID, in the tests.
+static const char* const kValuesMod = "{VALUES}";
+static CivValue<CvUnit, int> s_kills;
+static CivValue<CvPlayer, std::string> s_motto;
+static int s_found[8] = {-2, -2, -2, -2, -2, -2, -2, -2};
+
+TOY_EXPORT int ToyReaderFound(int attempt)
+{
+	return attempt < 8 ? s_found[attempt] : -2;
+}
+
+TOY_EXPORT int ToyReaderKills(const void* unit)
+{
+	return s_kills.Get(static_cast<const CvUnit*>(unit));
+}
+
+TOY_EXPORT bool ToyReaderSetKills(const void* unit, int kills)
+{
+	return s_kills.Set(static_cast<const CvUnit*>(unit), kills);
+}
+
+TOY_EXPORT std::string ToyReaderMotto(const void* player)
+{
+	return s_motto.Get(static_cast<const CvPlayer*>(player));
+}
+
+TOY_EXPORT int ToyReaderReadInt(int value, const void* unit)
+{
+	return s_host->GetIntValue(s_host->pluginIndex, value, unit);
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Reader");
+	s_found[0] = s_kills.Find(host, kValuesMod, "", "Kills") ? 1 : 0;
+	s_found[1] = s_motto.Find(host, kValuesMod, "", "Motto") ? 1 : 0;
+	CivValue<CvCity, double> morale;
+	s_found[2] = morale.Find(host, kValuesMod, "", "Morale") ? 1 : 0;
+	CivValue<CvUnit, double> wrongType;
+	s_found[3] = wrongType.Find(host, kValuesMod, "", "Kills") ? 1 : 0;
+	CivValue<CvCity, int> wrongKind;
+	s_found[4] = wrongKind.Find(host, kValuesMod, "", "Kills") ? 1 : 0;
+	CivValue<CvUnit, long> sameStorage;
+	s_found[5] = sameStorage.Find(host, kValuesMod, "", "Kills") ? 1 : 0;
+	CivValue<CvUnit, int> otherPlugin;
+	s_found[6] = otherPlugin.Find(host, kValuesMod, "OTHER", "Kills") ? 1 : 0;
+	s_found[7] = otherPlugin.Find(host, "{OTHER}", "", "Kills") ? 1 : 0;
 	return true;
 }
 

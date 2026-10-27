@@ -545,6 +545,9 @@ CvPlayer::~CvPlayer()
 //	--------------------------------------------------------------------------------
 void CvPlayer::init(PlayerTypes eID)
 {
+#if defined(CIV_HOST_API)
+	CivHostOnPlayerReset(eID);
+#endif
 	LeaderHeadTypes eBestPersonality;
 	int iValue;
 	int iBestValue;
@@ -2412,6 +2415,9 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bGift)
 		gDLL->GameplayCityCaptured(pkDllOldCity.get(), GetID());
 	}
 
+#if defined(CIV_HOST_API)
+	const int iCivHostOldCityID = pOldCity->GetID();
+#endif
 	GET_PLAYER(eOldOwner).deleteCity(pOldCity->GetID());
 	// adapted from PostKill()
 
@@ -2997,6 +3003,9 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bGift)
 				pNewCity->ChangeResistanceTurns(iResistanceTurns);
 			}
 		}
+#if defined(CIV_HOST_API)
+		CivHandCityReplaced(eOldOwner, iCivHostOldCityID, pNewCity);
+#endif
 
 		long lResult = 0;
 
@@ -19407,6 +19416,10 @@ void CvPlayer::DoCivilianReturnLogic(bool bReturn, PlayerTypes eToPlayer, int iU
 	{
 		pUnit->kill(true);
 		CvUnit* pNewUnit = GET_PLAYER(eToPlayer).initUnit(eNewUnitType, iX, iY);
+#if defined(CIV_HOST_API)
+		if (pNewUnit)
+			CivHandUnitReplaced(GetID(), iUnitID, pNewUnit);
+#endif
 		CvAssert(pNewUnit != NULL);
 		if (pNewUnit)
 		{
@@ -19549,6 +19562,10 @@ void CvPlayer::DoCivilianReturnLogic(bool bReturn, PlayerTypes eToPlayer, int iU
 				} else {
 					pUnit->kill(true);
 					CvUnit* pNewUnit = initUnit(eNewUnitType, iX, iY);
+#if defined(CIV_HOST_API)
+					if (pNewUnit)
+						CivHandUnitReplaced(GetID(), iUnitID, pNewUnit);
+#endif
 					CvAssert(pNewUnit != NULL);
 					if (pNewUnit)
 						pNewUnit->finishMoves();
@@ -19557,6 +19574,10 @@ void CvPlayer::DoCivilianReturnLogic(bool bReturn, PlayerTypes eToPlayer, int iU
 #endif
 				pUnit->kill(true);
 				CvUnit* pNewUnit = initUnit(eNewUnitType, iX, iY);
+#if defined(CIV_HOST_API)
+				if (pNewUnit)
+					CivHandUnitReplaced(GetID(), iUnitID, pNewUnit);
+#endif
 				CvAssert(pNewUnit != NULL);
 				if (pNewUnit)
 					pNewUnit->finishMoves();
@@ -19668,6 +19689,9 @@ void CvPlayer::AddIncomingUnit(PlayerTypes eFromPlayer, CvUnit* pUnit)
 		int iX = pUnit->getX();
 		int iY = pUnit->getY();
 		UnitTypes eType = pUnit->getUnitType();
+#if defined(CIV_HOST_API)
+		const int iCivHostOldID = pUnit->GetID();
+#endif
 
 		// Get rid of the old unit
 		pUnit->kill(true);
@@ -19676,6 +19700,10 @@ void CvPlayer::AddIncomingUnit(PlayerTypes eFromPlayer, CvUnit* pUnit)
 		if(eType != NO_UNIT)
 		{
 			CvUnit* pNewUnit = initUnit(eType, iX, iY);
+#if defined(CIV_HOST_API)
+			if (pNewUnit)
+				CivHandUnitReplaced(eFromPlayer, iCivHostOldID, pNewUnit);
+#endif
 			CvAssert(pNewUnit);
 			if (pNewUnit)
 #if defined(MOD_BUGFIX_MOVE_AFTER_PURCHASE)

@@ -39,6 +39,7 @@ void ClearLog();
 int LogIndex(const char* text, int from = 0);
 std::string LogLine(int index);
 bool LogHas(const char* text);
+int LogCount(const char* text);
 int FaultCount();
 bool LastFaultWhileShuttingDown();
 

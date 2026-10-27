@@ -13,6 +13,9 @@
 
 #include <string>
 
+class CvCity;
+class CvPlayer;
+class CvPlot;
 class CvUnit;
 
 enum CivHookKind
@@ -51,6 +54,13 @@ enum CivHandHook
 	CIV_HAND_DEAL_RESOLVED = 4,
 	// CivUnitOrdersCancelledFn: the game cancelled a unit's orders, for one of the CivOrdersCancelledReason reasons.
 	CIV_HAND_UNIT_ORDERS_CANCELLED = 5,
+	// CivUnitReplacedFn: the game made a new unit in place of an old one, which may already be gone, such as for an
+	// upgrade, a gift, a capture, a civilian handed back or a barbarian that changed sides. Values that carry over are
+	// already copied.
+	CIV_HAND_UNIT_REPLACED = 6,
+	// CivCityReplacedFn: the game made a new city in place of an old one, which is already gone, such as for a capture,
+	// a gift or a liberation. Values that carry over are already copied.
+	CIV_HAND_CITY_REPLACED = 7,
 	// Not a hook: one more than the last id this header knows.
 	CIV_HAND_HOOK_COUNT,
 };
@@ -73,6 +83,32 @@ typedef void (*CivPopupRaisedFn)(int player, int popupType, int data1, int data2
 typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
 typedef void (*CivDealResolvedFn)(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);
 typedef void (*CivUnitOrdersCancelledFn)(CvUnit* unit, int reason);
+typedef void (*CivUnitReplacedFn)(int oldOwner, int oldUnit, CvUnit* newUnit);
+typedef void (*CivCityReplacedFn)(int oldOwner, int oldCity, CvCity* newCity);
+
+enum CivObjectKind
+{
+	CIV_ON_PLAYER = 0,
+	CIV_ON_CITY = 1,
+	CIV_ON_UNIT = 2,
+	CIV_ON_PLOT = 3,
+};
+
+enum CivValueType
+{
+	CIV_VALUE_INT = 0,
+	CIV_VALUE_INT64 = 1,
+	CIV_VALUE_DOUBLE = 2,
+	CIV_VALUE_TEXT = 3,
+};
+
+enum CivValueFlags
+{
+	// Other plugins, and Lua, can read it; only its own plugin can change it.
+	CIV_VALUE_PUBLISHED = 1,
+	// Copied to the new object when the game replaces one; see CIV_HAND_UNIT_REPLACED and CIV_HAND_CITY_REPLACED.
+	CIV_VALUE_CARRIES_OVER = 2,
+};
 
 struct lua_State;
 typedef int (*CivLuaFunction)(lua_State* L);
@@ -96,6 +132,25 @@ struct CivHostInfo
 	int (*RegisterSaveData)(int pluginIndex, CivSaveDataFn save, CivLoadDataFn load);
 	// Only inside the plugin's save function, with the saving it was given; each call adds to the data.
 	void (*WriteSaveData)(void* saving, const void* data, int size);
+	// Only from CivPluginEntry, with a name no other value of this plugin has. The value's number, which works once the
+	// entry function has returned, or -1 when it was refused; Bazaar.log says why. start points at the starting value in
+	// the value's type, or is the text itself; null starts it at zero or empty. The CivValue class below does this for you.
+	int (*DeclareValue)(int pluginIndex, int objectKind, int valueType, const char* name, int flags, const void* start);
+	// Another plugin's published value, or -1 when it has none of that name, or it is on another kind of object or of
+	// another type. While plugins load, only the values of the plugins loaded before this one can be found.
+	int (*FindValue)(int pluginIndex, const char* modId, const char* pluginId, const char* name, int objectKind, int valueType);
+	// A value never set, or read on a null object, reads as its starting value. A value of the wrong type, or another
+	// plugin's private one, reads as zero or empty. Only the plugin that declared a value can set it, and not on a null
+	// object; Set gives back false when it did not.
+	int (*GetIntValue)(int pluginIndex, int value, const void* object);
+	bool (*SetIntValue)(int pluginIndex, int value, const void* object, int n);
+	__int64 (*GetInt64Value)(int pluginIndex, int value, const void* object);
+	bool (*SetInt64Value)(int pluginIndex, int value, const void* object, __int64 n);
+	double (*GetDoubleValue)(int pluginIndex, int value, const void* object);
+	bool (*SetDoubleValue)(int pluginIndex, int value, const void* object, double n);
+	// Copies the text, cut short to fit, and gives back its full length, so a second call with a bigger buffer gets it all.
+	int (*GetTextValue)(int pluginIndex, int value, const void* object, char* buffer, int size);
+	bool (*SetTextValue)(int pluginIndex, int value, const void* object, const char* text);
 };
 
 // The result parameter of a before-hook or after-hook on a function returning R: a reference to the value the caller
@@ -189,6 +244,101 @@ public:
 private:
 	const char* m_data;
 	int m_left;
+};
+
+template<class Object> struct CivObjectKindOf;
+template<> struct CivObjectKindOf<CvPlayer> { enum { Kind = CIV_ON_PLAYER }; };
+template<> struct CivObjectKindOf<CvCity> { enum { Kind = CIV_ON_CITY }; };
+template<> struct CivObjectKindOf<CvUnit> { enum { Kind = CIV_ON_UNIT }; };
+template<> struct CivObjectKindOf<CvPlot> { enum { Kind = CIV_ON_PLOT }; };
+
+// Each simple type is kept in one wide enough to hold all its values, so a value reads back exactly as it was set.
+// The rest, enums included, are kept in an int.
+template<class T> struct CivValueStorage { typedef int Stored; };
+template<> struct CivValueStorage<unsigned int> { typedef __int64 Stored; };
+template<> struct CivValueStorage<unsigned long> { typedef __int64 Stored; };
+template<> struct CivValueStorage<__int64> { typedef __int64 Stored; };
+template<> struct CivValueStorage<unsigned __int64> { typedef __int64 Stored; };
+template<> struct CivValueStorage<float> { typedef double Stored; };
+template<> struct CivValueStorage<double> { typedef double Stored; };
+template<> struct CivValueStorage<long double> { typedef double Stored; };
+template<> struct CivValueStorage<std::string> { typedef std::string Stored; };
+
+template<class Stored> struct CivStoredValue;
+template<> struct CivStoredValue<int>
+{
+	enum { Type = CIV_VALUE_INT };
+	static const void* Start(const int& n) { return &n; }
+	static int Get(const CivHostInfo* host, int value, const void* object) { return host->GetIntValue(host->pluginIndex, value, object); }
+	static bool Set(const CivHostInfo* host, int value, const void* object, int n) { return host->SetIntValue(host->pluginIndex, value, object, n); }
+};
+template<> struct CivStoredValue<__int64>
+{
+	enum { Type = CIV_VALUE_INT64 };
+	static const void* Start(const __int64& n) { return &n; }
+	static __int64 Get(const CivHostInfo* host, int value, const void* object) { return host->GetInt64Value(host->pluginIndex, value, object); }
+	static bool Set(const CivHostInfo* host, int value, const void* object, __int64 n) { return host->SetInt64Value(host->pluginIndex, value, object, n); }
+};
+template<> struct CivStoredValue<double>
+{
+	enum { Type = CIV_VALUE_DOUBLE };
+	static const void* Start(const double& n) { return &n; }
+	static double Get(const CivHostInfo* host, int value, const void* object) { return host->GetDoubleValue(host->pluginIndex, value, object); }
+	static bool Set(const CivHostInfo* host, int value, const void* object, double n) { return host->SetDoubleValue(host->pluginIndex, value, object, n); }
+};
+template<> struct CivStoredValue<std::string>
+{
+	enum { Type = CIV_VALUE_TEXT };
+	static const void* Start(const std::string& text) { return text.c_str(); }
+	static std::string Get(const CivHostInfo* host, int value, const void* object)
+	{
+		char first[256];
+		const int size = host->GetTextValue(host->pluginIndex, value, object, first, sizeof(first));
+		if (size < (int)sizeof(first))
+			return std::string(first, size);
+		std::string text(size + 1, '\0');
+		host->GetTextValue(host->pluginIndex, value, object, &text[0], size + 1);
+		text.resize(size);
+		return text;
+	}
+	static bool Set(const CivHostInfo* host, int value, const void* object, const std::string& text)
+	{
+		return host->SetTextValue(host->pluginIndex, value, object, text.c_str());
+	}
+};
+
+template<class T, class Stored> T CivFromStored(const Stored& stored) { return static_cast<T>(stored); }
+template<> inline bool CivFromStored<bool, int>(const int& stored) { return stored != 0; }
+
+// A value on every object of a kind, such as CivValue<CvUnit, int> or CivValue<CvCity, std::string>: Declare it from
+// CivPluginEntry, or Find another plugin's published one.
+template<class Object, class T> class CivValue
+{
+	typedef typename CivValueStorage<T>::Stored Stored;
+	typedef CivStoredValue<Stored> Calls;
+
+public:
+	CivValue() : m_host(0), m_value(-1) {}
+
+	bool Declare(const CivHostInfo* host, const char* name, const T& start, int flags = 0)
+	{
+		m_host = host;
+		const Stored stored = static_cast<Stored>(start);
+		m_value = host->DeclareValue(host->pluginIndex, CivObjectKindOf<Object>::Kind, Calls::Type, name, flags, Calls::Start(stored));
+		return m_value >= 0;
+	}
+	bool Find(const CivHostInfo* host, const char* modId, const char* pluginId, const char* name)
+	{
+		m_host = host;
+		m_value = host->FindValue(host->pluginIndex, modId, pluginId, name, CivObjectKindOf<Object>::Kind, Calls::Type);
+		return m_value >= 0;
+	}
+	T Get(const Object* object) const { return m_host ? CivFromStored<T, Stored>(Calls::Get(m_host, m_value, object)) : T(); }
+	bool Set(const Object* object, const T& value) const { return m_host && Calls::Set(m_host, m_value, object, static_cast<Stored>(value)); }
+
+private:
+	const CivHostInfo* m_host;
+	int m_value;
 };
 
 // Never changes, nor does its export name, and holds no pointers: every Bazaar reads it from plugin files of every

@@ -114,7 +114,10 @@ CivPluginListResult CivHostSetPlugins(const std::vector<CivPluginFile>& files, c
 // False, with nothing changed, when called while a plugin is running.
 bool CivHostUnloadPlugins();
 const std::vector<CivPluginRecord>& CivHostPlugins();
-// Both the refusal of a second plugin with the same key and the lookup of saved data use this, or data would mix.
+void CivHostLogLine(const char* line);
+const char* CivHostPluginName(int plugin);
+// The refusal of a second plugin with the same key, the lookup of saved data and the finding of published values all
+// use this, or data would mix.
 bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId);
 // False, with data empty, when the plugin has no save function, is off, or crashed in it.
 bool CivHostCallSaveFunction(int plugin, std::string* data);

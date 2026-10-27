@@ -1,6 +1,7 @@
 #include "CivHostSaves.h"
 #include "CivHostLock.h"
 #include "CivHostRuntime.h"
+#include "CivHostValues.h"
 
 #include <string.h>
 
@@ -130,6 +131,7 @@ std::string CivHostLoadPart(const std::string* part)
 {
 	CivLockHold hold(s_lock);
 	s_data.clear();
+	CivValuesClearCells();
 	const std::string problem = part ? ReadPart(*part) : std::string();
 	const std::vector<CivPluginRecord>& plugins = CivHostPlugins();
 	for (size_t i = 0; i < plugins.size(); ++i)

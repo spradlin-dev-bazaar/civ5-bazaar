@@ -10,6 +10,7 @@
 #include "CivHostRuntime.h"
 #include "CivHostSaves.h"
 #include "CivHostSetup.h"
+#include "CivHostValues.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -263,6 +264,30 @@ namespace
 		lua_pushcclosure(L, &CallPluginLuaFunction, 2);
 	}
 
+	// A kind added to CivObjectKind without a case here fails the build.
+#pragma warning(push)
+#pragma warning(error : 4062)
+	bool ObjectKey(int kind, const void* object, __int64* key)
+	{
+		switch (static_cast<CivObjectKind>(kind))
+		{
+		case CIV_ON_PLAYER:
+			*key = CivObjectKey(static_cast<const CvPlayer*>(object)->GetID(), 0);
+			return true;
+		case CIV_ON_CITY:
+			*key = CivObjectKey(static_cast<const CvCity*>(object)->getOwner(), static_cast<const CvCity*>(object)->GetID());
+			return true;
+		case CIV_ON_UNIT:
+			*key = CivObjectKey(static_cast<const CvUnit*>(object)->getOwner(), static_cast<const CvUnit*>(object)->GetID());
+			return true;
+		case CIV_ON_PLOT:
+			*key = CivObjectKey(static_cast<const CvPlot*>(object)->getX(), static_cast<const CvPlot*>(object)->getY());
+			return true;
+		}
+		return false;
+	}
+#pragma warning(pop)
+
 	void NotifyPluginProblems()
 	{
 		std::vector<std::string> lines;
@@ -303,6 +328,7 @@ namespace
 		CivHostSetLogSink(&LogLine);
 		CivHostSetFaultSink(&OnFault);
 		CivHostSetLuaPusher(&PushPluginLuaFunction);
+		CivHostSetObjectKeySink(&ObjectKey);
 		const CivPluginListResult result = CivHostSetPlugins(plugins, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{
@@ -514,6 +540,11 @@ void CivHostOnReadSave(FDataStream& stream, unsigned int version)
 void CivHostOnNewGame()
 {
 	CivHostLoadPart(NULL);
+}
+
+void CivHostOnPlayerReset(int player)
+{
+	CivValuesDropPlayer(player);
 }
 
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.
