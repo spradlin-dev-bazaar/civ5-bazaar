@@ -1,3 +1,29 @@
+[b]0.5.0[/b]
+The first public release. From this release on, what plugins use only grows until the next major version.
+
+For players:
+[list]
+[*]Plugins can keep their own data in your saved games, so when you load a game, its plugins carry on where they left off. If you turn a plugin off for a while, Bazaar keeps its data in your saves until you turn it back on.
+[*]When a plugin crashes during a game, a pop-up names it and sends you back to the main menu without saving, since the game may be damaged. Load your last save or autosave to play on. If another mod saves the game after a crash anyway, loading that save warns you.
+[*]Bazaar loads each plugin from the mod you turned on, even with several versions of a mod installed, and from folders whose names hold any characters.
+[*]Bazaar refuses a plugin whose mod isn't marked as affecting saved games, since it would not come back when you load a save. The Plugins screen says why.
+[*]Games saved with earlier pre-releases may not load. Start a new game with 0.5.0.
+[/list]
+For plugin authors:
+[list]
+[*]Every plugin must be rebuilt with the 0.5 SDK: Bazaar 0.5 refuses plugins built for earlier releases. From 0.5 on, what plugins use only grows within a major version.
+[*]Plugins can keep data of their own in saved games, and values on every player, city, unit or plot, such as a kill count on every unit. A plugin can publish a value for other plugins and Lua mods to read, and mark it to carry over when the game replaces a unit or city, as for an upgrade or a capture. Lua mods read published values with Game.GetPluginValue. When one plugin replaces a function where another plugin's values carry over, Bazaar holds one of them back, as it does for hand-placed hooks.
+[*]Plugins can publish plain functions for other plugins to call through Bazaar. Another plugin finds one by the publisher's mod ID, plugin ID, name and type, and calls it inside Bazaar's crash guard, so a crash counts against the plugin whose function crashed. Two plugins of one mod that both publish functions need plugin IDs of their own.
+[*]A plugin's crash during a game now ends the game: Bazaar's pop-up names the plugin and returns the player to the main menu, and nothing is saved in between.
+[*]Two new hand-placed hooks, UnitReplaced and CityReplaced, run when the game makes a new unit or city in place of an old one. NotificationAdded also passes the notification's lookup index, which CvNotifications::Dismiss and Activate take.
+[*]The functions Bazaar loads plugins and saves their data from can no longer be hooked.
+[*]CivHooks.h declares the exact type of every hook, so a hook with the wrong parameters fails to compile instead of crashing the game.
+[*]Plugins' Lua functions run inside Bazaar's crash guard, so a crash in one is caught like a crash in a hook instead of taking the game down.
+[*]The SDK and the developer docs are updated, on the release's GitHub page. The guide has new sections, "Keeping data in saved games" and "Calling another plugin's functions", and the template shows both kinds of saved data. The docs mark what was added or changed in 0.5.0.
+[*]The Claude Code plugin's scaffold scripts refuse a comma in a mod's name and edit the project file with an XML reader, and its Lua event list is corrected.
+[/list]
+This is plugin API version 0.5.
+
 [b]0.4.0[/b]
 For players: nothing changes in the game itself, and games saved with Bazaar 0.3.0 still load after you update.
 
