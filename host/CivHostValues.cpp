@@ -228,6 +228,14 @@ namespace
 		return 0;
 	}
 
+	bool CarriesOverIn(const std::vector<Value>& values, int plugin, int objectKind)
+	{
+		for (size_t i = 0; i < values.size(); ++i)
+			if (values[i].plugin == plugin && values[i].objectKind == objectKind && (values[i].flags & CIV_VALUE_CARRIES_OVER))
+				return true;
+		return false;
+	}
+
 	void DropPlayerIn(std::vector<Value>& values, int player)
 	{
 		for (size_t i = 0; i < values.size(); ++i)
@@ -477,6 +485,11 @@ bool CivValuesDeclaredBy(int plugin)
 		if (s_values[i].plugin == plugin)
 			return true;
 	return false;
+}
+
+bool CivValuesCarryOver(int plugin, int objectKind)
+{
+	return CarriesOverIn(s_values, plugin, objectKind) || CarriesOverIn(s_pending, plugin, objectKind);
 }
 
 void CivValuesForgetAll()

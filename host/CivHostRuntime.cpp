@@ -33,6 +33,8 @@ namespace
 		int hookPoint;
 		int handHook;
 		bool pluginReplaces;
+		// The other side only has values that Bazaar carries over at the hook, rather than a hook of its own there.
+		bool carriedValues;
 	};
 
 	std::vector<CivPluginRecord> s_plugins;
@@ -226,9 +228,9 @@ namespace
 		return false;
 	}
 
-	void NotePossibleConflict(int other, int hookPoint, int handHook, bool pluginReplaces)
+	void NotePossibleConflict(int other, int hookPoint, int handHook, bool pluginReplaces, bool carriedValues)
 	{
-		PossibleConflict conflict = { other, hookPoint, handHook, pluginReplaces };
+		PossibleConflict conflict = { other, hookPoint, handHook, pluginReplaces, carriedValues };
 		s_possibleConflicts.push_back(conflict);
 	}
 
@@ -262,12 +264,22 @@ namespace
 			AddOnce(rec.conflictsWith, otherFile);
 			if (UseBoth(CivFileName(rec.path), otherFile))
 			{
-				AddAndLog(plugin, rec.notes, Format("You chose to use this plugin with %s anyway, although one of them replaces %s, which runs the %s hook the other uses.",
-					otherName, function.c_str(), hook));
+				if (c.carriedValues)
+					AddAndLog(plugin, rec.notes, Format("You chose to use this plugin with %s anyway, although one of them replaces %s, where Bazaar carries the other's values over to a new unit or city.",
+						otherName, function.c_str()));
+				else
+					AddAndLog(plugin, rec.notes, Format("You chose to use this plugin with %s anyway, although one of them replaces %s, which runs the %s hook the other uses.",
+						otherName, function.c_str(), hook));
 				continue;
 			}
 			heldBack = true;
-			if (c.pluginReplaces)
+			if (c.carriedValues && c.pluginReplaces)
+				AddAndLog(plugin, rec.problems, Format("This plugin replaces %s, where Bazaar carries the values of %s, higher in the list, over to a new unit or city. If the version in this plugin does not run the game's own, those values are not carried over, so this plugin was held back. If you know the two work together, check Use both anyway.",
+					function.c_str(), otherName));
+			else if (c.carriedValues)
+				AddAndLog(plugin, rec.problems, Format("%s, higher in the list, replaces %s, where Bazaar carries this plugin's values over to a new unit or city. If the version in %s does not run the game's own, those values are not carried over, so this plugin was held back. If you know the two work together, check Use both anyway.",
+					otherName, function.c_str(), otherName));
+			else if (c.pluginReplaces)
 				AddAndLog(plugin, rec.problems, Format("This plugin replaces %s, which runs the %s hook that %s, higher in the list, uses. If the version in this plugin does not run the game's own, %s never gets that hook, so this plugin was held back. If you know the two work together, check Use both anyway.",
 					function.c_str(), hook, otherName, otherName));
 			else
@@ -278,6 +290,32 @@ namespace
 		return heldBack;
 	}
 
+	// The kind of object whose values Bazaar carries over where this hand-placed hook runs, or -1.
+	int CarriedKind(int handHook)
+	{
+		if (handHook == CIV_HAND_UNIT_REPLACED)
+			return CIV_ON_UNIT;
+		if (handHook == CIV_HAND_CITY_REPLACED)
+			return CIV_ON_CITY;
+		return -1;
+	}
+
+	bool RegisteredHandHook(int plugin, int handHook)
+	{
+		for (const CivHookEntry* e = g_CivHandHookPoints[handHook].before; e; e = e->next)
+			if (e->plugin == plugin)
+				return true;
+		return false;
+	}
+
+	bool PendingHandHook(int handHook)
+	{
+		for (size_t i = 0; i < s_pending.size(); ++i)
+			if (s_pending[i].id == CivHandHookId(handHook))
+				return true;
+		return false;
+	}
+
 	void NoteHandHookUsers(int hookId)
 	{
 		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
@@ -286,18 +324,33 @@ namespace
 			if (site.hookPoint != hookId)
 				continue;
 			for (const CivHookEntry* e = g_CivHandHookPoints[site.handHook].before; e; e = e->next)
-				NotePossibleConflict(e->plugin, hookId, site.handHook, true);
+				NotePossibleConflict(e->plugin, hookId, site.handHook, true, false);
+			const int kind = CarriedKind(site.handHook);
+			for (int other = 0; kind >= 0 && other < s_loadingPlugin; ++other)
+				if (CivValuesCarryOver(other, kind) && !RegisteredHandHook(other, site.handHook))
+					NotePossibleConflict(other, hookId, site.handHook, true, true);
 		}
 	}
 
-	void NoteReplacements(int handHook)
+	void NoteReplacements(int handHook, bool carriedValues)
 	{
 		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
 		{
 			const CivHandHookSite& site = g_CivHandHookSites[i];
 			const CivHookEntry* replacement = g_CivHookPoints[site.hookPoint].replace;
 			if (site.handHook == handHook && replacement)
-				NotePossibleConflict(replacement->plugin, site.hookPoint, handHook, false);
+				NotePossibleConflict(replacement->plugin, site.hookPoint, handHook, false, carriedValues);
+		}
+	}
+
+	// Run once the entry function has returned, when the plugin's values and hand-placed hooks are all known.
+	void NoteCarriedValues(int plugin)
+	{
+		for (int handHook = 0; handHook < g_CivHandHookCount; ++handHook)
+		{
+			const int kind = CarriedKind(handHook);
+			if (kind >= 0 && CivValuesCarryOver(plugin, kind) && !PendingHandHook(handHook))
+				NoteReplacements(handHook, true);
 		}
 	}
 
@@ -313,7 +366,7 @@ namespace
 			return CIV_HOOK_NOT_ALLOWED;
 		if (handHook < 0 || handHook >= g_CivHandHookCount || !fn)
 			return CIV_HOOK_BAD_ID;
-		NoteReplacements(handHook);
+		NoteReplacements(handHook, false);
 		PendingHook p = { CivHandHookId(handHook), CIV_HOOK_BEFORE, fn };
 		s_pending.push_back(p);
 		return CIV_HOOK_OK;
@@ -946,6 +999,7 @@ namespace
 			Unload(plugin);
 			return;
 		}
+		NoteCarriedValues(plugin);
 		const bool heldBack = !s_loadingConflict && ReportPossibleConflicts(plugin);
 		if (s_loadingConflict || heldBack)
 		{

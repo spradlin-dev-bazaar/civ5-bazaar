@@ -46,6 +46,7 @@ void TestPublishedValues();
 void TestCarriedValues();
 void TestValuesOfResetPlayers();
 void TestValuesOfRefusedPlugins();
+void TestCarriedValuesAndReplacements();
 void TestCapturedFrom();
 void TestSavedValues();
 void TestValuesOfPluginsThatAreOff();
@@ -121,6 +122,7 @@ namespace
 		{"carried values", &TestCarriedValues},
 		{"values of reset players", &TestValuesOfResetPlayers},
 		{"values of refused plugins", &TestValuesOfRefusedPlugins},
+		{"carried values and replacements", &TestCarriedValuesAndReplacements},
 		{"captured units", &TestCapturedFrom},
 		{"saved values", &TestSavedValues},
 		{"values of plugins that are off", &TestValuesOfPluginsThatAreOff},

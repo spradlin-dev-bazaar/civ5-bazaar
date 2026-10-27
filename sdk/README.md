@@ -196,7 +196,7 @@ the game gets the result
 A replacement that never calls `original` skips everything the game's own version would have done: the functions it would have called, the hooks other plugins have on those functions, and the hand-placed hooks inside it. Bazaar makes this visible in two ways:
 
 - The first time a replacement returns without calling `original`, Bazaar writes a line to its log naming the plugin and the function.
-- If one plugin replaces a function that contains a hand-placed hook another plugin uses, Bazaar holds back whichever of the two is lower in the list, and the Plugins screen says why. A player who knows the replacement calls the game's own version can check **Use both anyway**.
+- If one plugin replaces a function that contains a hand-placed hook another plugin uses, or where Bazaar carries another plugin's values over, Bazaar holds back whichever of the two is lower in the list, and the Plugins screen says why. A player who knows the replacement calls the game's own version can check **Use both anyway**.
 
 ### Writing a hook
 
@@ -399,7 +399,7 @@ s_turnsStarted.Set(player, s_turnsStarted.Get(player) + 1);
   - a 32-bit whole number, for `bool`, `char`, `short`, `unsigned short`, `int`, `long` and enums such as `UnitTypes`;
   - a 64-bit whole number, for `unsigned int`, `unsigned long`, `__int64` and `unsigned __int64`;
   - a decimal number, for `float` and `double`;
-  - text, for `std::string`, up to its first zero character, if it has one.
+  - text, for `std::string`, up to its first null character (the invisible character with byte value 0, not the digit 0), if it has one.
 
   A struct cannot be a value: use one value for each of its members, or your own data.
 - **`Declare(host, name, start, flags)`** works only in `CivPluginEntry`. The name must differ from your plugin's other values. `start` is what the value reads as on an object it was never set on. The flags are optional: `CIV_VALUE_PUBLISHED` lets other plugins and Lua read the value, though only your plugin can change it, and `CIV_VALUE_CARRIES_OVER` copies it when the game replaces a unit or city, as described below. For both, write `CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER`. `Declare` returns `false` when Bazaar refused the value, and `Bazaar.log` says why; the value then reads as zero or empty.
@@ -407,7 +407,7 @@ s_turnsStarted.Set(player, s_turnsStarted.Get(player) + 1);
 
 Bazaar saves and loads the values with the game, and in a new game every value starts at its starting value. When a unit or city is gone, its values are dropped the next time the game saves.
 
-**Carrying over.** The game sometimes replaces a unit or city with a new one, with a new ID: when a unit upgrades, is captured or is given away, or when a city is captured, for example. Without the flag, the new one starts with fresh values. With `CIV_VALUE_CARRIES_OVER`, Bazaar copies the value to the new one, or sets the new one's back to its start if the old one never had it set, at every replacement that the hand-placed hooks `UnitReplaced` and `CityReplaced` announce; `hand-placed-hooks.md` lists them, and the few the game makes with no link to the old unit. The hooks run after the copy and give the old unit's or city's owner, so to keep a value through some replacements only, such as an upgrade but not a capture, compare that owner with the new one's and set the value back to its start when they differ. A plugin that replaces one of the functions these hooks sit in, without calling `original`, stops the copy too, and Bazaar does not warn about it unless your plugin uses the hook itself (see [What a replacement skips](#what-a-replacement-skips)).
+**Carrying over.** The game sometimes replaces a unit or city with a new one, with a new ID: when a unit upgrades, is captured or is given away, or when a city is captured, for example. Without the flag, the new one starts with fresh values. With `CIV_VALUE_CARRIES_OVER`, Bazaar copies the value to the new one, or sets the new one's back to its start if the old one never had it set, at every replacement that the hand-placed hooks `UnitReplaced` and `CityReplaced` announce; `hand-placed-hooks.md` lists them, and the few the game makes with no link to the old unit. The hooks run after the copy and give the old unit's or city's owner, so to keep a value through some replacements only, such as an upgrade but not a capture, compare that owner with the new one's and set the value back to its start when they differ. A plugin that replaces one of the functions these hooks sit in, without calling `original`, stops the copy too, so Bazaar holds back one of the two plugins, as it does for a hand-placed hook (see [What a replacement skips](#what-a-replacement-skips)).
 
 **Reading another plugin's values.** A plugin can read a value that another plugin published, with `Find` in place of `Declare`:
 
@@ -418,7 +418,7 @@ static CivValue<CvPlayer, int> s_theirTurns;
 s_theirTurns.Find(host, "<the other mod's ID>", "", "TurnsStarted");
 ```
 
-The arguments are the other plugin's mod ID (the GUID on its `.civ5proj`'s `<Guid>` line, without braces), its plugin ID (`""` when it has none) and the value's name. The kind of object must match the declaration, and the type must be kept in the same form, so a value declared as an `int` can be found as a `long`. Call `Find` in `CivPluginEntry`. It returns `false` when there is no such published value, and also when the other plugin is below yours in the load order, since that one is not loaded yet. Setting a found value sets nothing, returns `false` and is logged.
+The arguments are the other plugin's mod ID (the GUID on its `.civ5proj`'s `<Guid>` line, without braces), its plugin ID (`""` when it has none) and the value's name. The kind of object must match the declaration, and the type must be kept in the same form, so a value declared as an `int` can be found as a `long`. You can call `Find` in `CivPluginEntry` or any time later. It returns `false` when there is no such published value. While plugins load, the plugins below yours in the load order are not loaded yet, so in `CivPluginEntry` it finds only the values of plugins above yours; called later, it finds them all. Setting a found value sets nothing, returns `false` and is logged.
 
 **Reading values from Lua.** Lua code can read published values with `Game.GetPluginValue(modId, pluginId, name, first, second)`. `first` and `second` name the object: a player's ID alone, a city's or unit's owner and ID, or a plot's x and y. It returns `nil` when no loaded plugin publishes a value of that name. Lua keeps every number as a decimal, so whole numbers come back exact up to about 9 million billion (2 to the power 53). Lua's `print` shows only 14 digits of a number; `string.format("%.0f", n)` shows them all. `true` and `false` come back as 1 and 0, so compare with `== 1`: Lua counts 0 as true. A unit or city that is gone has no values, so its reads return `nil` too.
 

@@ -319,6 +319,44 @@ void TestValuesOfRefusedPlugins()
 	Finish();
 }
 
+// Toy Values carries unit and city values over, and uses the UnitReplaced hook itself, but not CityReplaced.
+void TestCarriedValuesAndReplacements()
+{
+	const char* const kTakeReplace = "toy_take_replace.dll";
+	std::vector<CivPluginFile> files;
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
+	files.push_back(CivPluginFile(OutFile(kTakeReplace), "{TAKE}"));
+	Start(files);
+	const std::string replacer = ReportRow(kTakeReplace).problems;
+	Check(HasStatus(kTakeReplace, CIV_PLUGIN_POSSIBLE_CONFLICT) && Occurrences(replacer, "carries the values of Toy Values") == 1
+		&& Occurrences(replacer, "UnitReplaced hook that Toy Values") == 1,
+		"a replacement where another plugin's values carry over is held back, once for each place, and says why");
+
+	files.clear();
+	files.push_back(CivPluginFile(OutFile(kTakeReplace), "{TAKE}"));
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
+	Start(files);
+	const std::string carrier = ReportRow(kValues).problems;
+	Check(HasStatus(kValues, CIV_PLUGIN_POSSIBLE_CONFLICT) && Occurrences(carrier, "carries this plugin's values over") == 1
+		&& Occurrences(carrier, "UnitReplaced hook this plugin uses") == 1,
+		"a plugin whose values carry over is held back below one that replaces where they are copied, once for each place");
+
+	StartWithNone();
+	CivHostSetPlugins(files, CivFilePairs(1, CivFilePair(kTakeReplace, kValues)));
+	const CivPluginRecord* chosen = Find(kValues);
+	bool noted = false;
+	for (size_t i = 0; chosen && i < chosen->notes.size(); ++i)
+		noted = noted || chosen->notes[i].find("where Bazaar carries the other's values over") != std::string::npos;
+	Check(HasStatus(kValues, CIV_PLUGIN_LOADED) && noted, "a pair the player chose to use anyway loads together, with a note about the values");
+
+	files.clear();
+	files.push_back(CivPluginFile(OutFile(kReader), kReaderMod));
+	files.push_back(CivPluginFile(OutFile(kTakeReplace), "{TAKE}"));
+	Start(files);
+	Check(HasStatus(kTakeReplace, CIV_PLUGIN_LOADED), "a plugin without values that carry over does not hold a replacement back");
+	Finish();
+}
+
 void TestCapturedFrom()
 {
 	int owner = -1;

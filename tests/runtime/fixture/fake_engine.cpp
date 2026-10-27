@@ -97,6 +97,16 @@ bool FakeUnit::PlayedByPlugin(int player) const
 	return CivHandIsPluginControlledPlayer(player);
 }
 
+void FakeUnit::TakeCity(int oldOwner, int oldCity)
+{
+	CivHandCityReplaced(oldOwner, oldCity, reinterpret_cast<CvCity*>(this));
+}
+
+void FakeUnit::TakeUnit(int oldOwner, int oldUnit)
+{
+	CivHandUnitReplaced(oldOwner, oldUnit, reinterpret_cast<CvUnit*>(this));
+}
+
 int FakeUnit::Peek(const Hidden& hidden) const
 {
 	return hidden.value;

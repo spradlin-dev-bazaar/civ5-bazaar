@@ -20,6 +20,8 @@ void CivValuesCommitPending(const std::string& modId, const std::string& pluginI
 void CivValuesDiscardPending();
 bool CivValuesPending();
 bool CivValuesDeclaredBy(int plugin);
+// Declared or still pending.
+bool CivValuesCarryOver(int plugin, int objectKind);
 void CivValuesForgetAll();
 // For a new game or a save loading.
 void CivValuesClearGame();
