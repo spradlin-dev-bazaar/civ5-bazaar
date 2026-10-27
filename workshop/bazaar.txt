@@ -28,3 +28,9 @@ Plugins are DLLs written in C++. Each release on GitHub comes with the SDK to bu
 
 [h2]Credits[/h2]
 Built from Firaxis's Civilization V source code and whoward69's DLL - Various Mod Components, version 97. Many thanks to whoward69 and VMC's translators.
+
+[h2]Links[/h2]
+[list]
+[*][url=https://discord.gg/zuRynuzNxr]Bazaar's Discord[/url]
+[*][url=https://github.com/spradlin-dev-bazaar/civ5-bazaar]Bazaar's source code on GitHub[/url]
+[/list]

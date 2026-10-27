@@ -50,3 +50,7 @@ A release is made on the developer's machine with `tools\release.py`, in four st
 - Everything this repository adds: MIT. See [NOTICE](NOTICE) for exactly what that covers.
 
 The mod as a whole may not be sold.
+
+## Links
+
+- [Bazaar's Discord](https://discord.gg/zuRynuzNxr)
