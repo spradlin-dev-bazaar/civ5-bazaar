@@ -8,7 +8,7 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 
 ## Status
 
-Bazaar works and has been tested in the game, but it is still a pre-release, for trying out. The first public release will be 0.5.0. The first real plugin, the MCP server, which lets an AI model play the game, comes out together with 0.5.0. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
+Bazaar 0.5.0 is the first public release. From 0.5.0 on, what plugins use only grows until the next major version, so plugins built for it keep working with every 0.x release after it. The first real plugin, the MCP server, which lets an AI model play the game, will follow. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
 
 ## Installing
 
