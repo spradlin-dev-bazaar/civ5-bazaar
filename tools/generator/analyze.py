@@ -26,12 +26,16 @@ CLASS_KINDS = (CK.CLASS_DECL, CK.STRUCT_DECL)
 TEMPLATE_KINDS = (CK.CLASS_TEMPLATE, CK.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION, CK.FUNCTION_TEMPLATE)
 # Windows calls these under its loader lock, or before any plugin can have loaded.
 LOADER_ENTRY_POINTS = {"DllMain", "DllGetGameContext"}
-# Bazaar starts, unloads its plugins and answers the Plugins screen from inside these, so a plugin's hook on one could
-# keep it from doing so.
+# Bazaar starts, unloads its plugins, answers the Plugins screen and saves plugins' data from inside these, so a
+# plugin's hook on one could keep it from doing so.
 HOST_ENTRY_POINTS = {
     ("CvDllGameContext", "Init"),
     ("CvDllGameContext", "Uninit"),
     ("CvDllWorldBuilderMapLoader", "GetMapPreview"),
+    ("CvDllGame", "ReadSupportingClassData"),
+    ("CvDllGame", "WriteSupportingClassData"),
+    ("CvGame", "ReadSupportingClassData"),
+    ("CvGame", "WriteSupportingClassData"),
 }
 VARIABLE_SCOPES = (CK.TRANSLATION_UNIT, CK.NAMESPACE, CK.CLASS_DECL, CK.STRUCT_DECL)
 SCALAR_KINDS = {

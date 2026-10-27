@@ -8,7 +8,7 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 
 ## Status
 
-Bazaar works and has been tested in the game, but it is still a pre-release, for trying out. The first public release will be 0.5.0. Before it, plugins get a way to keep their own data in saved games. The first real plugin, the MCP server, which lets an AI model play the game, comes out together with 0.5.0. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
+Bazaar works and has been tested in the game, but it is still a pre-release, for trying out. The first public release will be 0.5.0. The first real plugin, the MCP server, which lets an AI model play the game, comes out together with 0.5.0. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
 
 ## Installing
 
@@ -25,6 +25,14 @@ You need Brave New World, on Windows.
 - **A crashing plugin doesn't end your game.** Bazaar turns that plugin off until you return to the main menu and tells you. The game keeps running.
 - **VMC included.** VMC's extra Lua events and options are there for the mods that use them. VMC also changes a few of the game's rules, as it does on its own: for example, the AI's anger at warmongering builds up much faster.
 
+## Saved games
+
+- Bazaar keeps each plugin's data in your saved games, so when you load a game, its plugins carry on where they left off.
+- A save made with a plugin's mod turned on loads only with that mod, as with any mod that affects saved games.
+- If you turn a plugin off for a while, Bazaar keeps its data in your saves, and the plugin gets it back when you turn it on again.
+- Games saved with Bazaar 0.4 still load.
+- If Bazaar cannot read its part of a save, it tells you when the save loads, so you can keep a copy before saving over it.
+
 ## Limits
 
 - Windows only. Single player only.
@@ -37,7 +45,7 @@ Ask on [Bazaar's Discord](https://discord.gg/zuRynuzNxr), or report a bug in [Gi
 
 ## For mod makers
 
-If VMC's Lua events, or the game's own, do what you need, make a plain Lua mod: it works with Bazaar just as it would with VMC on its own. Write a plugin when you need C++. A plugin can run its own code before, after or instead of almost any function in the game's DLL, or at a few extra spots placed by hand inside some of them, and it can add Lua functions of its own.
+If VMC's Lua events, or the game's own, do what you need, make a plain Lua mod: it works with Bazaar just as it would with VMC on its own. Write a plugin when you need C++. A plugin can run its own code before, after or instead of almost any function in the game's DLL, or at a few extra spots placed by hand inside some of them. It can add Lua functions of its own, and keep data in saved games: values on players, cities, units and plots, which it can let other plugins and Lua mods read, and data of its own.
 
 - **The SDK** comes with each release on the Releases page, as `Bazaar-SDK-<version>.zip`: the game's headers, the libraries to link against, Bazaar's compiler settings and a template plugin to start from. Its guide, [sdk/README.md](sdk/README.md), goes from what to install to publishing on the Steam Workshop.
 - **The developer docs** have a page for each game function plugins can hook. The newest release's docs are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/, and each release has them as `Bazaar-docs-<version>.zip`.

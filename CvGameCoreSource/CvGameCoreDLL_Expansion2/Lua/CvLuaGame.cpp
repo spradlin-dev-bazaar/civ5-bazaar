@@ -14,6 +14,9 @@
 //!
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #include "CvGameCoreDLLPCH.h"
+#if defined(CIV_HOST_API)
+#include "CivHostEngine.h"
+#endif
 #include "CvLuaSupport.h"
 #include "CvLuaCity.h"
 #include "CvLuaGame.h"
@@ -443,6 +446,9 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(AnyoneHasTech);
 	Method(AnyoneHasUnit);
 	Method(AnyoneHasUnitClass);
+#endif
+#if defined(CIV_HOST_API)
+	RegisterMethod(L, &CivHostLuaGetPluginValue, "GetPluginValue");
 #endif
 }
 //------------------------------------------------------------------------------

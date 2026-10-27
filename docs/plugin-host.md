@@ -1,6 +1,6 @@
 # Bazaar Multi-DLL Mod Loader: one DLL, many plugin DLLs
 
-Status: planned 2026-10-19, reworked 2026-10-21. P0 to P3.1 are done, and 0.4.1 is the newest pre-release. What the rest of P3 and the later phases add is a plan.
+Status: planned 2026-10-19, reworked 2026-10-21. P0 to P3.2 are done, and 0.4.1 is the newest pre-release. What the rest of P3 and the later phases add is a plan.
 
 ## Goal
 
@@ -106,6 +106,8 @@ Raw detouring is not used on host functions. It remains only for the closed exec
 | `CvDllContext` shutdown, `DllMain` crash-handler removal | plugin `Shutdown()` lifecycle call |
 | `CvLuaGame.cpp`: a dozen `Game.*` methods for the log window | generated after-hook on `CvLuaGame::RegisterMembers`, which can add methods to the `Game` table |
 
+Two more announcements came with plugin values (§6), at the spots where the game makes a new unit or city in place of an old one: `UnitReplaced(oldOwner, oldUnit, newUnit)` in `CvUnit::convert`, `CvUnit::createCaptureUnit`, and `CvPlayer`'s `DoCivilianReturnLogic` and `AddIncomingUnit`; and `CityReplaced(oldOwner, oldCity, newCity)` in `CvPlayer::acquireCity`. Bazaar copies the values that carry over before either runs.
+
 **Replacements and the hooks inside them.** A replacement that does not call the original skips everything the original would have done: the hand-placed hooks inside it, and the hooks on every function it would have called. Replacing stays allowed, because turning an existing DLL mod into a plugin and fixing a bug inside a function both need it, and a veto skips the original in the same way. Instead, the host makes the skipping visible:
 
 - When one plugin replaces a function that contains a hand-placed hook another plugin uses, the host treats it as a possible conflict. The plugin that loads second is held back, and the log and the Plugins screen say why. The Plugins screen offers a Use both anyway checkbox for that plugin, for when the replacement is known to run the original, and saves the choice with the load order. The build finds which functions contain each hand-placed hook by reading the engine source. Vetoes are not checked: a before-hook decides to veto only while the game runs.
@@ -147,9 +149,9 @@ Load order is the list on the screen, top first.
 
 ### 6. Save games
 
-The host's DLL GUID is what saves record. From 0.5, Bazaar keeps each plugin's own data in the save. When the game writes a save, Bazaar asks each plugin that registered for it for its data and writes it under the plugin's name. When the game reads the save, Bazaar hands each plugin its own data back; one plugin's data never reaches another. Bazaar's part of the save carries a version number, as each part of the game's own save does, so a game saved before 0.5 still loads, and the data of a plugin that is not loaded is skipped.
+The host's DLL GUID is what saves record. From 0.5, Bazaar keeps each plugin's own data in the save. When the game writes a save, Bazaar asks each plugin that registered for it for its data and writes it under the ID of the plugin's mod, which already cannot change without breaking the mod's saves. A mod with more than one plugin also gives each of them a plugin ID, a short name that must not change either, and Bazaar writes each plugin's data under both. When the game reads the save, Bazaar hands each plugin its own data back, or tells it there is none; one plugin's data never reaches another. Bazaar's part of the save carries a version number, as each part of the game's own save does, so a game saved before 0.5 still loads. The data of a plugin that is not loaded stays in the save: Bazaar writes it back unchanged each time the game is saved, so turning a plugin off for a while does not lose its data.
 
-A plugin can also give players, cities, units and plots values of its own, since it cannot add fields to the engine's classes. It declares each value once, such as a whole number called Kills on every unit, and reads and sets it through Bazaar for any object. Bazaar saves and loads the values with the plugin's data, drops an object's values when the object is gone, and carries them over when the game replaces an object with a new one, as it does for a captured city or an upgraded unit. The plugin chooses, for each value, whether it carries over.
+A plugin can also give players, cities, units and plots values of its own, since it cannot add fields to the engine's classes. It declares each value once, with its type and its starting value, such as a whole number called Kills on every unit that starts at 0, and reads and sets it through Bazaar for any object. A value can be a whole number, a large whole number, a decimal number or text, with true or false kept as a whole number; the SDK maps each of C++'s simple types to one of these, so nothing is cut off. A value is private to its plugin unless the plugin publishes it: other plugins, and Lua mods, can then read it but never change it. Bazaar saves and loads the values with the plugin's data, drops an object's values when the object is gone, and carries them over when the game replaces an object with a new one, as it does for a captured city, an upgraded or captured unit, a unit given to another player or a barbarian unit that changes sides. The plugin chooses, for each value, whether it carries over.
 
 Which saves need which plugins is left to the game's own mod settings. Every plugin mod sets AffectsSavedGames, so a save made with it cannot be loaded without it; Bazaar refuses a plugin whose mod does not, since a game loaded from a save would lack the plugin's `DllPlugins` row. A plugin that keeps data in saves also sets MinCompatibleSaveVersion, the oldest version of the mod whose saves it can still load.
 
@@ -175,7 +177,7 @@ A folder shipped with each host release (also the thing other developers downloa
 - `lib/` the host's import library, `CvGameCore_Expansion2.lib`, and the Firaxis libraries;
 - `CivPlugin.vsprops` the compiler and linker settings of the host build, with paths through the `BAZAAR_SDK` environment variable;
 - `README.md`, the plugin-writing guide (sdk/README.md), and `hand-placed-hooks.md`;
-- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook and one Lua method: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, a `build.cmd` that builds the DLL, the mod folder and the Workshop package, and a `release.cmd` that makes its releases, with its `VERSION`, `CHANGES.txt` and Workshop description (see Releasing a plugin or Lua mod).
+- `plugin-template/` a minimal plugin with one before-hook, one hand-placed hook, one Lua method, and a value and data of its own in saved games: its VS2008 project, its ModBuddy project declaring the dependency on the host, the SQL that creates the `DllPlugins` table if missing and adds its row, a `build.cmd` that builds the DLL, the mod folder and the Workshop package, and a `release.cmd` that makes its releases, with its `VERSION`, `CHANGES.txt` and Workshop description (see Releasing a plugin or Lua mod).
 
 Not in it yet: plugins cannot reach private and protected members, because the compiler names private functions differently from public ones, so the host would need to export them under their public names too. The list of functions written in headers and the generated reference come with the documentation site.
 

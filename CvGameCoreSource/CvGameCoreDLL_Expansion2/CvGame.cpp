@@ -391,6 +391,9 @@ void CvGame::init(HandicapTypes eHandicap)
 	CvGoodyHuts::Reset();
 
 	doUpdateCacheOnTurn();
+#if defined(CIV_HOST_API)
+	CivHostOnNewGame();
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -9715,6 +9718,9 @@ void CvGame::ReadSupportingClassData(FDataStream& kStream)
 
 	CvBarbarians::Read(kStream, uiVersion);
 	CvGoodyHuts::Read(kStream, uiVersion);
+#if defined(CIV_HOST_API)
+	CivHostOnReadSave(kStream, uiVersion);
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -9901,12 +9907,19 @@ void CvGame::Write(FDataStream& kStream) const
 void CvGame::WriteSupportingClassData(FDataStream& kStream)
 {
 	// Current version number
+#if defined(CIV_HOST_API)
+	uint uiVersion = CIV_HOST_SAVE_VERSION;
+#else
 	uint uiVersion = 1;
+#endif
 	kStream << uiVersion;
 	MOD_SERIALIZE_INIT_WRITE(kStream);
 
 	CvBarbarians::Write(kStream);
 	CvGoodyHuts::Write(kStream);
+#if defined(CIV_HOST_API)
+	CivHostOnWriteSave(kStream);
+#endif
 }
 
 //	--------------------------------------------------------------------------------

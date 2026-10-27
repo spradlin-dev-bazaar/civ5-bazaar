@@ -59,25 +59,29 @@ std::string CivModImportedFilePath(const CivActiveMod& mod, const std::string& f
 	return LastFilePath(mod, fileName, true);
 }
 
-std::vector<std::string> CivPluginPaths(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
+std::vector<CivPluginFile> CivPluginFiles(const std::vector<std::string>& files, const std::vector<CivActiveMod>& mods,
 	std::vector<CivNotLoaded>* notLoaded)
 {
-	std::vector<std::string> paths;
+	std::vector<CivPluginFile> found;
 	for (size_t f = 0; f < files.size(); ++f)
 	{
 		bool listed = false;
 		std::string path;
+		std::string modId;
 		for (size_t m = 0; m < mods.size() && path.empty(); ++m)
 		{
-			const std::string found = CivModFilePath(mods[m], files[f]);
-			listed = listed || !found.empty();
+			const std::string inMod = CivModFilePath(mods[m], files[f]);
+			listed = listed || !inMod.empty();
 			if (mods[m].affectsSavedGames)
-				path = found;
+			{
+				path = inMod;
+				modId = mods[m].id;
+			}
 		}
 		if (!path.empty())
-			paths.push_back(path);
+			found.push_back(CivPluginFile(path, modId));
 		else
 			notLoaded->push_back(NotLoaded(files[f], listed ? CIV_REPORT_NOT_IN_SAVES : CIV_REPORT_FILE_NOT_FOUND));
 	}
-	return paths;
+	return found;
 }

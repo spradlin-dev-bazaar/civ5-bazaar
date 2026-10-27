@@ -2,12 +2,15 @@
 #include "CvNotifications.h"
 
 #include "CivHostEngine.h"
+#include "CivHostLock.h"
 #include "CivHostMods.h"
 #include "CivHostNotices.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
+#include "CivHostSaves.h"
 #include "CivHostSetup.h"
+#include "CivHostValues.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -36,9 +39,11 @@ namespace
 	// The game unloads and reloads this DLL at the main menu, which resets a static flag but not the process's environment,
 	// so the log is emptied once per run of the game rather than before each game.
 	const char* const kLogStarted = "BAZAAR_LOG_STARTED";
+	CivLock s_logLock;
 
 	void LogLine(const char* line)
 	{
+		CivLockHold hold(s_logLock);
 		if (UserFolder().empty())
 			return;
 		const bool fresh = GetEnvironmentVariableA(kLogStarted, NULL, 0) == 0;
@@ -77,6 +82,28 @@ namespace
 	const char* const kModsUnreadable = "Bazaar could not read the game's list of mods, so any plugins already loaded were left as they were.";
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
 	const char* const kNotSaved = "Bazaar could not save your plugin order, so the old order comes back when a game starts. Details are in Logs\\Bazaar.log.";
+	const char* const kPluginDataNotLoaded = "Plugin data not loaded";
+	const char* const kSaveOverWarning = " If you save over this game, that data is lost for good; save in a new slot to keep the old save as it is.";
+
+	// A damaged length must not crash the load, and the game's stream throws when it runs out. A part not read in full
+	// comes back empty, which counts as damaged; it is the last thing in a save, so nothing after it goes unread.
+	std::string ReadSavePart(FDataStream& stream)
+	{
+		std::string part;
+		try
+		{
+			uint size = 0;
+			stream >> size;
+			part.resize(size);
+			if (size && stream.ReadIt(size, &part[0]) != size)
+				return std::string();
+		}
+		catch (...)
+		{
+			return std::string();
+		}
+		return part;
+	}
 
 	std::string Lines(const std::vector<std::string>& lines)
 	{
@@ -238,6 +265,55 @@ namespace
 		lua_pushcclosure(L, &CallPluginLuaFunction, 2);
 	}
 
+	// A kind added to CivObjectKind without a case in these two fails the build.
+#pragma warning(push)
+#pragma warning(error : 4062)
+	bool ObjectKey(int kind, const void* object, __int64* key)
+	{
+		switch (static_cast<CivObjectKind>(kind))
+		{
+		case CIV_ON_PLAYER:
+			*key = CivObjectKey(static_cast<const CvPlayer*>(object)->GetID(), 0);
+			return true;
+		case CIV_ON_CITY:
+			*key = CivObjectKey(static_cast<const CvCity*>(object)->getOwner(), static_cast<const CvCity*>(object)->GetID());
+			return true;
+		case CIV_ON_UNIT:
+			*key = CivObjectKey(static_cast<const CvUnit*>(object)->getOwner(), static_cast<const CvUnit*>(object)->GetID());
+			return true;
+		case CIV_ON_PLOT:
+			*key = CivObjectKey(static_cast<const CvPlot*>(object)->getX(), static_cast<const CvPlot*>(object)->getY());
+			return true;
+		}
+		return false;
+	}
+
+	// The game's lists give back whatever is in a slot for a number without its ID part, such as 0, and its map wraps
+	// plot coordinates, so what they find is checked against the numbers asked for.
+	bool ObjectAlive(int kind, int first, int second)
+	{
+		const bool owned = first >= 0 && first < MAX_PLAYERS;
+		switch (static_cast<CivObjectKind>(kind))
+		{
+		case CIV_ON_PLAYER:
+			return owned && second == 0;
+		case CIV_ON_CITY:
+		{
+			const CvCity* city = owned ? GET_PLAYER((PlayerTypes)first).getCity(second) : NULL;
+			return city && city->GetID() == second;
+		}
+		case CIV_ON_UNIT:
+		{
+			const CvUnit* unit = owned ? GET_PLAYER((PlayerTypes)first).getUnit(second) : NULL;
+			return unit && unit->GetID() == second;
+		}
+		case CIV_ON_PLOT:
+			return first >= 0 && first < GC.getMap().getGridWidth() && second >= 0 && second < GC.getMap().getGridHeight();
+		}
+		return false;
+	}
+#pragma warning(pop)
+
 	void NotifyPluginProblems()
 	{
 		std::vector<std::string> lines;
@@ -252,6 +328,11 @@ namespace
 	// report.
 	bool UseListedPlugins(const std::vector<CivOrderEntry>& wanted, const char* warning)
 	{
+		CivHostSetLogSink(&LogLine);
+		CivHostSetFaultSink(&OnFault);
+		CivHostSetLuaPusher(&PushPluginLuaFunction);
+		CivHostSetObjectKeySink(&ObjectKey);
+		CivHostSetObjectAliveSink(&ObjectAlive);
 		std::vector<std::string> files;
 		if (!ListedPluginFiles(&files))
 		{
@@ -273,12 +354,9 @@ namespace
 			return false;
 		}
 		std::vector<CivNotLoaded> notLoaded;
-		const std::vector<std::string> paths = CivPluginPaths(loading, mods, &notLoaded);
+		const std::vector<CivPluginFile> plugins = CivPluginFiles(loading, mods, &notLoaded);
 
-		CivHostSetLogSink(&LogLine);
-		CivHostSetFaultSink(&OnFault);
-		CivHostSetLuaPusher(&PushPluginLuaFunction);
-		const CivPluginListResult result = CivHostSetPlugins(paths, CivUseBothPairs(order));
+		const CivPluginListResult result = CivHostSetPlugins(plugins, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{
 			CivQueueNotice("Plugins not changed", kBusy);
@@ -418,6 +496,40 @@ void CivHostOnDatabaseReady()
 	UseListedPlugins(SavedOrder(), NULL);
 }
 
+// A type added to CivValueType without a case here fails the build.
+#pragma warning(push)
+#pragma warning(error : 4062)
+int CivHostLuaGetPluginValue(lua_State* L)
+{
+	const char* modId = luaL_checkstring(L, 1);
+	const char* pluginId = luaL_optstring(L, 2, "");
+	const char* name = luaL_checkstring(L, 3);
+	const int first = luaL_checkint(L, 4);
+	const int second = luaL_optint(L, 5, 0);
+	// After the checks: a Lua error jumps out of this frame without running the destructor of its text.
+	CivPublishedValue value;
+	if (!CivValuesGetPublished(modId, pluginId, name, first, second, &value))
+	{
+		lua_pushnil(L);
+		return 1;
+	}
+	switch (static_cast<CivValueType>(value.valueType))
+	{
+	case CIV_VALUE_INT:
+	case CIV_VALUE_INT64:
+		lua_pushnumber(L, (lua_Number)value.whole);
+		break;
+	case CIV_VALUE_DOUBLE:
+		lua_pushnumber(L, value.decimal);
+		break;
+	case CIV_VALUE_TEXT:
+		lua_pushlstring(L, value.text.data(), value.text.size());
+		break;
+	}
+	return 1;
+}
+#pragma warning(pop)
+
 bool CivHostOnFrontEndCall(lua_State* L, int* results)
 {
 	if (lua_type(L, 1) != LUA_TSTRING || strncmp(lua_tostring(L, 1), "bazaar:", 7) != 0)
@@ -462,6 +574,38 @@ void CivHostOnGameUpdate()
 		else
 			notifications->Add(NOTIFICATION_GENERIC, sending[i].message.c_str(), sending[i].summary.c_str(), -1, -1, -1);
 	}
+}
+
+void CivHostOnWriteSave(FDataStream& stream)
+{
+	const std::string part = CivHostSavePart();
+	stream << (uint)part.size();
+	stream.WriteIt((uint)part.size(), part.data());
+}
+
+void CivHostOnReadSave(FDataStream& stream, unsigned int version)
+{
+	if (version < CIV_HOST_SAVE_VERSION)
+	{
+		CivHostLoadPart(NULL);
+		return;
+	}
+	const std::string part = ReadSavePart(stream);
+	const std::string problem = CivHostLoadPart(&part);
+	if (problem.empty())
+		return;
+	LogLine(problem.c_str());
+	CivQueueNotice(kPluginDataNotLoaded, problem + kSaveOverWarning);
+}
+
+void CivHostOnNewGame()
+{
+	CivHostLoadPart(NULL);
+}
+
+void CivHostOnPlayerReset(int player)
+{
+	CivValuesDropPlayer(player);
 }
 
 // Plugins link against this DLL, so Windows cannot unload it while any plugin stays loaded.

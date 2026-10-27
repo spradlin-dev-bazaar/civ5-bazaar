@@ -33,6 +33,26 @@ void TestSkippedOriginal();
 void TestPaths();
 void TestActiveMods();
 void TestLuaFunctions();
+void TestSaveRegistration();
+void TestSaveRoundTrip();
+void TestSaveKeys();
+void TestSavesOfPluginsThatAreOff();
+void TestSaveCrashes();
+void TestDamagedSaves();
+void TestSaveReader();
+void TestValueDeclarations();
+void TestValueReadsAndWrites();
+void TestPublishedValues();
+void TestCarriedValues();
+void TestValuesOfResetPlayers();
+void TestValuesOfRefusedPlugins();
+void TestCapturedFrom();
+void TestSavedValues();
+void TestValuesOfPluginsThatAreOff();
+void TestValuesOfGoneObjects();
+void TestDamagedValues();
+void TestMatchingOfSavedValues();
+void TestPublishedValueReads();
 
 namespace
 {
@@ -88,6 +108,26 @@ namespace
 		{"paths", &TestPaths},
 		{"active mods", &TestActiveMods},
 		{"lua functions", &TestLuaFunctions},
+		{"save registration", &TestSaveRegistration},
+		{"save round trip", &TestSaveRoundTrip},
+		{"save keys", &TestSaveKeys},
+		{"saves of plugins that are off", &TestSavesOfPluginsThatAreOff},
+		{"save crashes", &TestSaveCrashes},
+		{"damaged saves", &TestDamagedSaves},
+		{"save reader", &TestSaveReader},
+		{"value declarations", &TestValueDeclarations},
+		{"value reads and writes", &TestValueReadsAndWrites},
+		{"published values", &TestPublishedValues},
+		{"carried values", &TestCarriedValues},
+		{"values of reset players", &TestValuesOfResetPlayers},
+		{"values of refused plugins", &TestValuesOfRefusedPlugins},
+		{"captured units", &TestCapturedFrom},
+		{"saved values", &TestSavedValues},
+		{"values of plugins that are off", &TestValuesOfPluginsThatAreOff},
+		{"values of gone objects", &TestValuesOfGoneObjects},
+		{"damaged values", &TestDamagedValues},
+		{"matching of saved values", &TestMatchingOfSavedValues},
+		{"published value reads", &TestPublishedValueReads},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 
@@ -142,12 +182,12 @@ std::string OutFile(const char* name)
 	return s_dir + name;
 }
 
-std::vector<std::string> OutFiles(const char* const* names, size_t count)
+std::vector<CivPluginFile> OutFiles(const char* const* names, size_t count)
 {
-	std::vector<std::string> paths;
+	std::vector<CivPluginFile> files;
 	for (size_t i = 0; i < count; ++i)
-		paths.push_back(OutFile(names[i]));
-	return paths;
+		files.push_back(CivPluginFile(OutFile(names[i]), ""));
+	return files;
 }
 
 void StartWith(const char* const* names, size_t count)
@@ -164,7 +204,7 @@ void StartWithNone()
 
 void Load(const char* name)
 {
-	CivHostLoadPlugins(std::vector<std::string>(1, OutFile(name)));
+	CivHostLoadPlugins(std::vector<CivPluginFile>(1, CivPluginFile(OutFile(name), "")));
 }
 
 // Records are looked up afresh each time: loading more plugins can move them. A file listed twice finds the later record.
@@ -229,6 +269,14 @@ std::string LogLine(int index)
 bool LogHas(const char* text)
 {
 	return LogIndex(text) >= 0;
+}
+
+int LogCount(const char* text)
+{
+	int count = 0;
+	for (int i = LogIndex(text); i >= 0; i = LogIndex(text, i + 1))
+		++count;
+	return count;
 }
 
 int FaultCount()

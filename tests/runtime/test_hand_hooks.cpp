@@ -15,14 +15,6 @@ namespace
 	{
 		return text.find(part) != std::string::npos;
 	}
-
-	int LogCount(const char* text)
-	{
-		int count = 0;
-		for (int i = LogIndex(text); i >= 0; i = LogIndex(text, i + 1))
-			++count;
-		return count;
-	}
 }
 
 void TestHandHooks()
@@ -61,6 +53,10 @@ void TestHandHooks()
 	Check(LogHas("[Toy Hand] deal 1 2 2 1 0"), "a resolved deal reaches the plugin with all its values");
 	unit.CancelOrders(CIV_ORDERS_NO_PATH);
 	Check(LogHas("[Toy Hand] orders cancelled Warrior 4"), "cancelled orders reach the plugin with the unit and the reason");
+	CivHandUnitReplaced(2, 8193, reinterpret_cast<CvUnit*>(&unit));
+	Check(LogHas("[Toy Hand] unit replaced 2 8193 Warrior"), "a replaced unit reaches the plugin with the old unit's owner and number, and the new unit");
+	CivHandCityReplaced(1, 16385, reinterpret_cast<CvCity*>(&unit));
+	Check(LogHas("[Toy Hand] city replaced 1 16385 by a new city"), "a replaced city reaches the plugin with the old city's owner and number, and the new city");
 }
 
 void TestHandHookFaults()
@@ -126,7 +122,7 @@ void TestPossibleConflicts()
 		"a plugin turned off for another reason is not offered Use both anyway");
 
 	StartWithNone();
-	const std::vector<std::string> paths = OutFiles(usesFirst);
+	const std::vector<CivPluginFile> paths = OutFiles(usesFirst);
 	CivHostSetPlugins(paths, CivFilePairs(1, CivFilePair("TOY_HAND_REPLACE.DLL", "toy_hand.dll")));
 	Check(HasStatus("toy_hand_replace.dll", CIV_PLUGIN_LOADED) && HasStatus("toy_hand.dll", CIV_PLUGIN_LOADED),
 		"a pair the player chose to use anyway loads together, matched in any case");

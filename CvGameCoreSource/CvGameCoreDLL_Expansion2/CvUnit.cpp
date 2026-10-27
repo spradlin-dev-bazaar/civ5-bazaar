@@ -1506,6 +1506,9 @@ void CvUnit::convert(CvUnit* pUnit, bool bIsUpgrade)
 		}
 	}
 
+#if defined(CIV_HOST_API)
+	CivHandUnitReplaced(pUnit->getOwner(), pUnit->GetID(), this);
+#endif
 	pUnit->kill(true);
 }
 
@@ -1805,6 +1808,9 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer /*= NO_PLAYER*/)
 		}
 	}
 
+#if defined(CIV_HOST_API)
+	CivHostCaptureFrom(getOwner(), GetID());
+#endif
 	//////////////////////////////////////////////////////////////////////////
 	// WARNING: This next statement will delete 'this'
 	// ANYTHING BELOW HERE MUST NOT REFERENCE THE UNIT!
@@ -1815,6 +1821,9 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer /*= NO_PLAYER*/)
 
 	// Create the captured unit that will replace this unit (if the capture definition is valid)
 	CvUnit::createCaptureUnit(kCaptureDef);
+#if defined(CIV_HOST_API)
+	CivHostCaptureDone();
+#endif
 
 	if(GC.getGame().getActivePlayer() == kCaptureDef.eOldPlayer)
 	{
@@ -1983,6 +1992,12 @@ bool CvUnit::getCaptureDefinition(CvUnitCaptureDefinition* pkCaptureDef, PlayerT
 						}
 					}
 
+#if defined(CIV_HOST_API)
+					int iCivHostOldOwner = NO_PLAYER;
+					int iCivHostOldID = -1;
+					if(pkCapturedUnit != NULL && CivHostTakeCapturedFrom(&iCivHostOldOwner, &iCivHostOldID))
+						CivHandUnitReplaced(iCivHostOldOwner, iCivHostOldID, pkCapturedUnit);
+#endif
 					// Captured civilian who could be returned?
 					if(!kCaptureDef.bAsIs)
 					{
@@ -15541,6 +15556,9 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 	CvPlot* pNewPlot = 0;
 	FStaticVector<IDInfo, 10, true, c_eCiv5GameplayDLL, 0> oldUnitList;
 	FStaticVector<CvUnitCaptureDefinition, 8, true, c_eCiv5GameplayDLL, 0> kCaptureUnitList;
+#if defined(CIV_HOST_API)
+	std::vector<IDInfo> kCivHostCapturedFrom;
+#endif
 	ActivityTypes eOldActivityType = NO_ACTIVITY;
 	int iI;
 	TeamTypes activeTeam = GC.getGame().getActiveTeam();
@@ -15732,7 +15750,12 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 										if(bDoCapture)
 										{
 											if(pLoopUnit->getCaptureDefinition(&kCaptureDef, getOwner()))
+											{
 												kCaptureUnitList.push_back(kCaptureDef);
+#if defined(CIV_HOST_API)
+												kCivHostCapturedFrom.push_back(pLoopUnit->GetIDInfo());
+#endif
+											}
 											pLoopUnit->setCapturingPlayer(NO_PLAYER);	// Make absolutely sure this is not valid so the kill does not do the capture.
 										}
 
@@ -16308,7 +16331,13 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 	// Create any units we captured, now that we own the destination
 	for(uint uiCaptureIndex = 0; uiCaptureIndex < kCaptureUnitList.size(); ++uiCaptureIndex)
 	{
+#if defined(CIV_HOST_API)
+		CivHostCaptureFrom(kCivHostCapturedFrom[uiCaptureIndex].eOwner, kCivHostCapturedFrom[uiCaptureIndex].iID);
+#endif
 		createCaptureUnit(kCaptureUnitList[uiCaptureIndex]);
+#if defined(CIV_HOST_API)
+		CivHostCaptureDone();
+#endif
 	}
 
 	CvAssert(pOldPlot != pNewPlot);

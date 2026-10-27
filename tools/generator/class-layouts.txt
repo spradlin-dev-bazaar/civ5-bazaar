@@ -14417,6 +14417,70 @@ class ?$CLinkList@W4TechTypes@@	size(16):
 12	| m_pTail
 	+---
 
+class ?$CivObjectKindOf@VCvCity@@	size(1):
+	+---
+	+---
+
+class ?$CivObjectKindOf@VCvPlayer@@	size(1):
+	+---
+	+---
+
+class ?$CivObjectKindOf@VCvPlot@@	size(1):
+	+---
+	+---
+
+class ?$CivObjectKindOf@VCvUnit@@	size(1):
+	+---
+	+---
+
+class ?$CivStoredValue@H	size(1):
+	+---
+	+---
+
+class ?$CivStoredValue@N	size(1):
+	+---
+	+---
+
+class ?$CivStoredValue@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@	size(1):
+	+---
+	+---
+
+class ?$CivStoredValue@_J	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@I	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@K	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@M	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@N	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@O	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@_J	size(1):
+	+---
+	+---
+
+class ?$CivValueStorage@_K	size(1):
+	+---
+	+---
+
 class ?$CvLuaMethodWrapper@VCvLuaArea@@VCvArea@@	size(1):
 	+---
 	+---
@@ -27703,19 +27767,44 @@ class CivApiVersion	size(8):
  4	| minor
 	+---
 
-class CivHostInfo	size(20):
+class CivHostInfo	size(68):
 	+---
  0	| pluginIndex
  4	| RegisterHook
  8	| Log
 12	| RegisterHandHook
 16	| PushLuaFunction
+20	| RegisterSaveData
+24	| WriteSaveData
+28	| DeclareValue
+32	| FindValue
+36	| GetIntValue
+40	| SetIntValue
+44	| GetInt64Value
+48	| SetInt64Value
+52	| GetDoubleValue
+56	| SetDoubleValue
+60	| GetTextValue
+64	| SetTextValue
 	+---
 
-class CivPluginInfo	size(8):
+class CivPluginInfo	size(12):
 	+---
  0	| name
  4	| version
+ 8	| id
+	+---
+
+class CivSaveReader	size(8):
+	+---
+ 0	| m_data
+ 4	| m_left
+	+---
+
+class CivSaveWriter	size(8):
+	+---
+ 0	| m_host
+ 4	| m_saving
 	+---
 
 class Command	size(8):
@@ -49126,6 +49215,8 @@ enum CIVILIAN_ATTACK_PRIORITY_HIGH_EARLY_GAME_ONLY = 1
 
 enum CIVILIAN_ATTACK_PRIORITY_LOW = 2
 
+enum CIV_HAND_CITY_REPLACED = 7
+
 enum CIV_HAND_DEAL_RESOLVED = 4
 
 enum CIV_HAND_IS_PLUGIN_CONTROLLED_PLAYER = 0
@@ -49137,6 +49228,8 @@ enum CIV_HAND_NOTIFICATION_ADDED = 3
 enum CIV_HAND_POPUP_RAISED = 2
 
 enum CIV_HAND_UNIT_ORDERS_CANCELLED = 5
+
+enum CIV_HAND_UNIT_REPLACED = 6
 
 enum CIV_HOOK_AFTER = 1
 
@@ -49154,6 +49247,14 @@ enum CIV_HOOK_REPLACE = 2
 
 enum CIV_HOOK_REPLACE_TAKEN = 3
 
+enum CIV_ON_CITY = 1
+
+enum CIV_ON_PLAYER = 0
+
+enum CIV_ON_PLOT = 3
+
+enum CIV_ON_UNIT = 2
+
 enum CIV_ORDERS_CANNOT_LAND = 1
 
 enum CIV_ORDERS_DESTINATION_BLOCKED = 6
@@ -49167,6 +49268,18 @@ enum CIV_ORDERS_PATH_LONGER = 5
 enum CIV_ORDERS_PROMOTION_READY = 0
 
 enum CIV_ORDERS_ROUTE_BLOCKED = 3
+
+enum CIV_VALUE_CARRIES_OVER = 2
+
+enum CIV_VALUE_DOUBLE = 2
+
+enum CIV_VALUE_INT = 0
+
+enum CIV_VALUE_INT64 = 1
+
+enum CIV_VALUE_PUBLISHED = 1
+
+enum CIV_VALUE_TEXT = 3
 
 enum COMBAT_PREDICTION_MAJOR_DEFEAT = 6
 
@@ -49333,6 +49446,22 @@ enum CitizenButtons_DIRTY_BIT = 7
 enum CityInfo_DIRTY_BIT = 18
 
 enum CityScreen_DIRTY_BIT = 21
+
+enum CivObjectKindOf<CvCity>::Kind = 1
+
+enum CivObjectKindOf<CvPlayer>::Kind = 0
+
+enum CivObjectKindOf<CvPlot>::Kind = 3
+
+enum CivObjectKindOf<CvUnit>::Kind = 2
+
+enum CivStoredValue<double>::Type = 2
+
+enum CivStoredValue<int>::Type = 0
+
+enum CivStoredValue<long long>::Type = 1
+
+enum CivStoredValue<std::string>::Type = 3
 
 enum ColoredPlots_DIRTY_BIT = 24
 
@@ -54095,10 +54224,31 @@ types CivHostInfo:
  field Log: void (*)(int, const char *)
  field RegisterHandHook: int (*)(int, int, void *)
  field PushLuaFunction: void (*)(int, lua_State *, int (*)(lua_State *))
+ field RegisterSaveData: int (*)(int, void (*)(void *), void (*)(const void *, int))
+ field WriteSaveData: void (*)(void *, const void *, int)
+ field DeclareValue: int (*)(int, int, int, const char *, int, const void *)
+ field FindValue: int (*)(int, const char *, const char *, const char *, int, int)
+ field GetIntValue: int (*)(int, int, const void *)
+ field SetIntValue: bool (*)(int, int, const void *, int)
+ field GetInt64Value: long long (*)(int, int, const void *)
+ field SetInt64Value: bool (*)(int, int, const void *, long long)
+ field GetDoubleValue: double (*)(int, int, const void *)
+ field SetDoubleValue: bool (*)(int, int, const void *, double)
+ field GetTextValue: int (*)(int, int, const void *, char *, int)
+ field SetTextValue: bool (*)(int, int, const void *, const char *)
 
 types CivPluginInfo:
  field name: const char *
  field version: const char *
+ field id: const char *
+
+types CivSaveReader:
+ field m_data: const char *
+ field m_left: int
+
+types CivSaveWriter:
+ field m_host: const CivHostInfo *
+ field m_saving: void *
 
 types CustomMods:
  field m_bGLOBAL_EARLY_COOP_WAR_LOCK: bool

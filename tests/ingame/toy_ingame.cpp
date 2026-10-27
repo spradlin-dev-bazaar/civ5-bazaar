@@ -236,6 +236,87 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
+#elif defined(TOY_SAVES)
+
+// The human player's turns in this game are the plugin's own data; the rest are values. All are kept in saved games.
+static int s_turns = 0;
+static CivValue<CvUnit, int> s_turnsAlive;
+static CivValue<CvCity, std::string> s_founder;
+static CivValue<CvPlayer, __int64> s_big;
+static CivValue<CvPlot, double> s_mark;
+
+static void SaveData(void* saving)
+{
+	CivSaveWriter writer(s_host, saving);
+	writer.WriteInt(s_turns);
+	Log("saved: %d turns", s_turns);
+}
+
+static void LoadData(const void* data, int size)
+{
+	CivSaveReader reader(data, size);
+	s_turns = reader.ReadInt(0);
+	Log(data ? "loaded: %d turns" : "no saved data: %d turns", s_turns);
+}
+
+// Every player's units and cities get values, so a captured one shows what carried over; only the human's are logged.
+static bool BeforeDoTurn(CvPlayer* self)
+{
+	const bool human = self->isHuman();
+	int loop = 0;
+	for (CvUnit* unit = self->firstUnit(&loop); unit; unit = self->nextUnit(&loop))
+	{
+		s_turnsAlive.Set(unit, s_turnsAlive.Get(unit) + 1);
+		if (human)
+			Log("unit %s (ID %d): %d turns alive", unit->getName().c_str(), unit->GetID(), s_turnsAlive.Get(unit));
+	}
+	for (CvCity* city = self->firstCity(&loop); city; city = self->nextCity(&loop))
+	{
+		if (s_founder.Get(city).empty())
+			s_founder.Set(city, self->getCivilizationShortDescription());
+		if (human)
+			Log("city %s (ID %d): founded by %s", city->getName().c_str(), city->GetID(), s_founder.Get(city).c_str());
+	}
+	if (!human)
+		return false;
+	++s_turns;
+	// 2 to the power 53, plus 1: exact in C++, the smallest whole number a Lua number cannot hold.
+	s_big.Set(self, 9007199254740993LL);
+	CvCity* capital = self->getCapitalCity();
+	if (capital)
+		s_mark.Set(capital->plot(), s_mark.Get(capital->plot()) + 1.5);
+	Log("turn %d of this game for %s; capital tile mark %.1f, big %I64d", s_turns, self->getCivilizationShortDescription(),
+		capital ? s_mark.Get(capital->plot()) : 0.0, s_big.Get(self));
+	return false;
+}
+
+static void UnitReplaced(int oldOwner, int oldUnit, CvUnit* newUnit)
+{
+	Log("unit replaced: player %d's unit %d is now %s (ID %d) of player %d, %d turns alive", oldOwner, oldUnit,
+		newUnit->getName().c_str(), newUnit->GetID(), newUnit->getOwner(), s_turnsAlive.Get(newUnit));
+}
+
+static void CityReplaced(int oldOwner, int oldCity, CvCity* newCity)
+{
+	Log("city replaced: player %d's city %d is now %s (ID %d) of player %d, founded by %s", oldOwner, oldCity,
+		newCity->getName().c_str(), newCity->GetID(), newCity->getOwner(), s_founder.Get(newCity).c_str());
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Saves");
+	LogRegistered(host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData), "save data");
+	LogRegistered(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(s_host, &BeforeDoTurn), "before CvPlayer::doTurn");
+	LogRegistered(host->RegisterHandHook(host->pluginIndex, CIV_HAND_UNIT_REPLACED, (void*)&UnitReplaced), "UnitReplaced");
+	LogRegistered(host->RegisterHandHook(host->pluginIndex, CIV_HAND_CITY_REPLACED, (void*)&CityReplaced), "CityReplaced");
+	const bool declared = s_turnsAlive.Declare(host, "TurnsAlive", 0, CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER)
+		&& s_founder.Declare(host, "Founder", "", CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER)
+		&& s_big.Declare(host, "Big", 0, CIV_VALUE_PUBLISHED) && s_mark.Declare(host, "Mark", 0.0, CIV_VALUE_PUBLISHED);
+	Log("declared values: %s", declared ? "ok" : "refused");
+	return true;
+}
+
 #else
 #error Define one TOY_* variant.
 #endif

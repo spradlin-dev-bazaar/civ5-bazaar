@@ -20,17 +20,28 @@ enum CivPluginStatus
 	CIV_PLUGIN_STILL_IN_MEMORY,
 	CIV_PLUGIN_REPLACE_CONFLICT,
 	CIV_PLUGIN_POSSIBLE_CONFLICT,
+	CIV_PLUGIN_SAVE_ID_TAKEN,
+};
+
+struct CivPluginFile
+{
+	CivPluginFile(const std::string& path, const std::string& modId) : path(path), modId(modId) {}
+
+	std::string path;
+	std::string modId;
 };
 
 struct CivPluginRecord
 {
 	CivPluginRecord()
 		: builtApiMajor(0), builtApiMinor(0), status(CIV_PLUGIN_FILE_NOT_LOADED), quarantined(false), module(0), host(0),
-		  serial(0)
+		  serial(0), saveFn(0), loadFn(0)
 	{
 	}
 
 	std::string path;
+	std::string modId;
+	std::string pluginId;
 	std::string name;
 	std::string version;
 	int builtApiMajor;
@@ -47,6 +58,8 @@ struct CivPluginRecord
 	CivHostInfo* host;
 	// Never reused, so a Lua function a plugin pushed before an unload or reload can tell its plugin is gone.
 	unsigned int serial;
+	CivSaveDataFn saveFn;
+	CivLoadDataFn loadFn;
 };
 
 #define CIV_REPORT_NOT_LOADED "Not loaded"
@@ -94,12 +107,22 @@ void CivHostSetLuaPusher(CivHostLuaPusher pusher);
 bool CivHostCallLuaFunction(unsigned int serial, CivLuaFunction fn, lua_State* L, int* results, char* why, size_t whySize);
 
 // Adds plugins without unloading any; CivHostSetPlugins is the way to change the list.
-void CivHostLoadPlugins(const std::vector<std::string>& paths);
+void CivHostLoadPlugins(const std::vector<CivPluginFile>& files);
 // Replaces the loaded plugins with these, unless they are the ones already listed with the same useBoth. BUSY changes
 // nothing. A pair in useBoth loads despite a possible conflict between the two.
-CivPluginListResult CivHostSetPlugins(const std::vector<std::string>& paths, const CivFilePairs& useBoth = CivFilePairs());
+CivPluginListResult CivHostSetPlugins(const std::vector<CivPluginFile>& files, const CivFilePairs& useBoth = CivFilePairs());
 // False, with nothing changed, when called while a plugin is running.
 bool CivHostUnloadPlugins();
 const std::vector<CivPluginRecord>& CivHostPlugins();
+void CivHostLogLine(const char* line);
+const char* CivHostPluginName(int plugin);
+// The refusal of a second plugin with the same key, the lookup of saved data and the finding of published values all
+// use this, or data would mix.
+bool CivSameSaveKey(const std::string& modIdA, const std::string& pluginIdA, const std::string& modIdB, const std::string& pluginIdB);
+bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId);
+// False, with data empty, when the plugin has no save function, is off, or crashed in it.
+bool CivHostCallSaveFunction(int plugin, std::string* data);
+// A null or empty data tells the plugin there is none.
+void CivHostCallLoadFunction(int plugin, const std::string* data);
 // What the Plugins screen shows for each plugin record, in load order; problems are separated by "\n".
 std::vector<CivPluginReportRow> CivHostReportRows();

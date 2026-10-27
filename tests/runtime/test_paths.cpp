@@ -26,7 +26,7 @@ void TestPaths()
 	Check(CopyFileW(CivWide(OutFile("toy_basic.dll")).c_str(), CivWide(copy).c_str(), FALSE) != 0, "a toy plugin is copied into a folder outside the system's code page");
 	std::string text;
 	Check(CivReadFile(copy, &text) && text.compare(0, 2, "MZ") == 0, "a file in such a folder can be read");
-	CivHostSetPlugins(std::vector<std::string>(1, copy));
+	CivHostSetPlugins(std::vector<CivPluginFile>(1, CivPluginFile(copy, "")));
 	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_LOADED), "a plugin in such a folder loads");
 	StartWithNone();
 }

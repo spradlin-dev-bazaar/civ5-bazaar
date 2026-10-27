@@ -23,6 +23,7 @@ Civilization V
 - A plugin can **hook** one of the game's functions: have Bazaar call a function of yours, a **hook**, before it, after it, or instead of it.
 - A plugin can be called at certain moments through Bazaar's **hand-placed hooks**: fixed spots inside the game's code, such as the one where a notification is added.
 - A plugin can add functions that Lua code can call.
+- A plugin can keep data in the player's saved games, including values of its own on players, cities, units and plots.
 - A plugin can call the game's own functions, and read and change its public data.
 
 For example, to make every player's score count double, you add an after-hook to `CvPlayer::GetScore` that doubles the score it returns. The [full example](#example-double-every-players-score) is further down.
@@ -64,7 +65,7 @@ For example, to make every player's score count double, you add an after-hook to
 
 2. Copy `Build\Template Plugin` into your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
 3. In the game's Mods menu, enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and Template Plugin, then start a game.
-4. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line that starts with `Plugin Template Plugin 1 loaded`. From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting.
+4. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line that starts with `Plugin Template Plugin 1 loaded`. From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting, and keeps two counts in your saved games: the turns each player has started, and the notifications it has seen.
 
 ## Step 2: make it your own
 
@@ -78,7 +79,8 @@ For example, to make every player's score count double, you add an after-hook to
 6. Delete the template's examples you do not want, with their `Check(...)` lines in `CivPluginEntry`:
    - `BeforeDoTurn` logs the start of each of your turns;
    - `NotificationAdded` logs each notification;
-   - `Hello` and `AfterRegisterGame` add `Game.TemplateHello()` to Lua.
+   - `Hello` and `AfterRegisterGame` add `Game.TemplateHello()` to Lua;
+   - `s_turnsStarted`, `s_notifications`, `SaveData` and `LoadData` keep two counts in saved games. Delete them with their `RegisterSaveData` and `Declare` lines in `CivPluginEntry`, and the lines in `BeforeDoTurn` and `NotificationAdded` that use the counts.
 7. Run `build.cmd` again. The `Build` folder now holds a folder with your display name.
 
 Your code goes in the `.cpp` file. Its first `#include`, `CvGameCoreDLLPCH.h`, brings in most of the game's headers; the next two are Bazaar's, and the fourth, `PluginVersion.h`, holds your plugin's version. A new `.cpp` file needs the first three, and an entry in the `.vcproj`'s file list (copy the existing `<File>` entry).
@@ -113,15 +115,19 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
 	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
+	Check(host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData), "save data");
+	if (!s_turnsStarted.Declare(host, "TurnsStarted", 0, CIV_VALUE_PUBLISHED))
+		Log("could not declare the value TurnsStarted");
 	return true;
 }
 ```
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
-- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)) and `host->Log`. (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
-- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version. Bazaar copies them when `CivPluginEntry` returns, so point both at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
+- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)), `host->Log`, and the functions for saved games (see [Keeping data in saved games](#keeping-data-in-saved-games)). (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
+- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version, and a plugin ID if your mod has more than one plugin that keeps data (see [Keeping data in saved games](#keeping-data-in-saved-games)). Bazaar copies them when `CivPluginEntry` returns, so point each at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
 - **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
 - **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration. `CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn)` registers `BeforeDoTurn` as a before-hook on `CvPlayer::doTurn`; [Registering a hook](#registering-a-hook) explains it. Hooks can only be registered from `CivPluginEntry`.
+- **The last three lines** keep the template's data in saved games; [Keeping data in saved games](#keeping-data-in-saved-games) explains them.
 - **Returning `true`** loads the plugin. Returning `false` tells Bazaar not to load it, and the Plugins screen shows it as Not loaded: "Declined to load."
 
 ### Writing to the log
@@ -129,7 +135,8 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 `host->Log(host->pluginIndex, text)` writes `text` as one line to `Bazaar.log`, headed with your plugin's name. The template's `Log` wraps it and takes a printf-style format. This line is from the template's `BeforeDoTurn` hook, which names its `self` parameter `player` (parameter names are up to you):
 
 ```cpp
-Log("%s starts turn %d with %d gold", player->getCivilizationShortDescription(), GC.getGame().getGameTurn(), player->GetTreasury()->GetGold());
+Log("%s starts turn %d with %d gold (turns started: %d, notifications seen: %d)", player->getCivilizationShortDescription(),
+	GC.getGame().getGameTurn(), player->GetTreasury()->GetGold(), s_turnsStarted.Get(player), s_notifications);
 ```
 
 ## Hooking the game's functions
@@ -289,6 +296,7 @@ Register for one in `CivPluginEntry` with `RegisterHandHook`. It returns codes f
 ```cpp
 static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
 {
+	++s_notifications;
 	Log("notification %d for %s: %s", notificationType, GET_PLAYER((PlayerTypes)player).getCivilizationShortDescription(), message);
 }
 
@@ -364,6 +372,92 @@ A Lua error is not a crash: your function raises one with `luaL_error`, and Lua 
 
 The protection has one gap: if your function runs Lua code in protected mode (with `lua_pcall`, or through the game, as when it fires a Lua event) and the game's own code crashes underneath, Lua's record of where to go after an error is left out of date. Bazaar's own Lua error about the crash is then the first to use it, so the game will most likely crash at that point.
 
+## Keeping data in saved games
+
+Bazaar can keep two kinds of data for your plugin in the player's saved games: **values** on players, cities, units and plots, and **data of your own** that your plugin writes when the game saves. Use values for anything that belongs to one player, city, unit or plot, and your own data for the rest, such as totals for the whole game. The template does both.
+
+Bazaar keeps the data under your mod's ID, the GUID on the `.civ5proj`'s `<Guid>` line, so changing that ID loses the data in saves made before. If your mod has more than one plugin that keeps data, give each a plugin ID in `CivPluginEntry`, such as `plugin->id = "battles";`: a short name that must never change either. Bazaar refuses a plugin that keeps data when one above it in the load order has the same mod ID and plugin ID and keeps data too, and the Plugins screen says why.
+
+### Values
+
+A value is a named piece of data on every object of one kind: every player, every city, every unit or every plot. You declare it once, with its type and its starting value, and then read and set it for any object. These are the template's pieces:
+
+```cpp
+static CivValue<CvPlayer, int> s_turnsStarted;
+
+// in CivPluginEntry:
+if (!s_turnsStarted.Declare(host, "TurnsStarted", 0, CIV_VALUE_PUBLISHED))
+	Log("could not declare the value TurnsStarted");
+
+// in BeforeDoTurn, where player is the CvPlayer whose turn starts:
+s_turnsStarted.Set(player, s_turnsStarted.Get(player) + 1);
+```
+
+- **`CivValue<CvPlayer, int>`** is a value of type `int` on every player. The first type in the angle brackets is the kind of object: `CvPlayer`, `CvCity`, `CvUnit` or `CvPlot`. The second is the value's type, one of C++'s simple types or text. Bazaar keeps each value in one of four forms, wide enough that it reads back exactly as it was set:
+  - a 32-bit whole number, for `bool`, `char`, `short`, `unsigned short`, `int`, `long` and enums such as `UnitTypes`;
+  - a 64-bit whole number, for `unsigned int`, `unsigned long`, `__int64` and `unsigned __int64`;
+  - a decimal number, for `float` and `double`;
+  - text, for `std::string`, up to its first zero character, if it has one.
+
+  A struct cannot be a value: use one value for each of its members, or your own data.
+- **`Declare(host, name, start, flags)`** works only in `CivPluginEntry`. The name must differ from your plugin's other values. `start` is what the value reads as on an object it was never set on. The flags are optional: `CIV_VALUE_PUBLISHED` lets other plugins and Lua read the value, though only your plugin can change it, and `CIV_VALUE_CARRIES_OVER` copies it when the game replaces a unit or city, as described below. For both, write `CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER`. `Declare` returns `false` when Bazaar refused the value, and `Bazaar.log` says why; the value then reads as zero or empty.
+- **`Get(object)`** returns the value on that object, and **`Set(object, value)`** sets it, once `CivPluginEntry` has returned. On a null object, `Get` returns the starting value and `Set` does nothing. `Set` returns `false` when it set nothing.
+
+Bazaar saves and loads the values with the game, and in a new game every value starts at its starting value. When a unit or city is gone, its values are dropped the next time the game saves.
+
+**Carrying over.** The game sometimes replaces a unit or city with a new one, with a new ID: when a unit upgrades, is captured or is given away, or when a city is captured, for example. Without the flag, the new one starts with fresh values. With `CIV_VALUE_CARRIES_OVER`, Bazaar copies the value to the new one, or sets the new one's back to its start if the old one never had it set, at every replacement that the hand-placed hooks `UnitReplaced` and `CityReplaced` announce; `hand-placed-hooks.md` lists them, and the few the game makes with no link to the old unit. The hooks run after the copy and give the old unit's or city's owner, so to keep a value through some replacements only, such as an upgrade but not a capture, compare that owner with the new one's and set the value back to its start when they differ. A plugin that replaces one of the functions these hooks sit in, without calling `original`, stops the copy too, and Bazaar does not warn about it unless your plugin uses the hook itself (see [What a replacement skips](#what-a-replacement-skips)).
+
+**Reading another plugin's values.** A plugin can read a value that another plugin published, with `Find` in place of `Declare`:
+
+```cpp
+static CivValue<CvPlayer, int> s_theirTurns;
+
+// in CivPluginEntry:
+s_theirTurns.Find(host, "<the other mod's ID>", "", "TurnsStarted");
+```
+
+The arguments are the other plugin's mod ID (the GUID on its `.civ5proj`'s `<Guid>` line, without braces), its plugin ID (`""` when it has none) and the value's name. The kind of object must match the declaration, and the type must be kept in the same form, so a value declared as an `int` can be found as a `long`. Call `Find` in `CivPluginEntry`. It returns `false` when there is no such published value, and also when the other plugin is below yours in the load order, since that one is not loaded yet. Setting a found value sets nothing, returns `false` and is logged.
+
+**Reading values from Lua.** Lua code can read published values with `Game.GetPluginValue(modId, pluginId, name, first, second)`. `first` and `second` name the object: a player's ID alone, a city's or unit's owner and ID, or a plot's x and y. It returns `nil` when no loaded plugin publishes a value of that name. Lua keeps every number as a decimal, so whole numbers come back exact up to about 9 million billion (2 to the power 53). Lua's `print` shows only 14 digits of a number; `string.format("%.0f", n)` shows them all. `true` and `false` come back as 1 and 0, so compare with `== 1`: Lua counts 0 as true. A unit or city that is gone has no values, so its reads return `nil` too.
+
+```lua
+local turns = Game.GetPluginValue("<the mod's ID>", "", "TurnsStarted", Game.GetActivePlayer())
+```
+
+### Data of your own
+
+For data that is not on one player, city, unit or plot, register a save function and a load function. These are the template's:
+
+```cpp
+// Runs at every save, one of them on another thread, so it must not use Lua.
+static void SaveData(void* saving)
+{
+	CivSaveWriter writer(s_host, saving);
+	writer.WriteInt(s_notifications);
+}
+
+// Runs when a game starts or a save loads; data is null when there is none.
+static void LoadData(const void* data, int size)
+{
+	CivSaveReader reader(data, size);
+	s_notifications = reader.ReadInt(0);
+}
+
+// in CivPluginEntry:
+Check(host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData), "save data");
+```
+
+- Register them once, in `CivPluginEntry`. `RegisterSaveData` returns 0 when it worked, 1 when the save or the load function is missing, and 4 when it is called outside `CivPluginEntry` or a second time.
+- **The save function** runs each time the game saves. Write your data with `CivSaveWriter`: `WriteInt` for a whole number, `WriteText` for a `std::string`, and `Write(pointer, size)` for any bytes. One save, the autosave as a game starts, runs on a thread of its own, so the save function must not call Lua.
+- **The load function** runs when a game starts and when a save loads. In a new game it runs before the map and the players are set up, so use it only to reset your plugin's own data. It gets back exactly what your save function wrote, or a null `data` and a `size` of 0 when there is none: in a new game, or a save made without your plugin. Either way, replace whatever your plugin held from the game before, as the template does by reading 0 when there is nothing to read.
+- **`CivSaveReader`** reads in the order you wrote. `ReadInt` and `ReadText` each take a fallback, which they return once the data runs out, and `Read(pointer, size)` returns `false` then. So a newer release of your plugin can add data at the end and still load the saves of an older one.
+
+### Saves and your plugin's releases
+
+- While your plugin is off, or the player has unchecked it, Bazaar keeps its data in each save unchanged, and its values too, except those of units and cities that are gone. Turning it off for a while loses nothing.
+- If a release renames a value or changes its type, the old value stays in saves, but your plugin no longer sees it: the new one starts from its starting value.
+- If a release can no longer read the saves of an older one, raise `<MinCompatibleSaveVersion>` in the `.civ5proj` to the oldest mod version whose saves it can read, so the game knows which saves it can load.
+
 ## Using VMC's events and options
 
 Bazaar includes whoward69's Various Mod Components (VMC), another mod that brings its own version of the game's code. The game can use only one such version, so VMC could not be on alongside Bazaar. Built in, its extra Lua events, Lua functions and options keep working, and so do mods made for VMC. It also means that a change that only needs one of VMC's events can be a plain Lua mod, with no plugin at all.
@@ -426,7 +520,7 @@ Make each release with `release.cmd`, in your plugin's folder. Besides what buil
 
 The template marks the mod as affecting saved games (`<AffectsSavedGames>` in the `.civ5proj`). Keep it that way. A save lists the mods marked this way, and when someone loads it, the game applies the database changes of those mods only. Your plugin's SQL is a database change, so without the mark, a loaded save would have no `DllPlugins` row for your DLL and Bazaar would not load your plugin. Mods that change nothing in the database, such as ones that only add keyboard shortcuts, are not affected and can be added or removed freely. `release.cmd` refuses a release without it, and Bazaar refuses to load a plugin whose mod lacks it, even in a new game, so the problem shows at once.
 
-Bazaar itself does not keep anything in saved games for plugins.
+To keep your plugin's own data in saved games, see [Keeping data in saved games](#keeping-data-in-saved-games).
 
 ## Advanced
 
@@ -494,6 +588,7 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 - **Replacement**: a hook that runs instead of the game's function. Only one plugin can replace a given function.
 - **`result`**: a reference to the game's function's return value, passed last to before-hooks and after-hooks.
 - **`self`**: the object a method was called on (C++'s `this`), passed first to a hook, or after `original` in a replacement.
+- **Value**: a named piece of data that a plugin declares on every player, city, unit or plot, and that Bazaar keeps in saved games.
 - **Veto**: what a before-hook does by returning `true`: the game's function does not run.
 - **VMC**: whoward69's Various Mod Components, which Bazaar includes: extra Lua events, Lua functions and options.
 
@@ -515,6 +610,13 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 | `struct N { enum { ID = 5 }; ... };` | a struct `N` holding an enum with one constant, `ID`, whose value is 5, and the declarations in place of `...` |
 | `F<A>(x)` | a call to the template function `F`, with `A` in angle brackets choosing what it works on: `CivRegisterAfter<CivHooks::CvPlayer_GetScore>(host, &AfterScore)` registers an after-hook on that hook point |
 | `T< A >::Type` | the type `Type` that the template `T` gives for `A` |
+| `C<A, B> name;` | a variable `name` of the class that the template `C` gives for `A` and `B`: `CivValue<CvPlayer, int> s_turnsStarted;` is a value of type `int` on every player |
+| `a \| b` | the flags `a` and `b` together |
+| `++x` | adds 1 to `x` |
+| `!x` | not `x`: `true` when `x` is `false` |
+| `static T name;` outside any function | a variable private to that `.cpp` file, which keeps its value for as long as the DLL is loaded |
+| `T name(a, b);` | makes an object `name` of the class `T`, handing `a` and `b` to its constructor |
+| `void*` | a pointer to anything; `const void*` is one through which nothing can be changed |
 | a signature ending in `;` | a declaration: it names the function and its parameters but has no body. The function still needs its `{ ... }` body |
 | `const` after a method | the method does not modify its object |
 | `static` on a method | the method belongs to the class, not to an object, so it has no `self` |
