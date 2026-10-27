@@ -297,7 +297,7 @@ void TestValuesOfRefusedPlugins()
 	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
 	files.push_back(CivPluginFile(OutFile(kSave), kValuesMod));
 	Start(files);
-	Check(HasStatus(kValues, CIV_PLUGIN_LOADED) && HasStatus(kSave, CIV_PLUGIN_SAVE_ID_TAKEN),
+	Check(HasStatus(kValues, CIV_PLUGIN_LOADED) && HasStatus(kSave, CIV_PLUGIN_ID_TAKEN),
 		"a plugin that keeps data is refused when one higher in the list, with values, comes from the same mod with the same "
 		"plugin ID");
 
@@ -305,7 +305,7 @@ void TestValuesOfRefusedPlugins()
 	files.push_back(CivPluginFile(OutFile(kSave), kValuesMod));
 	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
 	Start(files);
-	Check(HasStatus(kSave, CIV_PLUGIN_LOADED) && HasStatus(kValues, CIV_PLUGIN_SAVE_ID_TAKEN),
+	Check(HasStatus(kSave, CIV_PLUGIN_LOADED) && HasStatus(kValues, CIV_PLUGIN_ID_TAKEN),
 		"a plugin with values is refused when one higher in the list that keeps data comes from the same mod with the same "
 		"plugin ID");
 

@@ -1,4 +1,5 @@
 #include "CivHostCrash.h"
+#include "CivHostFunctions.h"
 #include "CivHostHooks.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
@@ -428,6 +429,53 @@ namespace
 		return s_saving ? reinterpret_cast<void*>(static_cast<UINT_PTR>(s_saveToken)) : 0;
 	}
 
+	int PublishFunction(int plugin, const char* name, const char* signature, void* fn)
+	{
+		std::string problem;
+		int result = CIV_HOOK_BAD_ID;
+		if (!InEntryOf(plugin))
+		{
+			problem = "it was published outside the plugin's entry function";
+			result = CIV_HOOK_NOT_ALLOWED;
+		}
+		else if (CivFunctionsPublish(plugin, name, signature, fn, &problem))
+		{
+			return CIV_HOOK_OK;
+		}
+		Log("Plugin %s: its function %s was refused because %s.", DisplayName(plugin), name ? name : "", problem.c_str());
+		return result;
+	}
+
+	struct FunctionCall
+	{
+		CivFunctionRunner run;
+		void* fn;
+		void* args;
+	};
+
+	void FunctionCallThunk(void* p)
+	{
+		FunctionCall& c = *static_cast<FunctionCall*>(p);
+		c.run(c.fn, c.args);
+	}
+
+	// Plugins unload bottom-up without being turned off, so a shutdown function could reach one already freed but for
+	// the module check; a plugin kept in memory calls with index -1 and numbers from before a reload.
+	bool CallFunction(int plugin, int function, CivFunctionRunner run, void* args)
+	{
+		int owner = -1;
+		void* fn = 0;
+		if (!run || !Alive(plugin) || !CivFunctionsGet(function, &owner, &fn) || !Alive(owner) || !s_plugins[owner].module)
+			return false;
+		FunctionCall c = { run, fn, args };
+		unsigned int code = 0;
+		if (GuardedCall(&FunctionCallThunk, &c, &code))
+			return true;
+		Quarantine(owner, false, Format("its function %s, which %s called", CivFunctionsName(function), DisplayName(plugin)).c_str(),
+			&code);
+		return false;
+	}
+
 	int DeclareValue(int plugin, int kind, int type, const char* name, int flags, const void* start)
 	{
 		std::string problem;
@@ -444,6 +492,7 @@ namespace
 	void CommitPending(int plugin)
 	{
 		CivValuesCommitPending(s_plugins[plugin].modId, s_plugins[plugin].pluginId);
+		CivFunctionsCommitPending(s_plugins[plugin].modId, s_plugins[plugin].pluginId);
 		s_plugins[plugin].saveFn = s_pendingSave;
 		s_plugins[plugin].loadFn = s_pendingLoad;
 		s_pendingSave = 0;
@@ -487,6 +536,7 @@ namespace
 		s_pendingSave = 0;
 		s_pendingLoad = 0;
 		CivValuesDiscardPending();
+		CivFunctionsDiscardPending();
 	}
 
 	void PluginLog(int plugin, const char* message)
@@ -737,20 +787,31 @@ namespace
 		Log("Plugin %s: %s", rec.name.c_str(), problem.c_str());
 	}
 
-	bool RefusedForSaveKey(int plugin)
+	bool RefusedForTakenId(int plugin)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
-		if (!s_pendingSave && !CivValuesPending())
+		const bool keepsData = s_pendingSave || CivValuesPending();
+		const bool publishes = CivFunctionsPending();
+		if (!keepsData && !publishes)
 			return false;
+		const std::string id = rec.pluginId.empty() ? "no plugin ID" : "the plugin ID \"" + rec.pluginId + "\"";
 		for (int i = 0; i < plugin; ++i)
 		{
 			const CivPluginRecord& other = s_plugins[i];
-			if ((!other.saveFn && !CivValuesDeclaredBy(i)) || !CivSameSaveKey(other, rec.modId, rec.pluginId))
+			if (!CivSameSaveKey(other, rec.modId, rec.pluginId))
 				continue;
-			const std::string id = rec.pluginId.empty() ? "no plugin ID" : "the plugin ID \"" + rec.pluginId + "\"";
-			Refuse(rec, CIV_PLUGIN_SAVE_ID_TAKEN, Format("%s, higher in the list, comes from the same mod and keeps its data in saves with %s too, so this plugin was not loaded, or their data would mix. Each plugin of a mod that keeps data in saves needs a plugin ID of its own; ask the plugin's author to fix this.",
-				other.name.c_str(), id.c_str()));
-			return true;
+			if (keepsData && (other.saveFn || CivValuesDeclaredBy(i)))
+			{
+				Refuse(rec, CIV_PLUGIN_ID_TAKEN, Format("%s, higher in the list, comes from the same mod and keeps its data in saves with %s too, so this plugin was not loaded, or their data would mix. Each plugin of a mod that keeps data in saves needs a plugin ID of its own; ask the plugin's author to fix this.",
+					other.name.c_str(), id.c_str()));
+				return true;
+			}
+			if (publishes && CivFunctionsPublishedBy(i))
+			{
+				Refuse(rec, CIV_PLUGIN_ID_TAKEN, Format("%s, higher in the list, comes from the same mod and publishes functions with %s too, so this plugin was not loaded. Each plugin of a mod that publishes functions needs a plugin ID of its own, so that other plugins can tell whose functions they find; ask the plugin's author to fix this.",
+					other.name.c_str(), id.c_str()));
+				return true;
+			}
 		}
 		return false;
 	}
@@ -928,6 +989,9 @@ namespace
 		host->SetDoubleValue = &CivSetDoubleValue;
 		host->GetTextValue = &CivGetTextValue;
 		host->SetTextValue = &CivSetTextValue;
+		host->PublishFunction = &PublishFunction;
+		host->FindFunction = &CivFunctionsFind;
+		host->CallFunction = &CallFunction;
 		return host;
 	}
 
@@ -993,7 +1057,7 @@ namespace
 	void KeepOrTurnAway(int plugin)
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
-		if (RefusedForSaveKey(plugin))
+		if (RefusedForTakenId(plugin))
 		{
 			DiscardPending();
 			Unload(plugin);
@@ -1353,5 +1417,6 @@ bool CivHostUnloadPlugins()
 	s_useBoth.clear();
 	s_strayWriteLogged = false;
 	CivValuesForgetAll();
+	CivFunctionsForgetAll();
 	return true;
 }

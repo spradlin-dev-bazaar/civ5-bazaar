@@ -48,6 +48,12 @@ void TestValuesOfResetPlayers();
 void TestValuesOfRefusedPlugins();
 void TestCarriedValuesAndReplacements();
 void TestCapturedFrom();
+void TestPublishedFunctions();
+void TestFunctionCrashes();
+void TestFunctionLoadOrder();
+void TestFunctionsOfRefusedPlugins();
+void TestFunctionsWhenUnloading();
+void TestFunctionsOfKeptPlugins();
 void TestSavedValues();
 void TestValuesOfPluginsThatAreOff();
 void TestValuesOfGoneObjects();
@@ -124,6 +130,12 @@ namespace
 		{"values of refused plugins", &TestValuesOfRefusedPlugins},
 		{"carried values and replacements", &TestCarriedValuesAndReplacements},
 		{"captured units", &TestCapturedFrom},
+		{"published functions", &TestPublishedFunctions},
+		{"function crashes", &TestFunctionCrashes},
+		{"function load order", &TestFunctionLoadOrder},
+		{"functions of refused plugins", &TestFunctionsOfRefusedPlugins},
+		{"functions when unloading", &TestFunctionsWhenUnloading},
+		{"functions of kept plugins", &TestFunctionsOfKeptPlugins},
 		{"saved values", &TestSavedValues},
 		{"values of plugins that are off", &TestValuesOfPluginsThatAreOff},
 		{"values of gone objects", &TestValuesOfGoneObjects},

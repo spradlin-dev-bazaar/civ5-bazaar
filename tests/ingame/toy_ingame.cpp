@@ -42,10 +42,21 @@ static void LogRegistered(int result, const char* what)
 
 #if defined(TOY_GOLD)
 
+static CivFunction<int ()> s_turnsPlayed;
+
+// Found each turn, since Toy Saves may be listed below Toy Gold and so not loaded yet when Toy Gold's entry runs.
 static bool BeforeDoTurn(CvPlayer* self)
 {
-	if (self->isHuman())
-		Log("turn starting for %s with %d gold", self->getCivilizationShortDescription(), self->GetTreasury()->GetGold());
+	if (!self->isHuman())
+		return false;
+	Log("turn starting for %s with %d gold", self->getCivilizationShortDescription(), self->GetTreasury()->GetGold());
+	if (s_turnsPlayed.Find(s_host, "b012c631-4178-4d68-99af-7c2fcf5d3701", "", "TurnsPlayed"))
+	{
+		bool called = false;
+		const int turns = s_turnsPlayed.Call(&called);
+		if (called)
+			Log("Toy Saves' TurnsPlayed says %d", turns);
+	}
 	return false;
 }
 
@@ -302,6 +313,11 @@ static void CityReplaced(int oldOwner, int oldCity, CvCity* newCity)
 		newCity->getName().c_str(), newCity->GetID(), newCity->getOwner(), s_founder.Get(newCity).c_str());
 }
 
+static int TurnsPlayed()
+{
+	return s_turns;
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
@@ -314,6 +330,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 		&& s_founder.Declare(host, "Founder", "", CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER)
 		&& s_big.Declare(host, "Big", 0, CIV_VALUE_PUBLISHED) && s_mark.Declare(host, "Mark", 0.0, CIV_VALUE_PUBLISHED);
 	Log("declared values: %s", declared ? "ok" : "refused");
+	LogRegistered(CivPublishFunction(host, "TurnsPlayed", &TurnsPlayed), "function TurnsPlayed");
 	return true;
 }
 

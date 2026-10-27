@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <string>
+#include <typeinfo>
 
 class CvCity;
 class CvPlayer;
@@ -32,7 +33,7 @@ enum CivHookKind
 enum CivHookRegisterResult
 {
 	CIV_HOOK_OK = 0,
-	CIV_HOOK_BAD_ID = 1, // an unknown hook id, or no function given
+	CIV_HOOK_BAD_ID = 1, // an unknown hook id, no function given, or a published function's name missing or taken
 	CIV_HOOK_BAD_KIND = 2,
 	CIV_HOOK_REPLACE_TAKEN = 3,
 	CIV_HOOK_NOT_ALLOWED = 4,
@@ -118,6 +119,7 @@ typedef int (*CivLuaFunction)(lua_State* L);
 
 typedef void (*CivSaveDataFn)(void* saving);
 typedef void (*CivLoadDataFn)(const void* data, int size);
+typedef void (*CivFunctionRunner)(void* fn, void* args);
 
 struct CivHostInfo
 {
@@ -154,6 +156,18 @@ struct CivHostInfo
 	// Copies the text, cut short to fit, and gives back its full length, so a second call with a bigger buffer gets it all.
 	int (*GetTextValue)(int pluginIndex, int value, const void* object, char* buffer, int size);
 	bool (*SetTextValue)(int pluginIndex, int value, const void* object, const char* text);
+	// Only from CivPluginEntry, with a name no other function this plugin publishes has; otherwise CIV_HOOK_NOT_ALLOWED or
+	// CIV_HOOK_BAD_ID, and Bazaar.log says why. Lets other plugins call fn; signature names its type, so a plugin that
+	// looks it up as a type of another name finds nothing. CivPublishFunction below does this for you.
+	int (*PublishFunction)(int pluginIndex, const char* name, const char* signature, void* fn);
+	// Another plugin's published function, or -1 when it has none of that name and signature. While plugins load, only
+	// the functions of the plugins loaded before this one can be found.
+	int (*FindFunction)(int pluginIndex, const char* modId, const char* pluginId, const char* name, const char* signature);
+	// Runs run(fn, args) inside Bazaar's crash guard, fn being the published function. False when function is -1, either
+	// plugin is off or unloaded, or it crashed; a crash turns off the plugin whose function it is, not the caller. Plugins
+	// unload from the bottom of the list up, so a shutdown function cannot call the plugins below it. The CivFunction
+	// class below does this for you.
+	bool (*CallFunction)(int pluginIndex, int function, CivFunctionRunner run, void* args);
 };
 
 // The result parameter of a before-hook or after-hook on a function returning R: a reference to the value the caller
@@ -183,8 +197,9 @@ struct CivPluginInfo
 {
 	const char* name;
 	const char* version;
-	// Optional. Bazaar keeps a plugin's data in saves under its mod's ID and this id, so a mod with more than one plugin
-	// gives each its own. Changing it, or the mod's ID, loses the data in existing saves.
+	// Optional. Bazaar keeps a plugin's data in saves under its mod's ID and this id, and other plugins find its values
+	// and functions by both, so a mod with more than one plugin gives each its own. Changing it, or the mod's ID, loses
+	// the data in existing saves.
 	const char* id;
 };
 
@@ -343,6 +358,162 @@ public:
 private:
 	const CivHostInfo* m_host;
 	int m_value;
+};
+
+template<class F> int CivPublishFunction(const CivHostInfo* host, const char* name, F* fn)
+{
+	return host->PublishFunction(host->pluginIndex, name, typeid(F).name(), (void*)fn);
+}
+
+template<class R> struct CivFunctionResult
+{
+	CivFunctionResult() : value() {}
+	R Get() const { return value; }
+	template<class F, class A> void Run0(F f, A&) { value = f(); }
+	template<class F, class A> void Run1(F f, A& a) { value = f(a.a1); }
+	template<class F, class A> void Run2(F f, A& a) { value = f(a.a1, a.a2); }
+	template<class F, class A> void Run3(F f, A& a) { value = f(a.a1, a.a2, a.a3); }
+	template<class F, class A> void Run4(F f, A& a) { value = f(a.a1, a.a2, a.a3, a.a4); }
+
+	R value;
+};
+template<> struct CivFunctionResult<void>
+{
+	void Get() const {}
+	template<class F, class A> void Run0(F f, A&) { f(); }
+	template<class F, class A> void Run1(F f, A& a) { f(a.a1); }
+	template<class F, class A> void Run2(F f, A& a) { f(a.a1, a.a2); }
+	template<class F, class A> void Run3(F f, A& a) { f(a.a1, a.a2, a.a3); }
+	template<class F, class A> void Run4(F f, A& a) { f(a.a1, a.a2, a.a3, a.a4); }
+};
+
+template<class F> class CivFunctionBase
+{
+public:
+	CivFunctionBase() : m_host(0), m_function(-1) {}
+
+	bool Find(const CivHostInfo* host, const char* modId, const char* pluginId, const char* name)
+	{
+		m_host = host;
+		m_function = host->FindFunction(host->pluginIndex, modId, pluginId, name, typeid(F).name());
+		return m_function >= 0;
+	}
+
+protected:
+	void Invoke(CivFunctionRunner run, void* args, bool* called) const
+	{
+		const bool ran = m_host && m_host->CallFunction(m_host->pluginIndex, m_function, run, args);
+		if (called)
+			*called = ran;
+	}
+
+private:
+	const CivHostInfo* m_host;
+	int m_function;
+};
+
+// Another plugin's published function with up to four parameters, such as CivFunction<int (int)>: Find it, then Call
+// it. Types match by name, so both plugins must share the definition of any type of their own. A call that could not
+// run returns the result type's default, and sets called to false when given.
+template<class F> class CivFunction;
+
+template<class R> class CivFunction<R()> : public CivFunctionBase<R()>
+{
+	struct Args
+	{
+		CivFunctionResult<R> result;
+	};
+	static void Run(void* fn, void* p) { Args& a = *static_cast<Args*>(p); a.result.Run0(reinterpret_cast<R (*)()>(fn), a); }
+
+public:
+	R Call(bool* called = 0) const
+	{
+		Args a;
+		this->Invoke(&Run, &a, called);
+		return a.result.Get();
+	}
+};
+
+template<class R, class A1> class CivFunction<R(A1)> : public CivFunctionBase<R(A1)>
+{
+	struct Args
+	{
+		Args(A1 v1) : a1(v1) {}
+		A1 a1;
+		CivFunctionResult<R> result;
+	};
+	static void Run(void* fn, void* p) { Args& a = *static_cast<Args*>(p); a.result.Run1(reinterpret_cast<R (*)(A1)>(fn), a); }
+
+public:
+	R Call(A1 a1, bool* called = 0) const
+	{
+		Args a(a1);
+		this->Invoke(&Run, &a, called);
+		return a.result.Get();
+	}
+};
+
+template<class R, class A1, class A2> class CivFunction<R(A1, A2)> : public CivFunctionBase<R(A1, A2)>
+{
+	struct Args
+	{
+		Args(A1 v1, A2 v2) : a1(v1), a2(v2) {}
+		A1 a1;
+		A2 a2;
+		CivFunctionResult<R> result;
+	};
+	static void Run(void* fn, void* p) { Args& a = *static_cast<Args*>(p); a.result.Run2(reinterpret_cast<R (*)(A1, A2)>(fn), a); }
+
+public:
+	R Call(A1 a1, A2 a2, bool* called = 0) const
+	{
+		Args a(a1, a2);
+		this->Invoke(&Run, &a, called);
+		return a.result.Get();
+	}
+};
+
+template<class R, class A1, class A2, class A3> class CivFunction<R(A1, A2, A3)> : public CivFunctionBase<R(A1, A2, A3)>
+{
+	struct Args
+	{
+		Args(A1 v1, A2 v2, A3 v3) : a1(v1), a2(v2), a3(v3) {}
+		A1 a1;
+		A2 a2;
+		A3 a3;
+		CivFunctionResult<R> result;
+	};
+	static void Run(void* fn, void* p) { Args& a = *static_cast<Args*>(p); a.result.Run3(reinterpret_cast<R (*)(A1, A2, A3)>(fn), a); }
+
+public:
+	R Call(A1 a1, A2 a2, A3 a3, bool* called = 0) const
+	{
+		Args a(a1, a2, a3);
+		this->Invoke(&Run, &a, called);
+		return a.result.Get();
+	}
+};
+
+template<class R, class A1, class A2, class A3, class A4> class CivFunction<R(A1, A2, A3, A4)> : public CivFunctionBase<R(A1, A2, A3, A4)>
+{
+	struct Args
+	{
+		Args(A1 v1, A2 v2, A3 v3, A4 v4) : a1(v1), a2(v2), a3(v3), a4(v4) {}
+		A1 a1;
+		A2 a2;
+		A3 a3;
+		A4 a4;
+		CivFunctionResult<R> result;
+	};
+	static void Run(void* fn, void* p) { Args& a = *static_cast<Args*>(p); a.result.Run4(reinterpret_cast<R (*)(A1, A2, A3, A4)>(fn), a); }
+
+public:
+	R Call(A1 a1, A2 a2, A3 a3, A4 a4, bool* called = 0) const
+	{
+		Args a(a1, a2, a3, a4);
+		this->Invoke(&Run, &a, called);
+		return a.result.Get();
+	}
 };
 
 // Never changes, nor does its export name, and holds no pointers: every Bazaar reads it from plugin files of every

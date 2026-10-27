@@ -14417,6 +14417,10 @@ class ?$CLinkList@W4TechTypes@@	size(16):
 12	| m_pTail
 	+---
 
+class ?$CivFunctionResult@X	size(1):
+	+---
+	+---
+
 class ?$CivObjectKindOf@VCvCity@@	size(1):
 	+---
 	+---
@@ -27703,6 +27707,41 @@ class AllocData	size(12):
  8	| nY
 	+---
 
+class Args	size(0):
+	+---
+ 0	| ?$CivFunctionResult@$RR@BAAB@ result
+	+---
+
+class Args	size(0):
+	+---
+ 0	| a1
+ 0	| ?$CivFunctionResult@$RR@BAAB@ result
+	+---
+
+class Args	size(0):
+	+---
+ 0	| a1
+ 0	| a2
+ 0	| ?$CivFunctionResult@$RR@BAAB@ result
+	+---
+
+class Args	size(0):
+	+---
+ 0	| a1
+ 0	| a2
+ 0	| a3
+ 0	| ?$CivFunctionResult@$RR@BAAB@ result
+	+---
+
+class Args	size(0):
+	+---
+ 0	| a1
+ 0	| a2
+ 0	| a3
+ 0	| a4
+ 0	| ?$CivFunctionResult@$RR@BAAB@ result
+	+---
+
 class BinaryIO	size(4):
 	+---
  0	| m_pszFilename
@@ -27767,7 +27806,7 @@ class CivApiVersion	size(8):
  4	| minor
 	+---
 
-class CivHostInfo	size(68):
+class CivHostInfo	size(80):
 	+---
  0	| pluginIndex
  4	| RegisterHook
@@ -27786,6 +27825,9 @@ class CivHostInfo	size(68):
 56	| SetDoubleValue
 60	| GetTextValue
 64	| SetTextValue
+68	| PublishFunction
+72	| FindFunction
+76	| CallFunction
 	+---
 
 class CivPluginInfo	size(12):
@@ -54236,6 +54278,9 @@ types CivHostInfo:
  field SetDoubleValue: bool (*)(int, int, const void *, double)
  field GetTextValue: int (*)(int, int, const void *, char *, int)
  field SetTextValue: bool (*)(int, int, const void *, const char *)
+ field PublishFunction: int (*)(int, const char *, const char *, void *)
+ field FindFunction: int (*)(int, const char *, const char *, const char *, const char *)
+ field CallFunction: bool (*)(int, int, void (*)(void *, void *), void *)
 
 types CivPluginInfo:
  field name: const char *

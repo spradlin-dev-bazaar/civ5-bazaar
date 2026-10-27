@@ -144,7 +144,7 @@ void TestSaveRegistration()
 		"a plugin of the same mod and plugin ID loads when the other keeps no data in saves");
 	const Listed twins[] = {{kSave, "{MOD-A}"}, {kTwin, "{mod-a}"}};
 	StartWithMods(twins);
-	Check(HasStatus(kSave, CIV_PLUGIN_LOADED) && HasStatus(kTwin, CIV_PLUGIN_SAVE_ID_TAKEN)
+	Check(HasStatus(kSave, CIV_PLUGIN_LOADED) && HasStatus(kTwin, CIV_PLUGIN_ID_TAKEN)
 		&& ReportRow(kTwin).problems.find("Toy Save, higher in the list, comes from the same mod") != std::string::npos,
 		"a second plugin of the same mod with the same plugin ID is not loaded, and the Plugins screen says why");
 	CivHostLoadPart(0);

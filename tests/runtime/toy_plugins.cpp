@@ -57,6 +57,17 @@ TOY_EXPORT ToyReaderKillsFn ToyReaderKills;
 TOY_EXPORT ToyReaderSetKillsFn ToyReaderSetKills;
 TOY_EXPORT ToyReaderMottoFn ToyReaderMotto;
 TOY_EXPORT ToyReaderReadIntFn ToyReaderReadInt;
+TOY_EXPORT ToyValuesPublishedFn ToyValuesPublished;
+TOY_EXPORT ToyValuesPublishLateFn ToyValuesPublishLate;
+TOY_EXPORT ToyReaderFunctionFoundFn ToyReaderFunctionFound;
+TOY_EXPORT ToyReaderFindsFn ToyReaderFinds;
+TOY_EXPORT ToyReaderDoubledFn ToyReaderDoubled;
+TOY_EXPORT ToyReaderDigitsFn ToyReaderDigits;
+TOY_EXPORT ToyReaderGreetFn ToyReaderGreet;
+TOY_EXPORT ToyReaderCrashFn ToyReaderCrash;
+TOY_EXPORT ToyReaderCallUnfoundFn ToyReaderCallUnfound;
+TOY_EXPORT ToyReaderFindDoubledNowFn ToyReaderFindDoubledNow;
+TOY_EXPORT ToyKeptCallerDoubledFn ToyKeptCallerDoubled;
 
 #if defined(TOY_NEWER) || defined(TOY_NEWER_IMPORTS)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR + 1};
@@ -578,6 +589,13 @@ static void AfterAdd(const FakeUnit*, int, int, int& result)
 	result += 500000;
 }
 
+#if defined(TOY_DECLINE)
+static int TimesFive(int n)
+{
+	return n * 5;
+}
+#endif
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
@@ -586,6 +604,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	RegisterHand(CIV_HAND_KEEP_DEAD_SLOT_OPEN, (void*)&SayYes);
 	host->DeclareValue(host->pluginIndex, CIV_ON_UNIT, CIV_VALUE_INT, "Kills", CIV_VALUE_PUBLISHED, 0);
+	CivPublishFunction(host, "Doubled", &TimesFive);
 	return false;
 #else
 	Describe(info, "Toy Late Fault");
@@ -1179,10 +1198,70 @@ TOY_EXPORT unsigned short ToyValuesShort(const void* unit)
 	return s_short.Get(static_cast<const CvUnit*>(unit));
 }
 
+static int Seven()
+{
+	return 7;
+}
+
+static int Doubled(int n)
+{
+	return n * 2;
+}
+
+static int Digits2(int a, int b)
+{
+	return a * 10 + b;
+}
+
+static int Digits3(int a, int b, int c)
+{
+	return a * 100 + b * 10 + c;
+}
+
+static int Digits4(int a, int b, int c, int d)
+{
+	return a * 1000 + b * 100 + c * 10 + d;
+}
+
+static void Greet(const char* who)
+{
+	char line[128];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "hello %s", who);
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+static int Crash(int)
+{
+	volatile int* nowhere = 0;
+	return *nowhere;
+}
+
+static int s_published[3] = {-2, -2, -2};
+
+TOY_EXPORT int ToyValuesPublished(int attempt)
+{
+	return attempt < 3 ? s_published[attempt] : -2;
+}
+
+TOY_EXPORT int ToyValuesPublishLate()
+{
+	return CivPublishFunction(s_host, "Late", &Doubled);
+}
+
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Values");
+	CivPublishFunction(host, "Seven", &Seven);
+	CivPublishFunction(host, "Doubled", &Doubled);
+	CivPublishFunction(host, "Digits2", &Digits2);
+	CivPublishFunction(host, "Digits3", &Digits3);
+	CivPublishFunction(host, "Digits4", &Digits4);
+	CivPublishFunction(host, "Greet", &Greet);
+	CivPublishFunction(host, "Crash", &Crash);
+	s_published[0] = CivPublishFunction(host, "Doubled", &Digits4);
+	s_published[1] = CivPublishFunction(host, "", &Doubled);
+	s_published[2] = host->PublishFunction(host->pluginIndex, "Nothing", "int __cdecl(int)", 0);
 	s_kills.Declare(host, "Kills", 0, CIV_VALUE_PUBLISHED | CIV_VALUE_CARRIES_OVER);
 	s_veteran.Declare(host, "Veteran", false);
 	s_morale.Declare(host, "Morale", 100.0, CIV_VALUE_CARRIES_OVER);
@@ -1208,6 +1287,80 @@ static const char* const kValuesMod = "{VALUES}";
 static CivValue<CvUnit, int> s_kills;
 static CivValue<CvPlayer, std::string> s_motto;
 static int s_found[8] = {-2, -2, -2, -2, -2, -2, -2, -2};
+static CivFunction<int ()> s_seven;
+static CivFunction<int (int)> s_doubled;
+static CivFunction<int (int, int)> s_digits2;
+static CivFunction<int (int, int, int)> s_digits3;
+static CivFunction<int (int, int, int, int)> s_digits4;
+static CivFunction<void (const char*)> s_greet;
+static CivFunction<int (int)> s_crash;
+static CivFunction<int (int)> s_neverFound;
+static int s_foundFunctions[3] = {-2, -2, -2};
+
+// Compiles the forms no test calls, so a mistake in CivPluginApi.h shows here before a plugin author meets it.
+template class CivFunction<void ()>;
+template class CivFunction<void (int, int)>;
+template class CivFunction<void (int, int, int)>;
+template class CivFunction<void (int, int, int, int)>;
+
+TOY_EXPORT int ToyReaderFunctionFound(int attempt)
+{
+	return attempt < 3 ? s_foundFunctions[attempt] : -2;
+}
+
+TOY_EXPORT bool ToyReaderFinds(const char* modId, const char* pluginId, const char* name)
+{
+	CivFunction<int (int)> function;
+	return function.Find(s_host, modId, pluginId, name);
+}
+
+TOY_EXPORT int ToyReaderDoubled(int n, bool* called)
+{
+	return s_doubled.Call(n, called);
+}
+
+TOY_EXPORT int ToyReaderDigits(int count)
+{
+	switch (count)
+	{
+	case 0:
+		return s_seven.Call();
+	case 2:
+		return s_digits2.Call(1, 2);
+	case 3:
+		return s_digits3.Call(1, 2, 3);
+	case 4:
+		return s_digits4.Call(1, 2, 3, 4);
+	}
+	return -2;
+}
+
+TOY_EXPORT void ToyReaderGreet(const char* who)
+{
+	s_greet.Call(who);
+}
+
+TOY_EXPORT int ToyReaderCrash(bool* called)
+{
+	return s_crash.Call(1, called);
+}
+
+TOY_EXPORT int ToyReaderCallUnfound(bool* called)
+{
+	return s_neverFound.Call(1, called);
+}
+
+TOY_EXPORT bool ToyReaderFindDoubledNow()
+{
+	return s_doubled.Find(s_host, kValuesMod, "", "Doubled");
+}
+
+static void CallDoubledOnShutdown()
+{
+	bool called = false;
+	s_doubled.Call(1, &called);
+	s_host->Log(s_host->pluginIndex, called ? "Doubled ran while shutting down" : "Doubled did not run while shutting down");
+}
 
 TOY_EXPORT int ToyReaderFound(int attempt)
 {
@@ -1238,6 +1391,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 	Describe(info, "Toy Reader");
+	s_ownShutdown = &CallDoubledOnShutdown;
 	s_found[0] = s_kills.Find(host, kValuesMod, "", "Kills") ? 1 : 0;
 	s_found[1] = s_motto.Find(host, kValuesMod, "", "Motto") ? 1 : 0;
 	CivValue<CvCity, double> morale;
@@ -1251,6 +1405,47 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	CivValue<CvUnit, int> otherPlugin;
 	s_found[6] = otherPlugin.Find(host, kValuesMod, "OTHER", "Kills") ? 1 : 0;
 	s_found[7] = otherPlugin.Find(host, "{OTHER}", "", "Kills") ? 1 : 0;
+	const bool all = s_seven.Find(host, kValuesMod, "", "Seven") && s_doubled.Find(host, kValuesMod, "", "Doubled")
+		&& s_digits2.Find(host, kValuesMod, "", "Digits2") && s_digits3.Find(host, kValuesMod, "", "Digits3")
+		&& s_digits4.Find(host, kValuesMod, "", "Digits4") && s_greet.Find(host, kValuesMod, "", "Greet")
+		&& s_crash.Find(host, kValuesMod, "", "Crash");
+	s_foundFunctions[0] = all ? 1 : 0;
+	CivFunction<long (int)> otherType;
+	s_foundFunctions[1] = otherType.Find(host, kValuesMod, "", "Doubled") ? 1 : 0;
+	CivFunction<int (int)> missing;
+	s_foundFunctions[2] = missing.Find(host, kValuesMod, "", "Missing") ? 1 : 0;
+	return true;
+}
+
+#elif defined(TOY_KEPT_CALLER)
+
+static CivFunction<int (int)> s_doubled;
+
+TOY_EXPORT int ToyKeptCallerDoubled(bool* called)
+{
+	return s_doubled.Call(21, called);
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Kept Caller");
+	s_doubled.Find(host, "{VALUES}", "", "Doubled");
+	return true;
+}
+
+#elif defined(TOY_FUNCTION_TWIN)
+
+static int Tripled(int n)
+{
+	return n * 3;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Function Twin");
+	CivPublishFunction(host, "Tripled", &Tripled);
 	return true;
 }
 
