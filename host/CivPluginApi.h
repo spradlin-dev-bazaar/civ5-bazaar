@@ -1,6 +1,6 @@
 #pragma once
 
-// The contract between the host and plugin DLLs. From 1.0 on, structures here only grow at the end, except CivApiVersion, which never changes.
+// The contract between the host and plugin DLLs. From 0.5 on, structures here only grow at the end, except CivApiVersion, which never changes.
 
 #ifdef _UNICODE
 #error Set your project's Character Set to Use Multi-Byte Character Set, as Bazaar's is.

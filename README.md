@@ -51,7 +51,7 @@ If VMC's Lua events, or the game's own, do what you need, make a plain Lua mod: 
 - **The developer docs** have a page for each game function plugins can hook. The newest release's docs are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/, and each release has them as `Bazaar-docs-<version>.zip`.
 - **With Claude Code**, add this repository's skills with `/plugin marketplace add spradlin-dev-bazaar/civ5-bazaar`, then `/plugin install civ5-bazaar@civ5-bazaar`. One skill makes DLL plugins, including from an existing DLL mod; the other makes Lua mods from its own template.
 
-A plugin runs only on Bazaar releases with the same major version as the one it was built for (the first number, such as the 1 in 1.2), from that release on: a plugin built for 1.2 runs on 1.5, but not on 1.1 or 2.0. Before 1.0, a new Bazaar may also change what plugins use, and plugins then need rebuilding with its SDK.
+A plugin runs only on Bazaar releases with the same major version as the one it was built for (the first number, such as the 1 in 1.2), from that release on: a plugin built for 1.2 runs on 1.5, but not on 1.1 or 2.0. Releases before 0.5 could also change what plugins use, so Bazaar 0.5 and later refuse a plugin built for one of them until it is rebuilt with a newer SDK.
 
 ## Building and testing
 

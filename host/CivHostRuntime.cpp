@@ -815,6 +815,13 @@ namespace
 				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
 			return true;
 		}
+		if (CivApiRefusedAsBeforeFreeze(CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, built.major, built.minor))
+		{
+			Refuse(rec, CIV_PLUGIN_OTHER_MAJOR, Format("Built for Bazaar API %d.%d, from before %d.%d changed what plugins use, "
+				"so this Bazaar (API %d.%d) cannot run it. Rebuild it with a newer SDK.", built.major, built.minor,
+				CIV_HOST_FREEZE_MAJOR, CIV_HOST_FREEZE_MINOR, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
+			return true;
+		}
 		return false;
 	}
 
@@ -1185,6 +1192,12 @@ const std::vector<CivPluginRecord>& CivHostPlugins()
 void CivHostLogLine(const char* line)
 {
 	Log("%s", line);
+}
+
+bool CivApiRefusedAsBeforeFreeze(int hostMajor, int hostMinor, int builtMajor, int builtMinor)
+{
+	const int freeze = CIV_HOST_FREEZE_MAJOR * 1000 + CIV_HOST_FREEZE_MINOR;
+	return hostMajor * 1000 + hostMinor >= freeze && builtMajor * 1000 + builtMinor < freeze;
 }
 
 const char* CivHostPluginName(int plugin)

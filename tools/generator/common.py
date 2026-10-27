@@ -14,6 +14,10 @@ HOST_DIR = os.path.join(REPO, "host")
 HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
 HOST_DLL = os.path.join(HOST_OUTPUT, "CvGameCore_Expansion2.dll")
 LICENSE = os.path.join(REPO, "LICENSE")
+# From this release on, what plugins use is frozen: removing or changing any of it needs a new major version. Bazaar's
+# loader has its own copy in host/CivHostRuntime.h, which a test keeps equal.
+FREEZE = (0, 5)
+FREEZE_SHOWN = "%d.%d" % FREEZE
 NOTICE = os.path.join(REPO, "NOTICE")
 
 VS2008_INCLUDE = [
@@ -189,3 +193,8 @@ def engine_project():
         "CvGameCoreDLLPCH.h",
         VCPROJ,
     )
+
+
+def frozen(numbers):
+    """Whether a version, as (major, minor) or longer, is at or past the freeze."""
+    return tuple(numbers[:2]) >= FREEZE

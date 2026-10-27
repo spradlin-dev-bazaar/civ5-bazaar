@@ -10,8 +10,8 @@ its own, as a plugin would, apart from the report, whose hook point structs are 
 
 usage: layouts.py            (run by build-hooked.cmd)
        layouts.py --accept   (run by build-hooked.cmd accept-layouts: save the current layouts as the record; a
-                              changed class or enum value is refused unless CIV_HOST_API_MAJOR is 0 while no 1.0
-                              release is tagged, or one more than the last release's major after that)
+                              changed class or enum value is refused unless CIV_HOST_API_MAJOR is the last release's
+                              major while no release from the freeze on is tagged, or one more than it after that)
 """
 
 import difflib
@@ -192,22 +192,23 @@ def compare(recorded, current):
     return lost, new
 
 
-def released_major(tag):
-    """The last release's major version, or None when no release tag is here."""
-    released = re.match(r"v(\d+)", tag or "")
-    return int(released.group(1)) if released else None
+def released_version(tag):
+    """The last release's (major, minor), or None when no release tag is here."""
+    released = re.match(r"v(\d+)(?:\.(\d+))?", tag or "")
+    return (int(released.group(1)), int(released.group(2) or 0)) if released else None
 
 
 def accept_allowed(recorded_version, version, tag):
-    """Before 1.0 a change may be accepted on purpose under a 0.x number. 1.0 freezes the layouts; from then on only the
-    major version after the last release's may change them, as often as needed until it is released. Without a release
-    tag here, a change is allowed only while the record and the number are both still at 0."""
-    released = released_major(tag)
+    """Before the freeze (common.FREEZE) a change may be accepted on purpose under the last release's major number. The
+    freeze fixes the layouts; from then on only the major version after the last release's may change them, as often as
+    needed until it is released. Without a release tag here, a change is allowed only while the record and the number
+    are both before the freeze."""
+    released = released_version(tag)
     if released is None:
-        return version[0] == 0 and recorded_version[0] == 0
-    if released == 0:
-        return version[0] == 0
-    return version[0] == released + 1
+        return not common.frozen(version) and not common.frozen(recorded_version)
+    if not common.frozen(released):
+        return version[0] == released[0]
+    return version[0] == released[0] + 1
 
 
 def shared_names(*reports):
@@ -270,20 +271,23 @@ def last_release_tag():
 def frozen_advice(tag):
     """The way out when a changed class is refused. VERSION must keep agreeing with CivPluginApi.h, so the changed
     number goes back once the record is saved, and release.py prepare --major raises it for the release."""
-    released = released_major(tag)
+    released = released_version(tag)
     if released is None:
         return ["No release tag is here, so the last release is not known: run git fetch --tags, then build again."]
-    if released == 0:
+    if not common.frozen(released):
         return [
-            "1.0 freezes the layouts the 0.x releases left, and no 1.0 release is tagged yet. To change a class or",
-            "enum value before then, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to 0 and run build-hooked.cmd",
+            "%s freezes the layouts the releases before it left, and no %s release is tagged yet. To change a class or"
+            % (common.FREEZE_SHOWN, common.FREEZE_SHOWN),
+            "enum value before then, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to %d and run build-hooked.cmd"
+            % released[0],
             "accept-layouts. Then " + SET_BACK,
             "Rebuild every plugin.",
         ]
     return [
-        "From 1.0 on, a class or enum value can change only in a new major version, which release.py prepare --major",
+        "From %s on, a class or enum value can change only in a new major version, which release.py prepare --major"
+        % common.FREEZE_SHOWN,
         "starts. To accept the change for it, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to %d, one more than the"
-        % (released + 1),
+        % (released[0] + 1),
         "last release's, and run build-hooked.cmd accept-layouts. Then " + SET_BACK,
         "Rebuild every plugin.",
     ]
@@ -293,9 +297,10 @@ def read_record(version):
     if os.path.exists(RECORD):
         with open(RECORD, encoding="cp1252") as f:
             return parse_record(f.read())
-    if version[0] >= 1:
+    if common.frozen(version):
         raise RuntimeError(
-            "%s is missing. From 1.0 on it cannot be made again: restore it from git." % common.shown(RECORD)
+            "%s is missing. From %s on it cannot be made again: restore it from git."
+            % (common.shown(RECORD), common.FREEZE_SHOWN)
         )
     return None, []
 
@@ -345,7 +350,10 @@ def check(project):
         print_lost(lost, recorded, current)
         tag = last_release_tag()
         if not any(now for _, _, now in lost):
-            print("Once no plugin uses what is gone, run build-hooked.cmd accept-layouts. From 1.0 on, the release")
+            print(
+                "Once no plugin uses what is gone, run build-hooked.cmd accept-layouts. From %s on, the release"
+                % common.FREEZE_SHOWN
+            )
             print("without it must be a new major version.")
         elif accept_allowed(recorded_version, version, tag):
             print("To change them on purpose, run build-hooked.cmd accept-layouts, then rebuild every plugin.")

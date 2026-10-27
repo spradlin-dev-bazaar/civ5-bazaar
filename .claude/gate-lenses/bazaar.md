@@ -12,7 +12,7 @@ A plugin compiled against the SDK's headers and linked to Bazaar's exports break
 - the function or signature behind a hook number in `tools/generator/hook-ids.txt`;
 - the name of anything Bazaar exported in a release.
 
-Additions are fine. Before 1.0 a change is allowed when there is no other way, and the finding says every plugin must be rebuilt; from 1.0 on it needs a new major version.
+Additions are fine. Before 0.5 a change is allowed when there is no other way, and the finding says every plugin must be rebuilt; from 0.5 on it needs a new major version.
 
 ## Build settings shared with plugins
 

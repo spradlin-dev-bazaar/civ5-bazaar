@@ -192,13 +192,16 @@ class NumberTest(unittest.TestCase):
     def test_something_added_raises_the_middle_number(self):
         self.assertEqual(release.next_version(version.Version("0.3.2", 4), changes(added=["x"])), ("0.4.0", 5))
 
-    def test_something_removed_before_1_0_raises_the_middle_number(self):
+    def test_something_removed_before_the_freeze_raises_the_middle_number(self):
         self.assertEqual(release.next_version(version.Version("0.3.2", 4), changes(removed=["x"])), ("0.4.0", 5))
+        self.assertEqual(release.next_version(version.Version("0.4.1", 5), changes(removed=["x"])), ("0.5.0", 6))
 
-    def test_something_added_from_1_0_on_raises_the_middle_number(self):
+    def test_something_added_from_the_freeze_on_raises_the_middle_number(self):
+        self.assertEqual(release.next_version(version.Version("0.5.0", 6), changes(added=["x"])), ("0.6.0", 7))
         self.assertEqual(release.next_version(version.Version("1.2.3", 9), changes(added=["x"])), ("1.3.0", 10))
 
-    def test_something_removed_from_1_0_on_needs_major(self):
+    def test_something_removed_from_the_freeze_on_needs_major(self):
+        self.assertIsNone(release.next_version(version.Version("0.5.0", 6), changes(removed=["x"])))
         base, diffs = version.Version("1.2.3", 9), changes(removed=["x"])
         self.assertIsNone(release.next_version(base, diffs))
         with (
@@ -409,7 +412,7 @@ class PublishTest(unittest.TestCase):
         self.assertIn("gh is not logged in", message)
         self.assertNotIn("tag", calls)
 
-    def test_a_new_tag_is_made_and_pushed_and_a_0_x_draft_is_a_pre_release(self):
+    def test_a_new_tag_is_made_and_pushed_and_a_draft_before_the_freeze_is_a_pre_release(self):
         message, calls = self.publish()
         self.assertIsNone(message)
         self.assertLess(calls.index("tag"), calls.index("push"))
@@ -418,10 +421,11 @@ class PublishTest(unittest.TestCase):
         self.assertIn("--draft", create)
         self.assertIn("--prerelease", create)
 
-    def test_a_draft_from_1_0_on_is_not_a_pre_release(self):
-        message, _ = self.publish(current=version.Version("1.0.0", 5))
-        self.assertIsNone(message)
-        self.assertNotIn("--prerelease", self.gh_commands[-1])
+    def test_a_draft_from_the_freeze_on_is_not_a_pre_release(self):
+        for current in (version.Version("0.5.0", 5), version.Version("1.0.0", 5)):
+            message, _ = self.publish(current=current)
+            self.assertIsNone(message)
+            self.assertNotIn("--prerelease", self.gh_commands[-1])
 
     def test_a_failed_draft_says_to_delete_one_already_there(self):
         message, calls = self.publish(gh_exit_codes=(0, 1))
