@@ -41,6 +41,8 @@ public:
 #endif
 	void CancelOrders(int reason);
 	bool PlayedByPlugin(int player) const;
+	void TakeCity(int oldOwner, int oldCity);
+	void TakeUnit(int oldOwner, int oldUnit);
 
 private:
 	struct Hidden

@@ -873,6 +873,21 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
+#elif defined(TOY_TAKE_REPLACE)
+
+static void ReplaceTake(void (*)(FakeUnit*, int, int), FakeUnit*, int, int)
+{
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Take Replace");
+	CivRegisterReplace<CivHooks::FakeUnit_TakeCity>(s_host, &ReplaceTake);
+	CivRegisterReplace<CivHooks::FakeUnit_TakeUnit>(s_host, &ReplaceTake);
+	return true;
+}
+
 #elif defined(TOY_OLDER) || defined(TOY_ORDINALS)
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
