@@ -8,7 +8,7 @@
     <ModVersion>1</ModVersion>
     <Stability>Experimental</Stability>
     <Teaser>A minimal plugin for the Bazaar Multi-DLL Mod Loader.</Teaser>
-    <Description>A minimal plugin for the Bazaar Multi-DLL Mod Loader. It writes a line to Logs\Bazaar.log at the start of each of your turns and for each notification, and adds Game.TemplateHello() to Lua.</Description>
+    <Description>A minimal plugin for the Bazaar Multi-DLL Mod Loader. It writes a line to Logs\Bazaar.log at the start of each of your turns and for each notification, adds Game.TemplateHello() to Lua, and keeps two counts in your saved games.</Description>
     <Authors>Your name</Authors>
     <SpecialThanks>
     </SpecialThanks>

@@ -40,6 +40,7 @@ TOYS = [
     ("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
     ("HAND", "ToyHand", "Toy Hand Plugin", "d6d32c6a-5f13-49b5-ab37-505f39e88adc"),
     ("HAND_REPLACE", "ToyHandReplace", "Toy Hand Replace Plugin", "2df335dd-943f-40dd-86a9-241903d92043"),
+    ("SAVES", "ToySaves", "Toy Saves Plugin", "b012c631-4178-4d68-99af-7c2fcf5d3701"),
 ]
 VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
 # Runs after VMC's CustomModOptions.xml has added the row only if the game orders it after VMC's files, because like
