@@ -7,7 +7,7 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 [list]
 [*][b]More than one DLL mod at a time.[/b] Each plugin is an ordinary mod with a DLL inside, from the Workshop or installed by hand. Turn on the ones you want in the Mods menu, as usual.
 [*][b]A Plugins screen.[/b] It shows which plugins loaded, and any that failed or were refused, and lets you change their order or skip one. It opens in place of Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup). Its Continue button then opens the usual Advanced Setup, or another mod's version of it, such as Really Advanced Setup's.
-[*][b]A crashing plugin doesn't end your game.[/b] Bazaar turns that plugin off until you return to the main menu and tells you. The game keeps running.
+[*][b]A crashing plugin doesn't crash the game.[/b] Bazaar catches the crash, names the plugin, and sends you back to the main menu without saving, since the game may be damaged. Load your last save or autosave to play on.
 [*][b]VMC included.[/b] VMC's extra Lua events and options are there for the mods that use them. VMC also changes a few of the game's rules, as it does on its own: for example, the AI's anger at warmongering builds up much faster.
 [/list]
 

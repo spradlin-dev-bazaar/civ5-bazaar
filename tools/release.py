@@ -368,7 +368,7 @@ def write_release_files(current, out, release_marks):
         mods.HOST_ID,
         mods.HOST_TEASER,
         common.HOST_DLL,
-        plugins_screen=True,
+        host_screens=True,
         version=current.mod,
     )
     for folder, name in ((host_folder, names.host), (bootstrap_folder, names.bootstrap)):

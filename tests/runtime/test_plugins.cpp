@@ -205,6 +205,7 @@ void TestQuarantine()
 	const int result = unit.add(2, 3);
 	Check(FaultCount() == before + 2 && !LastFaultWhileShuttingDown(),
 		"faulting before- and after-hooks are both caught and reported as crashes, not as ones while shutting down");
+	Check(CivHostGameMayBeDamaged(), "after a crash in a hook, the game may be damaged");
 	Check(SymGetOptions() == options, "a crash report puts back dbghelp's settings, which the game's own crash handling shares");
 	Check(result == 110, "the other plugins' hooks still run on the same call");
 	Check(IsQuarantined("toy_fault.dll"), "a faulting plugin is quarantined");

@@ -9,8 +9,9 @@
 namespace
 {
 	// Raised when the layout of Bazaar's part changes; the layouts of older saves must still be read.
-	const unsigned int kFormat = 2;
+	const unsigned int kFormat = 3;
 	const unsigned int kFormatWithValues = 2;
+	const unsigned int kFormatWithCrashMark = 3;
 	const char* const kDamaged = "Bazaar's part of this save is damaged, so no plugin gets its saved data.";
 	const char* const kDamagedLater = "Bazaar's part of this save is damaged, so some plugins do not get their saved data.";
 
@@ -44,7 +45,7 @@ namespace
 		s_data.push_back(added);
 	}
 
-	std::string ReadPart(const std::string& part)
+	std::string ReadPart(const std::string& part, bool* savedAfterCrash)
 	{
 		CivPartReader reader(part);
 		unsigned int format = 0;
@@ -64,6 +65,10 @@ namespace
 		}
 		if (format >= kFormatWithValues && !CivValuesLoad(&reader))
 			return kDamagedLater;
+		unsigned int crashed = 0;
+		if (format >= kFormatWithCrashMark && !reader.Number(&crashed))
+			return kDamagedLater;
+		*savedAfterCrash = crashed != 0;
 		return std::string();
 	}
 }
@@ -88,15 +93,19 @@ std::string CivHostSavePart()
 		CivPutText(&part, s_data[i].data);
 	}
 	CivValuesSave(&part);
+	CivPutNumber(&part, CivHostGameMayBeDamaged() ? 1u : 0u);
 	return part;
 }
 
-std::string CivHostLoadPart(const std::string* part)
+std::string CivHostLoadPart(const std::string* part, bool* savedAfterCrash)
 {
 	CivLockHold hold(s_lock);
 	s_data.clear();
 	CivValuesClearGame();
-	const std::string problem = part ? ReadPart(*part) : std::string();
+	bool crashed = false;
+	const std::string problem = part ? ReadPart(*part, &crashed) : std::string();
+	if (savedAfterCrash)
+		*savedAfterCrash = crashed;
 	const std::vector<CivPluginRecord>& plugins = CivHostPlugins();
 	for (size_t i = 0; i < plugins.size(); ++i)
 	{

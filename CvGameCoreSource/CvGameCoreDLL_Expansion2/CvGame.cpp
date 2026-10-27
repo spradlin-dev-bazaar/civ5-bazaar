@@ -890,6 +890,9 @@ void CvGame::regenerateMap()
 
 	GC.GetEngineUserInterface()->setCycleSelectionCounter(1);
 
+#if defined(CIV_HOST_API)
+	if (CivHostSavingAllowed())
+#endif
 	gDLL->AutoSave(true);
 }
 
@@ -1500,6 +1503,9 @@ void CvGame::update()
 
 			if(getTurnSlice() == 0 && !isPaused())
 			{
+#if defined(CIV_HOST_API)
+				if (CivHostSavingAllowed())
+#endif
 				gDLL->AutoSave(true);
 			}
 
@@ -3477,6 +3483,9 @@ void CvGame::doControl(ControlTypes eControl)
 			CvPlayerAI& kActivePlayer = GET_PLAYER(getActivePlayer());
 			if (!isNetworkMultiPlayer() && kActivePlayer.isHuman() && GC.GetPostTurnAutosaves())
 			{
+#if defined(CIV_HOST_API)
+				if (CivHostSavingAllowed())
+#endif
 				gDLL->AutoSave(false, true);
 			}
 
@@ -3556,16 +3565,25 @@ void CvGame::doControl(ControlTypes eControl)
 		break;
 
 	case CONTROL_SAVE_GROUP:
+#if defined(CIV_HOST_API)
+		if (CivHostSavingAllowed())
+#endif
 		gDLL->SaveGame(SAVEGAME_GROUP);
 		break;
 
 	case CONTROL_SAVE_NORMAL:
+#if defined(CIV_HOST_API)
+		if (CivHostSavingAllowed())
+#endif
 		gDLL->SaveGame(SAVEGAME_NORMAL);
 		break;
 
 	case CONTROL_QUICK_SAVE:
 		if(!(isNetworkMultiPlayer()))	// SP only!
 		{
+#if defined(CIV_HOST_API)
+			if (CivHostSavingAllowed())
+#endif
 			gDLL->QuickSave();
 		}
 		break;
@@ -7594,6 +7612,9 @@ void CvGame::doTurn()
 
 	if(getAIAutoPlay())
 	{
+#if defined(CIV_HOST_API)
+		if (CivHostSavingAllowed())
+#endif
 		gDLL->AutoSave(false);
 	}
 
@@ -7766,6 +7787,9 @@ void CvGame::doTurn()
 
 	if(isNetworkMultiPlayer())
 	{//autosave after doing a turn
+#if defined(CIV_HOST_API)
+		if (CivHostSavingAllowed())
+#endif
 		gDLL->AutoSave(false);
 	}
 

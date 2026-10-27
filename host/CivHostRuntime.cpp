@@ -56,6 +56,7 @@ namespace
 	bool* s_originalCalled = 0;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
+	volatile bool s_gameMayBeDamaged = false;
 	CivHostLuaPusher s_luaPusher = 0;
 	unsigned int s_lastSerial = 0;
 
@@ -184,6 +185,8 @@ namespace
 		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", *code, where);
 		Log("Plugin %s: %s", rec.name.c_str(), problem);
 		LogCrash(code);
+		if (!shuttingDown)
+			s_gameMayBeDamaged = true;
 		if (rec.quarantined)
 			return;
 		rec.quarantined = true;
@@ -1300,6 +1303,16 @@ bool CivHostCallLuaFunction(unsigned int serial, CivLuaFunction fn, lua_State* L
 	Quarantine(plugin, false, "a Lua function", &code);
 	_snprintf_s(why, whySize, _TRUNCATE, "%s stopped working in a Lua function and was turned off.", s_plugins[plugin].name.c_str());
 	return false;
+}
+
+bool CivHostGameMayBeDamaged()
+{
+	return s_gameMayBeDamaged;
+}
+
+void CivHostForgetGameDamage()
+{
+	s_gameMayBeDamaged = false;
 }
 
 const std::vector<CivPluginRecord>& CivHostPlugins()

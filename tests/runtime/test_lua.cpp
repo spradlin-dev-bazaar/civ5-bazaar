@@ -97,8 +97,8 @@ void TestLuaFunctions()
 
 	const int faults = FaultCount();
 	Check(Refused(first[kCrash], "stopped working in a Lua function"), "a crash in a plugin's Lua function is caught, and Lua gets an error instead");
-	Check(IsQuarantined("toy_lua.dll") && FaultCount() == faults + 1 && !LastFaultWhileShuttingDown(),
-		"the crash turns the plugin off and is reported as a crash, not one while shutting down");
+	Check(IsQuarantined("toy_lua.dll") && FaultCount() == faults + 1 && !LastFaultWhileShuttingDown() && CivHostGameMayBeDamaged(),
+		"the crash turns the plugin off and is reported as a crash, not one while shutting down, that may damage the game");
 	Check(Refused(first[kTwo], "turned off after a crash"), "once its plugin is off, a Lua function raises a Lua error instead of running");
 
 	Check(CivHostUnloadPlugins(), "after a Lua error jumped through it, the guard no longer counts a plugin call as running");

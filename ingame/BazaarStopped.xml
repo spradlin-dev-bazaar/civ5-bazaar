@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context ColorSet="Beige_Black_Alpha" Font="TwCenMT22" FontStyle="Shadow">
+	<Box Style="BGBlock" />
+	<Grid Padding="50,70" Size="500,300" Anchor="C,C" Style="Grid9DetailFive140" ID="Grid">
+		<Box Style="MenuLeftSideTreatment" />
+		<Box Style="MenuRightSideTreatment" />
+		<Label Anchor="C,T" Offset="0,48" Font="TwCenMT24" FontStyle="Shadow" ColorSet="Beige_Black_Alpha" String="Plugin stopped working" ID="Title" />
+		<Label Anchor="C,T" Offset="0,90" WrapWidth="440" LeadingOffset="-4" Font="TwCenMT20" FontStyle="Shadow" ColorSet="Beige_Black_Alpha" ID="Message" />
+		<GridButton Size="260,36" Anchor="C,B" AnchorSide="I.I" Offset="0,50" Style="BaseButton" String="Return to Main Menu" ID="ReturnButton" />
+	</Grid>
+</Context>

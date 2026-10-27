@@ -42,7 +42,7 @@ def files_in(folder):
 class LayoutTest(unittest.TestCase):
     def test_both_mods_carry_the_license_and_list_it(self):
         with tempfile.TemporaryDirectory() as folder:
-            for mod in lay_out(os.path.join(folder, "MODS"), plugins_screen=True, version=3):
+            for mod in lay_out(os.path.join(folder, "MODS"), host_screens=True, version=3):
                 listed = [f.text for f in modinfo(mod).find("Files")]
                 for name in LICENSE_NAMES:
                     self.assertTrue(os.path.isfile(os.path.join(mod, name)), "%s lacks %s" % (mod, name))
@@ -50,7 +50,7 @@ class LayoutTest(unittest.TestCase):
 
     def test_every_file_is_listed_with_its_checksum(self):
         with tempfile.TemporaryDirectory() as folder:
-            for mod in lay_out(os.path.join(folder, "MODS"), plugins_screen=True):
+            for mod in lay_out(os.path.join(folder, "MODS"), host_screens=True):
                 with self.subTest(mod=os.path.basename(mod)):
                     listed = dict((f.text, f.get("md5")) for f in modinfo(mod).find("Files"))
                     modinfo_name = [n for n in os.listdir(mod) if n.endswith(".modinfo")]
@@ -60,7 +60,7 @@ class LayoutTest(unittest.TestCase):
 
     def test_the_host_mod_takes_the_version_it_is_given(self):
         with tempfile.TemporaryDirectory() as folder:
-            host, bootstrap = lay_out(os.path.join(folder, "MODS"), plugins_screen=True, version=3)
+            host, bootstrap = lay_out(os.path.join(folder, "MODS"), host_screens=True, version=3)
             self.assertEqual(modinfo(host).get("version"), "3")
             self.assertTrue(host.endswith("(v 3)"))
             self.assertEqual(modinfo(bootstrap).get("version"), str(mods.vmc_mod_parts().version))
@@ -82,15 +82,22 @@ class LayoutTest(unittest.TestCase):
             self.assertEqual(imported.get(dll), "1")
             self.assertEqual([u.text for u in root.find("Actions/OnModActivated")], ["DllPlugins.sql"])
 
-    def test_the_plugins_screen_comes_with_its_files_and_reference(self):
-        for plugins_screen in (True, False):
-            with tempfile.TemporaryDirectory() as folder, self.subTest(plugins_screen=plugins_screen):
-                host, _ = lay_out(os.path.join(folder, "MODS"), plugins_screen=plugins_screen)
+    def test_the_host_screens_come_with_their_files_reference_and_entry_point(self):
+        for host_screens in (True, False):
+            with tempfile.TemporaryDirectory() as folder, self.subTest(host_screens=host_screens):
+                host, _ = lay_out(os.path.join(folder, "MODS"), host_screens=host_screens)
                 root = modinfo(host)
                 references = [m.get("id") for m in root.find("References")]
-                screen_files = [f.text for f in root.find("Files") if f.text.startswith("frontend/")]
-                self.assertEqual(mods.RAS_ID in references, plugins_screen)
-                self.assertEqual(bool(screen_files), plugins_screen)
+                files = [f.text for f in root.find("Files")]
+                entries = root.find("EntryPoints")
+                addins = [] if entries is None else [(e.get("type"), e.get("file")) for e in entries]
+                self.assertEqual(mods.RAS_ID in references, host_screens)
+                self.assertEqual(any(f.startswith("frontend/") for f in files), host_screens)
+                self.assertEqual(addins, [mods.STOPPED_POPUP[:2]] if host_screens else [])
+                if host_screens:
+                    for path in ("ingame/BazaarStopped.xml", "ingame/BazaarStopped.lua"):
+                        self.assertIn(path, files)
+                        self.assertTrue(os.path.isfile(os.path.join(host, path)))
 
     def test_the_bootstrap_keeps_vmcs_credits_and_save_setting(self):
         vmc = mods.vmc_mod_parts()
@@ -116,7 +123,7 @@ class WorkshopTextTest(unittest.TestCase):
 class PackTest(unittest.TestCase):
     def test_a_package_is_7z_with_the_mod_files_at_its_top_and_replaces_an_old_one(self):
         with tempfile.TemporaryDirectory() as folder:
-            host, _ = lay_out(os.path.join(folder, "MODS"), plugins_screen=True)
+            host, _ = lay_out(os.path.join(folder, "MODS"), host_screens=True)
             package = os.path.join(folder, "host.civ5mod")
             with open(package, "wb") as f:
                 f.write(b"an old package")

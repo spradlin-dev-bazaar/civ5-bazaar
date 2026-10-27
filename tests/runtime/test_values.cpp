@@ -488,7 +488,8 @@ void TestDamagedValues()
 	Thing unit = {1, 8193};
 	TOY_FUNCTION(kValues, ToyValuesSetKills)(&unit, 4);
 	const std::string part = CivHostSavePart();
-	const std::string cut = part.substr(0, part.size() - 2);
+	// The crash mark follows the values, so the cut skips it.
+	const std::string cut = part.substr(0, part.size() - sizeof(unsigned int) - 2);
 	Check(CivHostLoadPart(&cut).find("some plugins") != std::string::npos, "a part whose values are cut short is reported as damaged");
 
 	// The format before values were saved, with no plugin data: its number and a count of 0.

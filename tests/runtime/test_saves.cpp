@@ -266,12 +266,48 @@ void TestDamagedSaves()
 	CivHostLoadPart(&emptyEntry);
 	Check(!HadData(kSave) && Value(kSave) == 0, "a plugin whose saved data is empty is told there is none");
 
-	// The format before values, which the in-game probe build wrote: the same entries, without the count of values.
+	// The format before values, which the in-game probe build wrote: the same entries, without the count of values or
+	// the crash mark after it.
 	std::string older = all;
 	older[0] = 1;
-	older.resize(older.size() - sizeof(unsigned int));
+	older.resize(older.size() - 2 * sizeof(unsigned int));
 	SetAll(0, 0, 0);
 	Check(CivHostLoadPart(&older).empty() && Values(1, 2, 3), "a part in the format before values loads, with every plugin's data");
+	CivHostLoadPart(0);
+}
+
+void TestSavesAfterACrash()
+{
+	StartWithMods(kOne);
+	const std::string before = CivHostSavePart();
+	bool marked = true;
+	Check(!CivHostGameMayBeDamaged() && CivHostLoadPart(&before, &marked).empty() && !marked, "a game saved before any crash is not marked");
+
+	CrashNext(kSave, 2);
+	CivHostLoadPart(&before);
+	Check(IsQuarantined(kSave) && CivHostGameMayBeDamaged(), "after a plugin's crash, the game may be damaged");
+	const std::string after = CivHostSavePart();
+	marked = false;
+	Check(CivHostLoadPart(&after, &marked).empty() && marked, "a game saved after a crash is marked, and loading it says so");
+	const std::string cutMark = after.substr(0, after.size() - 2);
+	Check(CivHostLoadPart(&cutMark).find("some plugins") != std::string::npos, "a part whose mark is cut short is reported as damaged");
+
+	CivHostUnloadPlugins();
+	Check(CivHostGameMayBeDamaged(), "reloading the plugins on the Plugins screen does not end it");
+	CivHostForgetGameDamage();
+	Check(!CivHostGameMayBeDamaged(), "going back to the main menu ends it");
+
+	StartWithMods(kOne);
+	CrashNext(kSave, 1);
+	marked = false;
+	const std::string crashedWhileSaving = CivHostSavePart();
+	Check(CivHostLoadPart(&crashedWhileSaving, &marked).empty() && marked, "a crash in a save function marks the save being written");
+	// The format before the mark: the same part, without its last number.
+	std::string formatTwo = after;
+	formatTwo[0] = 2;
+	formatTwo.resize(formatTwo.size() - sizeof(unsigned int));
+	marked = true;
+	Check(CivHostLoadPart(&formatTwo, &marked).empty() && !marked, "a part in the format before the mark loads, unmarked");
 	CivHostLoadPart(0);
 }
 
