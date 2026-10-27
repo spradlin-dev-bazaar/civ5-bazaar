@@ -24,6 +24,7 @@ Civilization V
 - A plugin can be called at certain moments through Bazaar's **hand-placed hooks**: fixed spots inside the game's code, such as the one where a notification is added.
 - A plugin can add functions that Lua code can call.
 - A plugin can keep data in the player's saved games, including values of its own on players, cities, units and plots.
+- A plugin can publish functions for other plugins to call, and call theirs.
 - A plugin can call the game's own functions, and read and change its public data.
 
 For example, to make every player's score count double, you add an after-hook to `CvPlayer::GetScore` that doubles the score it returns. The [full example](#example-double-every-players-score) is further down.
@@ -123,8 +124,8 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 ```
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
-- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)), `host->Log`, and the functions for saved games (see [Keeping data in saved games](#keeping-data-in-saved-games)). (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
-- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version, and a plugin ID if your mod has more than one plugin that keeps data (see [Keeping data in saved games](#keeping-data-in-saved-games)). Bazaar copies them when `CivPluginEntry` returns, so point each at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
+- **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)), `host->Log`, the functions for saved games (see [Keeping data in saved games](#keeping-data-in-saved-games)), and the functions for calling other plugins (see [Calling another plugin's functions](#calling-another-plugins-functions)). (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
+- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version, and a plugin ID if your mod has more than one plugin that keeps data or publishes functions (see [Keeping data in saved games](#keeping-data-in-saved-games)). Bazaar copies them when `CivPluginEntry` returns, so point each at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
 - **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
 - **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration. `CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn)` registers `BeforeDoTurn` as a before-hook on `CvPlayer::doTurn`; [Registering a hook](#registering-a-hook) explains it. Hooks can only be registered from `CivPluginEntry`.
 - **The last three lines** keep the template's data in saved games; [Keeping data in saved games](#keeping-data-in-saved-games) explains them.
@@ -460,6 +461,49 @@ Check(host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData), "save dat
 - If a release renames a value or changes its type, the old value stays in saves, but your plugin no longer sees it: the new one starts from its starting value.
 - If a release can no longer read the saves of an older one, raise `<MinCompatibleSaveVersion>` in the `.civ5proj` to the oldest mod version whose saves it can read, so the game knows which saves it can load.
 
+## Calling another plugin's functions
+
+A plugin can publish some of its functions for other plugins to call through Bazaar. A plugin that works out how close each player is to a victory, for example, can share that, so other plugins need not work it out again. Publish a function in `CivPluginEntry`:
+
+```cpp
+static int TurnsToVictory(int player)
+{
+	return s_turnsToVictory[player];
+}
+
+// in CivPluginEntry:
+CivPublishFunction(host, "TurnsToVictory", &TurnsToVictory);
+```
+
+- **`CivPublishFunction(host, name, &function)`** works only in `CivPluginEntry`, and the name must differ from your plugin's other published functions. It returns 0 when it worked; otherwise `Bazaar.log` says why.
+- The function must be a plain function, not a method of a class, and can have up to four parameters.
+- Other plugins find your functions by your mod's ID and your plugin ID, as they find your values. If your mod has more than one plugin that publishes functions, give each a plugin ID: Bazaar refuses a plugin that publishes functions when one above it in the load order has the same mod ID and plugin ID and publishes functions too.
+
+Another plugin calls it through `CivFunction`:
+
+```cpp
+static CivFunction<int (int)> s_turnsToVictory;
+
+// in CivPluginEntry, or any time later:
+s_turnsToVictory.Find(host, "<the other mod's ID>", "", "TurnsToVictory");
+
+// wherever you need it:
+bool called = false;
+const int turns = s_turnsToVictory.Call(player, &called);
+```
+
+- **`CivFunction<int (int)>`** is another plugin's function that takes an `int` and returns an `int`. In the angle brackets goes the function's type: what it returns, then the types of its parameters in parentheses. `CivFunction<void (int, const char*)>` is one that takes an `int` and a C string and returns nothing.
+- **`Find(host, modId, pluginId, name)`** takes the same arguments as a value's `Find` and follows the same load-order rule: in `CivPluginEntry` it finds only the functions of plugins above yours, and called later it finds them all. It returns `false` when there is no such function. The type must match the published function's exactly, so one published as `int (int)` is not found as `long (int)`.
+- **`Call(arguments, &called)`** runs the function and returns its result. When the function did not run, `Call` returns zero, `false` or a null pointer, and sets `called` to `false`: when `Find` found nothing, when the other plugin is off or already unloaded, or when the function crashed. `&called` is optional.
+
+Keep in mind:
+
+- A crash in a published function counts as a crash of the plugin that published it, even when the caller handed it something bad, such as a pointer to a unit that is gone. See [When something goes wrong](#when-something-goes-wrong).
+- Bazaar tells types apart by their names. A type of your own, such as a struct, matches any type of the same name, so both plugins must build with the same definition of it, such as from a header the publisher shares. If the type changes, publish the function under a new name.
+- If your plugin cannot work without the other one, check what `Find` returns in `CivPluginEntry`, and return `false` when it finds nothing so your plugin is not loaded. That works only when your plugin is below the other on the Plugins screen, so say so in your mod's description. Otherwise check `called`, and carry on without the other plugin's answer.
+- A function runs on the thread of the plugin that calls it. If a plugin calls it from its save function, it runs on the game's save thread, where it must not use Lua.
+- Plugins unload from the bottom of the load order up, so a call from your `CivPluginShutdown` to a plugin below yours does not run.
+
 ## Using VMC's events and options
 
 Bazaar includes whoward69's Various Mod Components (VMC), another mod that brings its own version of the game's code. The game can use only one such version, so VMC could not be on alongside Bazaar. Built in, its extra Lua events, Lua functions and options keep working, and so do mods made for VMC. It also means that a change that only needs one of VMC's events can be a plain Lua mod, with no plugin at all.
@@ -586,6 +630,7 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 - **Load order**: the order of the plugins on the Plugins screen, top first.
 - **`original`**: a replacement's first parameter, a function pointer to the game's own version of the function.
 - **Plugins screen**: the screen Bazaar puts in place of Advanced Setup, where the player orders, skips and reloads plugins.
+- **Published function**: a function a plugin offers for other plugins to call through Bazaar.
 - **Register**: tell Bazaar, in `CivPluginEntry`, which of your functions to call and when.
 - **Replacement**: a hook that runs instead of the game's function. Only one plugin can replace a given function.
 - **`result`**: a reference to the game's function's return value, passed last to before-hooks and after-hooks.
@@ -613,6 +658,7 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 | `F<A>(x)` | a call to the template function `F`, with `A` in angle brackets choosing what it works on: `CivRegisterAfter<CivHooks::CvPlayer_GetScore>(host, &AfterScore)` registers an after-hook on that hook point |
 | `T< A >::Type` | the type `Type` that the template `T` gives for `A` |
 | `C<A, B> name;` | a variable `name` of the class that the template `C` gives for `A` and `B`: `CivValue<CvPlayer, int> s_turnsStarted;` is a value of type `int` on every player |
+| `R (A, B)` in angle brackets | a function type: a function that takes an `A` and a `B` and returns an `R`, as in `CivFunction<int (int)>` |
 | `a \| b` | the flags `a` and `b` together |
 | `++x` | adds 1 to `x` |
 | `!x` | not `x`: `true` when `x` is `false` |

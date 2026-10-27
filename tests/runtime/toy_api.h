@@ -57,3 +57,18 @@ typedef int ToyReaderKillsFn(const void* unit);
 typedef bool ToyReaderSetKillsFn(const void* unit, int kills);
 typedef std::string ToyReaderMottoFn(const void* player);
 typedef int ToyReaderReadIntFn(int value, const void* unit);
+// The results of the functions its entry function tried to publish, in toy_plugins.cpp's order.
+typedef int ToyValuesPublishedFn(int attempt);
+typedef int ToyValuesPublishLateFn();
+// What the reader found of Toy Values' functions, in toy_plugins.cpp's order.
+typedef int ToyReaderFunctionFoundFn(int attempt);
+// Whether a function that takes and returns an int is published under that mod's ID, plugin ID and name.
+typedef bool ToyReaderFindsFn(const char* modId, const char* pluginId, const char* name);
+typedef int ToyReaderDoubledFn(int n, bool* called);
+// Calls Toy Values' function with that many parameters, 0, 2, 3 or 4, handing it 1, 2, 3 and 4 in order.
+typedef int ToyReaderDigitsFn(int count);
+typedef void ToyReaderGreetFn(const char* who);
+typedef int ToyReaderCrashFn(bool* called);
+typedef int ToyReaderCallUnfoundFn(bool* called);
+typedef bool ToyReaderFindDoubledNowFn();
+typedef int ToyKeptCallerDoubledFn(bool* called);
