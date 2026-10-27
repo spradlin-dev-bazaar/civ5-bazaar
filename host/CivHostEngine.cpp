@@ -85,22 +85,23 @@ namespace
 	const char* const kPluginDataNotLoaded = "Plugin data not loaded";
 	const char* const kSaveOverWarning = " If you save over this game, that data is lost for good; save in a new slot to keep the old save as it is.";
 
-	// A damaged length must not crash the load; a part not read in full comes back empty, which counts as damaged.
+	// A damaged length must not crash the load, and the game's stream throws when it runs out. A part not read in full
+	// comes back empty, which counts as damaged; it is the last thing in a save, so nothing after it goes unread.
 	std::string ReadSavePart(FDataStream& stream)
 	{
-		uint size = 0;
-		stream >> size;
 		std::string part;
 		try
 		{
+			uint size = 0;
+			stream >> size;
 			part.resize(size);
+			if (size && stream.ReadIt(size, &part[0]) != size)
+				return std::string();
 		}
-		catch (const std::exception&)
+		catch (...)
 		{
 			return std::string();
 		}
-		if (size && stream.ReadIt(size, &part[0]) != size)
-			return std::string();
 		return part;
 	}
 
