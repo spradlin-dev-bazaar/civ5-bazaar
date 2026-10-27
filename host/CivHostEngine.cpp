@@ -287,19 +287,27 @@ namespace
 		return false;
 	}
 
+	// The game's lists give back whatever is in a slot for a number without its ID part, such as 0, and its map wraps
+	// plot coordinates, so what they find is checked against the numbers asked for.
 	bool ObjectAlive(int kind, int first, int second)
 	{
 		const bool owned = first >= 0 && first < MAX_PLAYERS;
 		switch (static_cast<CivObjectKind>(kind))
 		{
 		case CIV_ON_PLAYER:
-			return owned;
+			return owned && second == 0;
 		case CIV_ON_CITY:
-			return owned && GET_PLAYER((PlayerTypes)first).getCity(second) != NULL;
+		{
+			const CvCity* city = owned ? GET_PLAYER((PlayerTypes)first).getCity(second) : NULL;
+			return city && city->GetID() == second;
+		}
 		case CIV_ON_UNIT:
-			return owned && GET_PLAYER((PlayerTypes)first).getUnit(second) != NULL;
+		{
+			const CvUnit* unit = owned ? GET_PLAYER((PlayerTypes)first).getUnit(second) : NULL;
+			return unit && unit->GetID() == second;
+		}
 		case CIV_ON_PLOT:
-			return GC.getMap().plot(first, second) != NULL;
+			return first >= 0 && first < GC.getMap().getGridWidth() && second >= 0 && second < GC.getMap().getGridHeight();
 		}
 		return false;
 	}

@@ -27,7 +27,7 @@ void CivValuesDropPlayer(int player);
 void CivValuesReplaced(int objectKind, __int64 oldKey, const void* newObject);
 // First drops, from memory too, the values of units and cities that are gone.
 void CivValuesSave(std::string* part);
-// Saved values no loaded plugin declares are kept for the next save. False when the part is damaged.
+// Saved values no loaded plugin declares stay unclaimed and go into the next save. False when the part is damaged.
 bool CivValuesLoad(CivPartReader* reader);
 
 int CivFindValue(int plugin, const char* modId, const char* pluginId, const char* name, int objectKind, int valueType);

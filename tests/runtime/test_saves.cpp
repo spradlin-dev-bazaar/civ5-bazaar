@@ -265,6 +265,13 @@ void TestDamagedSaves()
 	const std::string emptyEntry = OneEntry("{MOD-A}", "");
 	CivHostLoadPart(&emptyEntry);
 	Check(!HadData(kSave) && Value(kSave) == 0, "a plugin whose saved data is empty is told there is none");
+
+	// The format before values, which the in-game probe build wrote: the same entries, without the count of values.
+	std::string older = all;
+	older[0] = 1;
+	older.resize(older.size() - sizeof(unsigned int));
+	SetAll(0, 0, 0);
+	Check(CivHostLoadPart(&older).empty() && Values(1, 2, 3), "a part in the format before values loads, with every plugin's data");
 	CivHostLoadPart(0);
 }
 

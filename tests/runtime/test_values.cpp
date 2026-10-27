@@ -315,6 +315,7 @@ void TestValuesOfRefusedPlugins()
 	Start(files);
 	Check(HasStatus(kReader, CIV_PLUGIN_LOADED) && HasStatus(kValues, CIV_PLUGIN_LOADED),
 		"a plugin with values loads below one from the same mod that keeps no data");
+	Check(TOY_FUNCTION(kReader, ToyReaderFound)(0) == 0, "a plugin cannot find the published values of a plugin below it in the list");
 	Finish();
 }
 

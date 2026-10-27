@@ -301,9 +301,15 @@ namespace
 		}
 	}
 
+	// A plugin kept in memory after a crash has the index -1 too.
+	bool InEntryOf(int plugin)
+	{
+		return s_loadingPlugin >= 0 && plugin == s_loadingPlugin;
+	}
+
 	int RegisterHandHook(int plugin, int handHook, void* fn)
 	{
-		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
+		if (!InEntryOf(plugin))
 			return CIV_HOOK_NOT_ALLOWED;
 		if (handHook < 0 || handHook >= g_CivHandHookCount || !fn)
 			return CIV_HOOK_BAD_ID;
@@ -315,7 +321,7 @@ namespace
 
 	int RegisterHook(int plugin, int hookId, int kind, void* fn)
 	{
-		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin)
+		if (!InEntryOf(plugin))
 			return CIV_HOOK_NOT_ALLOWED;
 		if (hookId < 0 || hookId >= g_CivHookPointCount || !fn)
 			return CIV_HOOK_BAD_ID;
@@ -355,7 +361,7 @@ namespace
 
 	int RegisterSaveData(int plugin, CivSaveDataFn save, CivLoadDataFn load)
 	{
-		if (s_loadingPlugin < 0 || plugin != s_loadingPlugin || s_pendingSave)
+		if (!InEntryOf(plugin) || s_pendingSave)
 			return CIV_HOOK_NOT_ALLOWED;
 		if (!save || !load)
 			return CIV_HOOK_BAD_ID;
@@ -373,7 +379,7 @@ namespace
 	{
 		std::string problem;
 		int value = -1;
-		if (s_loadingPlugin >= 0 && plugin == s_loadingPlugin)
+		if (InEntryOf(plugin))
 			value = CivValuesDeclare(plugin, kind, type, name, flags, start, &problem);
 		else
 			problem = "it was declared outside the plugin's entry function";

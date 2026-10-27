@@ -36,7 +36,7 @@ namespace
 	{
 		Value() : plugin(-1), objectKind(0), valueType(0), flags(0) {}
 
-		// -1 on a kept value.
+		// -1 on an unclaimed value.
 		int plugin;
 		std::string modId;
 		std::string pluginId;
@@ -55,7 +55,7 @@ namespace
 	std::vector<Value> s_values;
 	std::vector<Value> s_pending;
 	// Values in the loaded save that no loaded plugin declares, written back at each save.
-	std::vector<Value> s_kept;
+	std::vector<Value> s_unclaimed;
 	CivHostObjectKeySink s_objectKey = 0;
 	CivHostObjectAliveSink s_objectAlive = 0;
 	CivLock s_lock;
@@ -294,7 +294,7 @@ namespace
 		{
 			CivLockHold hold(s_lock);
 			ObjectsIn(s_values, &objects);
-			ObjectsIn(s_kept, &objects);
+			ObjectsIn(s_unclaimed, &objects);
 		}
 		Objects gone;
 		for (Objects::const_iterator object = objects.begin(); object != objects.end(); ++object)
@@ -304,7 +304,7 @@ namespace
 			return;
 		CivLockHold hold(s_lock);
 		EraseIn(s_values, gone);
-		EraseIn(s_kept, gone);
+		EraseIn(s_unclaimed, gone);
 	}
 
 	// Changing this layout needs kFormat raised in CivHostSaves.cpp, and LoadValue must still read the older layouts.
@@ -484,7 +484,7 @@ void CivValuesForgetAll()
 	CivLockHold hold(s_lock);
 	s_values.clear();
 	s_pending.clear();
-	s_kept.clear();
+	s_unclaimed.clear();
 }
 
 void CivValuesClearGame()
@@ -492,14 +492,14 @@ void CivValuesClearGame()
 	CivLockHold hold(s_lock);
 	for (size_t i = 0; i < s_values.size(); ++i)
 		s_values[i].cells.clear();
-	s_kept.clear();
+	s_unclaimed.clear();
 }
 
 void CivValuesDropPlayer(int player)
 {
 	CivLockHold hold(s_lock);
 	DropPlayerIn(s_values, player);
-	DropPlayerIn(s_kept, player);
+	DropPlayerIn(s_unclaimed, player);
 }
 
 void CivValuesReplaced(int objectKind, __int64 oldKey, const void* newObject)
@@ -509,16 +509,16 @@ void CivValuesReplaced(int objectKind, __int64 oldKey, const void* newObject)
 		return;
 	CivLockHold hold(s_lock);
 	CarryIn(s_values, objectKind, oldKey, newKey);
-	CarryIn(s_kept, objectKind, oldKey, newKey);
+	CarryIn(s_unclaimed, objectKind, oldKey, newKey);
 }
 
 void CivValuesSave(std::string* part)
 {
 	DropGoneObjects();
 	CivLockHold hold(s_lock);
-	CivPutNumber(part, CountWithCells(s_values) + CountWithCells(s_kept));
+	CivPutNumber(part, CountWithCells(s_values) + CountWithCells(s_unclaimed));
 	SaveAllWithCells(part, s_values);
-	SaveAllWithCells(part, s_kept);
+	SaveAllWithCells(part, s_unclaimed);
 }
 
 bool CivValuesLoad(CivPartReader* reader)
@@ -535,7 +535,7 @@ bool CivValuesLoad(CivPartReader* reader)
 		if (Value* declared = Declared(saved))
 			declared->cells.swap(saved.cells);
 		else
-			s_kept.push_back(saved);
+			s_unclaimed.push_back(saved);
 	}
 	return true;
 }
