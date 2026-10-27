@@ -3,12 +3,16 @@
 #include "CivHostSaves.h"
 #include "CivHostValues.h"
 
+#include <set>
+
 namespace
 {
 	const char* const kValues = "toy_values.dll";
 	const char* const kReader = "toy_values_reader.dll";
 	const char* const kDecline = "toy_decline.dll";
 	const char* const kSave = "toy_save.dll";
+	const char* const kValuesMod = "{VALUES}";
+	const char* const kReaderMod = "{READER}";
 
 	struct Thing
 	{
@@ -21,6 +25,14 @@ namespace
 		const Thing* thing = static_cast<const Thing*>(object);
 		*key = CivObjectKey(thing->first, thing->second);
 		return true;
+	}
+
+	typedef std::set<std::pair<int, std::pair<int, int> > > Gone;
+	Gone s_gone;
+
+	bool ThingAlive(int objectKind, int first, int second)
+	{
+		return !s_gone.count(std::make_pair(objectKind, std::make_pair(first, second)));
 	}
 
 	// Toy Values' values are numbered in the order its entry function declares them.
@@ -39,9 +51,9 @@ namespace
 	bool StartWithValues(bool withReader)
 	{
 		std::vector<CivPluginFile> files;
-		files.push_back(CivPluginFile(OutFile(kValues), "{VALUES}"));
+		files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
 		if (withReader)
-			files.push_back(CivPluginFile(OutFile(kReader), "{READER}"));
+			files.push_back(CivPluginFile(OutFile(kReader), kReaderMod));
 		Start(files);
 		const bool loaded = HasStatus(kValues, CIV_PLUGIN_LOADED) && (!withReader || HasStatus(kReader, CIV_PLUGIN_LOADED));
 		Check(loaded, "the plugins that declare and read values load");
@@ -52,6 +64,59 @@ namespace
 	{
 		CivHostLoadPart(0);
 		CivHostSetObjectKeySink(0);
+		CivHostSetObjectAliveSink(0);
+		s_gone.clear();
+	}
+
+	bool StartOnly(const char* name, const char* modId)
+	{
+		std::vector<CivPluginFile> files;
+		files.push_back(CivPluginFile(OutFile(name), modId));
+		Start(files);
+		const bool loaded = HasStatus(name, CIV_PLUGIN_LOADED);
+		Check(loaded, "the plugin loads on its own");
+		return loaded;
+	}
+
+	void MarkGone(int objectKind, int first, int second)
+	{
+		CivHostSetObjectAliveSink(&ThingAlive);
+		s_gone.insert(std::make_pair(objectKind, std::make_pair(first, second)));
+	}
+
+	// Written by hand rather than by Bazaar, so the tests check the format itself.
+	void PutSavedValue(std::string* part, const char* modId, const char* pluginId, const char* name, int objectKind, int valueType,
+		__int64 key, int n)
+	{
+		CivPutText(part, modId);
+		CivPutText(part, pluginId);
+		CivPutText(part, name);
+		CivPutNumber(part, (unsigned int)objectKind);
+		CivPutNumber(part, (unsigned int)valueType);
+		CivPutNumber(part, (unsigned int)CIV_VALUE_PUBLISHED);
+		CivPutNumber(part, 1u);
+		CivPutNumber(part, key);
+		if (valueType == CIV_VALUE_DOUBLE)
+			CivPutNumber(part, (double)n);
+		else
+			CivPutNumber(part, (__int64)n);
+	}
+
+	std::string ValuesOnlyPart(unsigned int valueCount)
+	{
+		std::string part;
+		CivPutNumber(&part, 2u);
+		CivPutNumber(&part, 0u);
+		CivPutNumber(&part, valueCount);
+		return part;
+	}
+
+	int Occurrences(const std::string& text, const char* part)
+	{
+		int count = 0;
+		for (size_t at = text.find(part); at != std::string::npos; at = text.find(part, at + 1))
+			++count;
+		return count;
 	}
 }
 
@@ -119,8 +184,8 @@ void TestValueReadsAndWrites()
 void TestPublishedValues()
 {
 	std::vector<CivPluginFile> files;
-	files.push_back(CivPluginFile(OutFile(kValues), "{VALUES}"));
-	files.push_back(CivPluginFile(OutFile(kReader), "{READER}"));
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
+	files.push_back(CivPluginFile(OutFile(kReader), kReaderMod));
 	files.push_back(CivPluginFile(OutFile(kSave), "{SAVE}"));
 	Start(files);
 	if (!HasStatus(kValues, CIV_PLUGIN_LOADED) || !HasStatus(kReader, CIV_PLUGIN_LOADED) || !HasStatus(kSave, CIV_PLUGIN_LOADED))
@@ -214,8 +279,8 @@ void TestValuesOfRefusedPlugins()
 {
 	std::vector<CivPluginFile> files;
 	files.push_back(CivPluginFile(OutFile(kDecline), "{DECLINE}"));
-	files.push_back(CivPluginFile(OutFile(kValues), "{VALUES}"));
-	files.push_back(CivPluginFile(OutFile(kReader), "{READER}"));
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
+	files.push_back(CivPluginFile(OutFile(kReader), kReaderMod));
 	Start(files);
 	if (!HasStatus(kValues, CIV_PLUGIN_LOADED) || !HasStatus(kReader, CIV_PLUGIN_LOADED))
 	{
@@ -229,24 +294,24 @@ void TestValuesOfRefusedPlugins()
 		"the values of a plugin that declines are dropped, and the next plugin's values keep their numbers");
 
 	files.clear();
-	files.push_back(CivPluginFile(OutFile(kValues), "{VALUES}"));
-	files.push_back(CivPluginFile(OutFile(kSave), "{VALUES}"));
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
+	files.push_back(CivPluginFile(OutFile(kSave), kValuesMod));
 	Start(files);
 	Check(HasStatus(kValues, CIV_PLUGIN_LOADED) && HasStatus(kSave, CIV_PLUGIN_SAVE_ID_TAKEN),
 		"a plugin that keeps data is refused when one higher in the list, with values, comes from the same mod with the same "
 		"plugin ID");
 
 	files.clear();
-	files.push_back(CivPluginFile(OutFile(kSave), "{VALUES}"));
-	files.push_back(CivPluginFile(OutFile(kValues), "{VALUES}"));
+	files.push_back(CivPluginFile(OutFile(kSave), kValuesMod));
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
 	Start(files);
 	Check(HasStatus(kSave, CIV_PLUGIN_LOADED) && HasStatus(kValues, CIV_PLUGIN_SAVE_ID_TAKEN),
 		"a plugin with values is refused when one higher in the list that keeps data comes from the same mod with the same "
 		"plugin ID");
 
 	files.clear();
-	files.push_back(CivPluginFile(OutFile(kReader), "{VALUES}"));
-	files.push_back(CivPluginFile(OutFile(kValues), "{VALUES}"));
+	files.push_back(CivPluginFile(OutFile(kReader), kValuesMod));
+	files.push_back(CivPluginFile(OutFile(kValues), kValuesMod));
 	Start(files);
 	Check(HasStatus(kReader, CIV_PLUGIN_LOADED) && HasStatus(kValues, CIV_PLUGIN_LOADED),
 		"a plugin with values loads below one from the same mod that keeps no data");
@@ -266,4 +331,157 @@ void TestCapturedFrom()
 	Check(CivHostTakeCapturedFrom(&owner, &unit) && owner == 1 && unit == 8193, "the outer capture still gives its unit after the inner one");
 	CivHostCaptureDone();
 	Check(!CivHostTakeCapturedFrom(&owner, &unit), "once every capture is done, none is left");
+}
+
+void TestSavedValues()
+{
+	if (!StartWithValues(false))
+		return Finish();
+	Thing unit = {1, 8193};
+	Thing city = {2, 8193};
+	Thing player = {3, 0};
+	Thing plot = {10, 20};
+	TOY_FUNCTION(kValues, ToyValuesSetKills)(&unit, 3);
+	TOY_FUNCTION(kValues, ToyValuesSetVeteran)(&unit, true);
+	TOY_FUNCTION(kValues, ToyValuesSetMorale)(&city, 87.25);
+	TOY_FUNCTION(kValues, ToyValuesSetMotto)(&player, "Onward");
+	TOY_FUNCTION(kValues, ToyValuesSetBig)(&plot, 9000000000000000000LL);
+	TOY_FUNCTION(kValues, ToyValuesSetSpeed)(&unit, 0.1f);
+	const std::string part = CivHostSavePart();
+	CivHostLoadPart(0);
+	const bool cleared = TOY_FUNCTION(kValues, ToyValuesKills)(&unit) == 0;
+	Check(cleared && CivHostLoadPart(&part).empty() && TOY_FUNCTION(kValues, ToyValuesKills)(&unit) == 3
+		&& TOY_FUNCTION(kValues, ToyValuesVeteran)(&unit) && TOY_FUNCTION(kValues, ToyValuesMorale)(&city) == 87.25
+		&& TOY_FUNCTION(kValues, ToyValuesMotto)(&player) == "Onward" && TOY_FUNCTION(kValues, ToyValuesBig)(&plot) == 9000000000000000000LL
+		&& TOY_FUNCTION(kValues, ToyValuesSpeed)(&unit) == 0.1f,
+		"values of every type and kind of object come back exactly when the save loads");
+	Finish();
+}
+
+void TestValuesOfPluginsThatAreOff()
+{
+	if (!StartOnly(kValues, kValuesMod))
+		return Finish();
+	Thing unit = {1, 8193};
+	Thing newUnit = {2, 16385};
+	Thing gone = {1, 24577};
+	Thing reset = {3, 8193};
+	ToyValuesSetKillsFn* setKills = TOY_FUNCTION(kValues, ToyValuesSetKills);
+	setKills(&unit, 5);
+	setKills(&gone, 6);
+	setKills(&reset, 7);
+	const std::string withValues = CivHostSavePart();
+
+	if (!StartOnly(kReader, kReaderMod))
+		return Finish();
+	CivHostLoadPart(&withValues);
+	CivHandUnitReplaced(unit.first, unit.second, reinterpret_cast<CvUnit*>(&newUnit));
+	CivValuesDropPlayer(reset.first);
+	MarkGone(CIV_ON_UNIT, gone.first, gone.second);
+	const std::string whileOff = CivHostSavePart();
+	CivHostLoadPart(0);
+	const std::string afterNewGame = CivHostSavePart();
+
+	if (!StartOnly(kValues, kValuesMod))
+		return Finish();
+	ToyValuesKillsFn* kills = TOY_FUNCTION(kValues, ToyValuesKills);
+	CivHostLoadPart(&whileOff);
+	Check(kills(&unit) == 5, "the values of a plugin that is off go into the next save");
+	Check(kills(&newUnit) == 5, "they carry over to a new unit while their plugin is off, as they would with it on");
+	Check(kills(&reset) == 0 && kills(&gone) == 0, "they are dropped for a player whose slot is set up again, and for a unit that is gone");
+	CivHostLoadPart(&afterNewGame);
+	Check(kills(&unit) == 0, "a new game drops the kept values of plugins that are off too");
+	Finish();
+}
+
+void TestMatchingOfSavedValues()
+{
+	if (!StartWithValues(false))
+		return Finish();
+	Thing unit = {1, 8193};
+	const __int64 key = CivObjectKey(unit.first, unit.second);
+	ToyValuesKillsFn* kills = TOY_FUNCTION(kValues, ToyValuesKills);
+	std::string matching = ValuesOnlyPart(1);
+	PutSavedValue(&matching, "{values}", "", "Kills", CIV_ON_UNIT, CIV_VALUE_INT, key, 9);
+	Check(CivHostLoadPart(&matching).empty() && kills(&unit) == 9, "a saved value goes to the plugin with its mod ID, plugin ID, name, kind of object and type");
+
+	std::string others = ValuesOnlyPart(5);
+	PutSavedValue(&others, kValuesMod, "", "Kills", CIV_ON_UNIT, CIV_VALUE_DOUBLE, key, 1);
+	PutSavedValue(&others, kValuesMod, "", "Kills", CIV_ON_CITY, CIV_VALUE_INT, key, 2);
+	PutSavedValue(&others, kValuesMod, "OTHER", "Kills", CIV_ON_UNIT, CIV_VALUE_INT, key, 3);
+	PutSavedValue(&others, "{OTHER}", "", "Kills", CIV_ON_UNIT, CIV_VALUE_INT, key, 4);
+	PutSavedValue(&others, kValuesMod, "", "OldKills", CIV_ON_UNIT, CIV_VALUE_INT, key, 5);
+	Check(CivHostLoadPart(&others).empty() && kills(&unit) == 0,
+		"a saved value of another type, kind of object, plugin ID, mod or name goes to no plugin");
+	const std::string saved = CivHostSavePart();
+	Check(Occurrences(saved, "Kills") == 5 && Occurrences(saved, "OldKills") == 1, "saved values that go to no plugin are written into the next save");
+
+	std::string unknownKind = ValuesOnlyPart(1);
+	PutSavedValue(&unknownKind, kValuesMod, "", "Kills", 9, CIV_VALUE_INT, key, 5);
+	Check(CivHostLoadPart(&unknownKind).find("some plugins") != std::string::npos, "a saved value on a kind of object Bazaar does not know is reported as damaged");
+	Finish();
+}
+
+void TestValuesOfGoneObjects()
+{
+	if (!StartWithValues(false))
+		return Finish();
+	Thing unit = {1, 8193};
+	Thing gone = {1, 16385};
+	Thing plot = {1, 16385};
+	ToyValuesKillsFn* kills = TOY_FUNCTION(kValues, ToyValuesKills);
+	TOY_FUNCTION(kValues, ToyValuesSetKills)(&unit, 1);
+	TOY_FUNCTION(kValues, ToyValuesSetKills)(&gone, 2);
+	TOY_FUNCTION(kValues, ToyValuesSetBig)(&plot, 3);
+	MarkGone(CIV_ON_UNIT, gone.first, gone.second);
+	const std::string part = CivHostSavePart();
+	Check(kills(&gone) == 0 && kills(&unit) == 1 && TOY_FUNCTION(kValues, ToyValuesBig)(&plot) == 3,
+		"saving drops the values of a unit that is gone, and only of that object");
+	CivHostLoadPart(&part);
+	Check(kills(&gone) == 0 && kills(&unit) == 1, "the save holds no values of the unit that is gone");
+	Finish();
+}
+
+void TestDamagedValues()
+{
+	if (!StartWithValues(false))
+		return Finish();
+	Thing unit = {1, 8193};
+	TOY_FUNCTION(kValues, ToyValuesSetKills)(&unit, 4);
+	const std::string part = CivHostSavePart();
+	const std::string cut = part.substr(0, part.size() - 2);
+	Check(CivHostLoadPart(&cut).find("some plugins") != std::string::npos, "a part whose values are cut short is reported as damaged");
+
+	// The format before values were saved, with no plugin data: its number and a count of 0.
+	std::string older;
+	CivPutNumber(&older, 1u);
+	CivPutNumber(&older, 0u);
+	Check(CivHostLoadPart(&older).empty() && TOY_FUNCTION(kValues, ToyValuesKills)(&unit) == 0,
+		"a part from before values were saved loads, and every value starts again");
+	Finish();
+}
+
+void TestPublishedValueReads()
+{
+	if (!StartWithValues(false))
+		return Finish();
+	Thing unit = {1, 8193};
+	Thing player = {3, 0};
+	TOY_FUNCTION(kValues, ToyValuesSetKills)(&unit, 6);
+	TOY_FUNCTION(kValues, ToyValuesSetMotto)(&player, "Onward");
+	CivPublishedValue kills;
+	CivPublishedValue motto;
+	CivPublishedValue unset;
+	Check(CivValuesGetPublished(kValuesMod, "", "Kills", 1, 8193, &kills) && kills.valueType == CIV_VALUE_INT && kills.whole == 6
+		&& CivValuesGetPublished("{values}", 0, "Motto", 3, 0, &motto) && motto.text == "Onward",
+		"Lua reads a published value by its mod's ID, plugin ID, name and the object's two numbers");
+	Check(CivValuesGetPublished(kValuesMod, "", "Motto", 4, 0, &unset) && unset.text == "none yet",
+		"Lua reads the starting value of an object the value was never set on");
+	CivPublishedValue none;
+	Check(!CivValuesGetPublished(kValuesMod, "", "Veteran", 1, 8193, &none) && !CivValuesGetPublished(kValuesMod, "", "Nothing", 1, 8193, &none)
+		&& !CivValuesGetPublished("{OTHER}", "", "Kills", 1, 8193, &none),
+		"Lua cannot read a value that was not published, or one that does not exist");
+	MarkGone(CIV_ON_UNIT, unit.first, unit.second);
+	Check(!CivValuesGetPublished(kValuesMod, "", "Kills", 1, 8193, &none), "Lua reads no value on a unit or city that is gone");
+	Finish();
 }

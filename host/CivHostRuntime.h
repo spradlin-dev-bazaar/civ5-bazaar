@@ -118,6 +118,7 @@ void CivHostLogLine(const char* line);
 const char* CivHostPluginName(int plugin);
 // The refusal of a second plugin with the same key, the lookup of saved data and the finding of published values all
 // use this, or data would mix.
+bool CivSameSaveKey(const std::string& modIdA, const std::string& pluginIdA, const std::string& modIdB, const std::string& pluginIdB);
 bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId);
 // False, with data empty, when the plugin has no save function, is off, or crashed in it.
 bool CivHostCallSaveFunction(int plugin, std::string* data);

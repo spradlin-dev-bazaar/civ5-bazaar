@@ -47,6 +47,12 @@ void TestCarriedValues();
 void TestValuesOfResetPlayers();
 void TestValuesOfRefusedPlugins();
 void TestCapturedFrom();
+void TestSavedValues();
+void TestValuesOfPluginsThatAreOff();
+void TestValuesOfGoneObjects();
+void TestDamagedValues();
+void TestMatchingOfSavedValues();
+void TestPublishedValueReads();
 
 namespace
 {
@@ -116,6 +122,12 @@ namespace
 		{"values of reset players", &TestValuesOfResetPlayers},
 		{"values of refused plugins", &TestValuesOfRefusedPlugins},
 		{"captured units", &TestCapturedFrom},
+		{"saved values", &TestSavedValues},
+		{"values of plugins that are off", &TestValuesOfPluginsThatAreOff},
+		{"values of gone objects", &TestValuesOfGoneObjects},
+		{"damaged values", &TestDamagedValues},
+		{"matching of saved values", &TestMatchingOfSavedValues},
+		{"published value reads", &TestPublishedValueReads},
 	};
 	const int kSectionCount = sizeof(kSections) / sizeof(kSections[0]);
 

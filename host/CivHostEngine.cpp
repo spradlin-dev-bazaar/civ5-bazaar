@@ -264,7 +264,7 @@ namespace
 		lua_pushcclosure(L, &CallPluginLuaFunction, 2);
 	}
 
-	// A kind added to CivObjectKind without a case here fails the build.
+	// A kind added to CivObjectKind without a case in these two fails the build.
 #pragma warning(push)
 #pragma warning(error : 4062)
 	bool ObjectKey(int kind, const void* object, __int64* key)
@@ -286,6 +286,23 @@ namespace
 		}
 		return false;
 	}
+
+	bool ObjectAlive(int kind, int first, int second)
+	{
+		const bool owned = first >= 0 && first < MAX_PLAYERS;
+		switch (static_cast<CivObjectKind>(kind))
+		{
+		case CIV_ON_PLAYER:
+			return owned;
+		case CIV_ON_CITY:
+			return owned && GET_PLAYER((PlayerTypes)first).getCity(second) != NULL;
+		case CIV_ON_UNIT:
+			return owned && GET_PLAYER((PlayerTypes)first).getUnit(second) != NULL;
+		case CIV_ON_PLOT:
+			return GC.getMap().plot(first, second) != NULL;
+		}
+		return false;
+	}
 #pragma warning(pop)
 
 	void NotifyPluginProblems()
@@ -302,6 +319,11 @@ namespace
 	// report.
 	bool UseListedPlugins(const std::vector<CivOrderEntry>& wanted, const char* warning)
 	{
+		CivHostSetLogSink(&LogLine);
+		CivHostSetFaultSink(&OnFault);
+		CivHostSetLuaPusher(&PushPluginLuaFunction);
+		CivHostSetObjectKeySink(&ObjectKey);
+		CivHostSetObjectAliveSink(&ObjectAlive);
 		std::vector<std::string> files;
 		if (!ListedPluginFiles(&files))
 		{
@@ -325,10 +347,6 @@ namespace
 		std::vector<CivNotLoaded> notLoaded;
 		const std::vector<CivPluginFile> plugins = CivPluginFiles(loading, mods, &notLoaded);
 
-		CivHostSetLogSink(&LogLine);
-		CivHostSetFaultSink(&OnFault);
-		CivHostSetLuaPusher(&PushPluginLuaFunction);
-		CivHostSetObjectKeySink(&ObjectKey);
 		const CivPluginListResult result = CivHostSetPlugins(plugins, CivUseBothPairs(order));
 		if (result == CIV_PLUGINS_BUSY)
 		{
@@ -468,6 +486,40 @@ void CivHostOnDatabaseReady()
 {
 	UseListedPlugins(SavedOrder(), NULL);
 }
+
+// A type added to CivValueType without a case here fails the build.
+#pragma warning(push)
+#pragma warning(error : 4062)
+int CivHostLuaGetPluginValue(lua_State* L)
+{
+	const char* modId = luaL_checkstring(L, 1);
+	const char* pluginId = luaL_optstring(L, 2, "");
+	const char* name = luaL_checkstring(L, 3);
+	const int first = luaL_checkint(L, 4);
+	const int second = luaL_optint(L, 5, 0);
+	// After the checks: a Lua error jumps out of this frame without running the destructor of its text.
+	CivPublishedValue value;
+	if (!CivValuesGetPublished(modId, pluginId, name, first, second, &value))
+	{
+		lua_pushnil(L);
+		return 1;
+	}
+	switch (static_cast<CivValueType>(value.valueType))
+	{
+	case CIV_VALUE_INT:
+	case CIV_VALUE_INT64:
+		lua_pushnumber(L, (lua_Number)value.whole);
+		break;
+	case CIV_VALUE_DOUBLE:
+		lua_pushnumber(L, value.decimal);
+		break;
+	case CIV_VALUE_TEXT:
+		lua_pushlstring(L, value.text.data(), value.text.size());
+		break;
+	}
+	return 1;
+}
+#pragma warning(pop)
 
 bool CivHostOnFrontEndCall(lua_State* L, int* results)
 {

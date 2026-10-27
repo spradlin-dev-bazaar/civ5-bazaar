@@ -21,5 +21,10 @@ void CivHostOnPlayerReset(int player);
 // Front-end Lua has no other way into the DLL, so the Plugins screen calls UI.GetMapPreview("bazaar:<request>", ...),
 // which the engine passes here first. True, with the number of results pushed, when the call was for the host.
 bool CivHostOnFrontEndCall(lua_State* L, int* results);
+// Game.GetPluginValue(modId, pluginId, name, first, second): a value a plugin published, or nil when no loaded plugin
+// publishes one of that name or the object does not exist. first and second name the object: a player's ID and 0, a
+// city's or unit's owner and ID, or a plot's x and y. Whole numbers and true or false come back as Lua numbers, exact
+// up to 2 to the power 53.
+int CivHostLuaGetPluginValue(lua_State* L);
 // The living players on a team, for the hand-placed hooks the engine calls for a team.
 std::vector<int> CivHostTeamPlayers(int team);

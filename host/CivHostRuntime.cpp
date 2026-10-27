@@ -384,7 +384,7 @@ namespace
 
 	void CommitPending(int plugin)
 	{
-		CivValuesCommitPending();
+		CivValuesCommitPending(s_plugins[plugin].modId, s_plugins[plugin].pluginId);
 		s_plugins[plugin].saveFn = s_pendingSave;
 		s_plugins[plugin].loadFn = s_pendingLoad;
 		s_pendingSave = 0;
@@ -1186,9 +1186,14 @@ const char* CivHostPluginName(int plugin)
 	return DisplayName(plugin);
 }
 
+bool CivSameSaveKey(const std::string& modIdA, const std::string& pluginIdA, const std::string& modIdB, const std::string& pluginIdB)
+{
+	return CivSameText(modIdA, modIdB) && CivSameText(pluginIdA, pluginIdB);
+}
+
 bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId)
 {
-	return CivSameText(plugin.modId, modId) && CivSameText(plugin.pluginId, pluginId);
+	return CivSameSaveKey(plugin.modId, plugin.pluginId, modId, pluginId);
 }
 
 bool CivHostCallSaveFunction(int plugin, std::string* data)
