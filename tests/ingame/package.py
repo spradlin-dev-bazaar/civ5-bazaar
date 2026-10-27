@@ -173,7 +173,7 @@ def main(args):
         mods.HOST_ID,
         "Test build of the %s." % mods.HOST_NAME,
         common.HOST_DLL,
-        plugins_screen=True,
+        host_screens=True,
         version=host_version,
     )
     for _, dll_name, mod_name, mod_id in TOYS:

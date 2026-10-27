@@ -22,6 +22,13 @@ import common  # noqa: E402
 
 VMC_DIR = os.path.join(common.REPO, "mod", "vmc")
 FRONTEND_DIR = os.path.join(common.REPO, "frontend")
+INGAME_DIR = os.path.join(common.REPO, "ingame")
+STOPPED_POPUP = (
+    "InGameUIAddin",
+    "ingame/BazaarStopped.xml",
+    "Plugin stopped working",
+    "Returns the player to the main menu after a plugin crashes in a game.",
+)
 LICENSE_FILE = ("LICENSE.txt", common.LICENSE)
 NOTICE_FILE = ("NOTICE.txt", common.NOTICE)
 
@@ -173,13 +180,14 @@ def write_modinfo(
         f.write("</Mod>\n")
 
 
-def copy_plugins_screen(folder):
-    """The Plugins screen's files, which replace Advanced Setup."""
-    os.makedirs(os.path.join(folder, "frontend"))
+def copy_host_screens(folder):
+    """The Plugins screen's files, which replace Advanced Setup, and the pop-up for a plugin that crashes in a game."""
     files = []
-    for path in sorted(glob.glob(os.path.join(FRONTEND_DIR, "*.lua")) + glob.glob(os.path.join(FRONTEND_DIR, "*.xml"))):
-        files.append(("frontend/" + os.path.basename(path), 1))
-        shutil.copyfile(path, os.path.join(folder, files[-1][0]))
+    for source, target in ((FRONTEND_DIR, "frontend"), (INGAME_DIR, "ingame")):
+        os.makedirs(os.path.join(folder, target))
+        for path in sorted(glob.glob(os.path.join(source, "*.lua")) + glob.glob(os.path.join(source, "*.xml"))):
+            files.append((target + "/" + os.path.basename(path), 1))
+            shutil.copyfile(path, os.path.join(folder, files[-1][0]))
     return files
 
 
@@ -218,7 +226,7 @@ def write_vmc_data_mod(mods_folder):
     return folder, vmc.version
 
 
-def write_dll_mod(mods_folder, name, mod_id, teaser, dll, plugins_screen=False, version=1):
+def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1):
     """A build of the game core, with VMC's data mod beside it. The DLL reads tables and columns VMC's files add, so it
     depends on that mod, which makes the game switch it on first. Returns its folder, then the VMC data mod's folder."""
     folder = new_mod_folder(mods_folder, name, version)
@@ -229,9 +237,11 @@ def write_dll_mod(mods_folder, name, mod_id, teaser, dll, plugins_screen=False, 
     vmc_folder, vmc_version = write_vmc_data_mod(mods_folder)
     files = [("CvGameCore_Expansion2.dll", 1), ("DllPlugins.sql", 0)] + license_files
     references = []
-    if plugins_screen:
-        files += copy_plugins_screen(folder)
+    entries = []
+    if host_screens:
+        files += copy_host_screens(folder)
         references.append((RAS_ID, RAS_NAME))
+        entries.append(STOPPED_POPUP)
     write_modinfo(
         folder,
         name,
@@ -239,6 +249,7 @@ def write_dll_mod(mods_folder, name, mod_id, teaser, dll, plugins_screen=False, 
         teaser,
         files,
         ["DllPlugins.sql"],
+        entries,
         dll="CvGameCore_Expansion2.dll",
         references=references,
         dependencies=[(VMC_MOD_ID, VMC_DATA_NAME, vmc_version)],

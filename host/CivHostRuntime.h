@@ -118,6 +118,9 @@ void CivHostLoadPlugins(const std::vector<CivPluginFile>& files);
 CivPluginListResult CivHostSetPlugins(const std::vector<CivPluginFile>& files, const CivFilePairs& useBoth = CivFilePairs());
 // False, with nothing changed, when called while a plugin is running.
 bool CivHostUnloadPlugins();
+// From a plugin's crash, other than one while shutting down, until CivHostForgetGameDamage, which the main menu calls.
+bool CivHostGameMayBeDamaged();
+void CivHostForgetGameDamage();
 const std::vector<CivPluginRecord>& CivHostPlugins();
 void CivHostLogLine(const char* line);
 // A plugin built before the freeze compiled in what the freeze changed, so a host from the freeze on refuses it.

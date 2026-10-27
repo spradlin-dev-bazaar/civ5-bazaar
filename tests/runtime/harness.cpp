@@ -39,6 +39,7 @@ void TestSaveKeys();
 void TestSavesOfPluginsThatAreOff();
 void TestSaveCrashes();
 void TestDamagedSaves();
+void TestSavesAfterACrash();
 void TestSaveReader();
 void TestValueDeclarations();
 void TestValueReadsAndWrites();
@@ -121,6 +122,7 @@ namespace
 		{"saves of plugins that are off", &TestSavesOfPluginsThatAreOff},
 		{"save crashes", &TestSaveCrashes},
 		{"damaged saves", &TestDamagedSaves},
+		{"saves after a crash", &TestSavesAfterACrash},
 		{"save reader", &TestSaveReader},
 		{"value declarations", &TestValueDeclarations},
 		{"value reads and writes", &TestValueReadsAndWrites},
@@ -213,6 +215,7 @@ void StartWith(const char* const* names, size_t count)
 void StartWithNone()
 {
 	CivHostUnloadPlugins();
+	CivHostForgetGameDamage();
 	ClearLog();
 }
 

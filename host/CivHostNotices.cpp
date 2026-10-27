@@ -20,13 +20,20 @@ void CivQueueNotice(const std::string& summary, const std::string& message)
 	s_notices.push_back(notice);
 }
 
-void CivQueuePopup(const std::string& message)
+void CivQueueStoppedPopup(const std::string& pluginName)
 {
 	CivNotice notice;
-	notice.message = message;
-	notice.popup = true;
+	notice.stoppedPlugin = pluginName;
 	CivLockHold hold(s_lock);
 	s_notices.push_back(notice);
+}
+
+void CivDropStoppedPopups()
+{
+	CivLockHold hold(s_lock);
+	for (size_t i = s_notices.size(); i-- > 0;)
+		if (!s_notices[i].stoppedPlugin.empty())
+			s_notices.erase(s_notices.begin() + i);
 }
 
 void CivReplaceNotices(const std::string& summary, const std::vector<std::string>& messages)

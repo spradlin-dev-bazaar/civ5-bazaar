@@ -66,7 +66,8 @@ void TestFunctionCrashes()
 	bool called = true;
 	Check(TOY_FUNCTION(kReader, ToyReaderCrash)(&called) == 0 && !called && FaultCount() == faults + 1,
 		"a crash in a published function is caught, and the call says it did not run");
-	Check(IsQuarantined(kValues) && !IsQuarantined(kReader), "the crash turns off the plugin whose function it was, not the caller");
+	Check(IsQuarantined(kValues) && !IsQuarantined(kReader) && CivHostGameMayBeDamaged(),
+		"the crash turns off the plugin whose function it was, not the caller, and the game may be damaged");
 	Check(LogHas("its function Crash, which Toy Reader called"), "the log says whose function crashed and who called it");
 	called = true;
 	Check(TOY_FUNCTION(kReader, ToyReaderDoubled)(21, &called) == 0 && !called, "the functions of a plugin that is off do not run");

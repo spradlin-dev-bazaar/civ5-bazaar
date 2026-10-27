@@ -62,17 +62,28 @@ namespace
 		if (shuttingDown)
 			CivQueueNotice("Plugin disabled", std::string(name) + " stopped working while shutting down, so it stays off until you restart Civilization V. Details are in Logs\\Bazaar.log.");
 		else
-		{
-			const std::string rest = " stopped working and was turned off until you return to the main menu.[NEWLINE][NEWLINE]The game may now be unstable. If you want to keep this game, save it in a new save slot rather than over your main save, and play on at your own risk.[NEWLINE][NEWLINE]Details are in Logs\\Bazaar.log.";
-			CivQueuePopup(CivShortened(name, sizeof(CvPopupInfo().szText) - 1 - rest.size()) + rest);
-		}
+			CivQueueStoppedPopup(name);
 	}
 
-	void ShowPopup(const std::string& text)
+	// Bazaar's own pop-up, ingame/BazaarStopped.lua, returns the player to the main menu when closed. The game's text
+	// pop-up, for when that one did not load, only closes, so its text asks the player to go there.
+	void ShowStoppedPopup(const std::string& pluginName)
 	{
+		const std::string text = pluginName + " stopped working, so you will now be returned to the main menu.[NEWLINE][NEWLINE]The game may now be damaged, so it will not be saved. To play on, load your most recent save or autosave.[NEWLINE][NEWLINE]Details are in Logs\\Bazaar.log.";
+		bool handled = false;
+		if (ICvEngineScriptSystem1* scripts = gDLL->GetScriptSystem())
+		{
+			CvLuaArgsHandle args;
+			args->Push(text.c_str(), text.size());
+			LuaSupport::CallTestAny(scripts, "BazaarPluginStopped", args.get(), handled);
+		}
+		if (handled)
+			return;
+		const std::string rest = " stopped working.[NEWLINE][NEWLINE]The game may now be damaged, so do not save it. Go back to the main menu, then load your most recent save or autosave to play on.[NEWLINE][NEWLINE]Details are in Logs\\Bazaar.log.";
 		// The game's TextPopup.lua takes Data1 as the width to wrap the text at.
 		CvPopupInfo popup(BUTTONPOPUP_TEXT, 500);
-		strncpy_s(popup.szText, sizeof(popup.szText), text.c_str(), _TRUNCATE);
+		const std::string fallback = CivShortened(pluginName, sizeof(popup.szText) - 1 - rest.size()) + rest;
+		strncpy_s(popup.szText, sizeof(popup.szText), fallback.c_str(), _TRUNCATE);
 		GC.GetEngineUserInterface()->AddPopup(popup);
 	}
 
@@ -83,6 +94,7 @@ namespace
 	const char* const kBusy = "Your plugin changes were not applied because a plugin was busy. They will be applied the next time your mods change, or when you restart Civilization V.";
 	const char* const kNotSaved = "Bazaar could not save your plugin order, so the old order comes back when a game starts. Details are in Logs\\Bazaar.log.";
 	const char* const kPluginDataNotLoaded = "Plugin data not loaded";
+	const char* const kSavedAfterCrash = "This game was saved after a plugin stopped working, so it may be damaged. An earlier save is safer.";
 	const char* const kSaveOverWarning = " If you save over this game, that data is lost for good; save in a new slot to keep the old save as it is.";
 
 	// A damaged length must not crash the load, and the game's stream throws when it runs out. A part not read in full
@@ -567,10 +579,15 @@ void CivHostOnGameUpdate()
 		return;
 	// A plugin's notification hook can crash here, and the crash's own notice must not move the strings being sent.
 	const std::vector<CivNotice> sending = CivTakeNotices();
+	bool stopShown = false;
 	for (size_t i = 0; i < sending.size(); ++i)
 	{
-		if (sending[i].popup)
-			ShowPopup(sending[i].message);
+		if (!sending[i].stoppedPlugin.empty())
+		{
+			if (!stopShown)
+				ShowStoppedPopup(sending[i].stoppedPlugin);
+			stopShown = true;
+		}
 		else
 			notifications->Add(NOTIFICATION_GENERIC, sending[i].message.c_str(), sending[i].summary.c_str(), -1, -1, -1);
 	}
@@ -591,11 +608,19 @@ void CivHostOnReadSave(FDataStream& stream, unsigned int version)
 		return;
 	}
 	const std::string part = ReadSavePart(stream);
-	const std::string problem = CivHostLoadPart(&part);
+	bool savedAfterCrash = false;
+	const std::string problem = CivHostLoadPart(&part, &savedAfterCrash);
+	if (savedAfterCrash)
+		CivQueueNotice(kPluginProblem, kSavedAfterCrash);
 	if (problem.empty())
 		return;
 	LogLine(problem.c_str());
 	CivQueueNotice(kPluginDataNotLoaded, problem + kSaveOverWarning);
+}
+
+bool CivHostSavingAllowed()
+{
+	return !CivHostGameMayBeDamaged();
 }
 
 void CivHostOnNewGame()
@@ -613,5 +638,7 @@ void CivHostOnEngineShutdown()
 {
 	if (!CivHostUnloadPlugins())
 		LogLine("Plugins were not unloaded because one of them was still running.");
+	CivHostForgetGameDamage();
+	CivDropStoppedPopups();
 	CivForgetNamedNotices();
 }

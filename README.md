@@ -22,7 +22,7 @@ You need Brave New World, on Windows.
 
 - **More than one DLL mod at a time.** Each plugin is an ordinary mod with a DLL inside, from the Steam Workshop or installed by hand. It lists Bazaar as a requirement, so the game won't let you turn it on without Bazaar.
 - **A Plugins screen.** It shows which plugins loaded and any that failed or were refused, and lets you reorder them or skip any of them. It opens in place of Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup), and its Continue button then opens the usual Advanced Setup, or another mod's version of it such as Really Advanced Setup's.
-- **A crashing plugin doesn't end your game.** Bazaar turns that plugin off until you return to the main menu and tells you. The game keeps running.
+- **A crashing plugin doesn't crash the game.** Bazaar catches the crash, names the plugin, and sends you back to the main menu without saving, since the game may be damaged. Load your last save or autosave to play on.
 - **VMC included.** VMC's extra Lua events and options are there for the mods that use them. VMC also changes a few of the game's rules, as it does on its own: for example, the AI's anger at warmongering builds up much faster.
 
 ## Saved games

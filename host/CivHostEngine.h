@@ -17,6 +17,8 @@ void CivHostOnNewGame();
 #define CIV_HOST_SAVE_VERSION 2
 void CivHostOnWriteSave(FDataStream& stream);
 void CivHostOnReadSave(FDataStream& stream, unsigned int version);
+// False from a plugin's crash until the player is back at the main menu, so the game saves nothing it may have damaged.
+bool CivHostSavingAllowed();
 void CivHostOnPlayerReset(int player);
 // Front-end Lua has no other way into the DLL, so the Plugins screen calls UI.GetMapPreview("bazaar:<request>", ...),
 // which the engine passes here first. True, with the number of results pushed, when the call was for the host.

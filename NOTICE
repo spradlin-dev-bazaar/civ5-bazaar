@@ -1,6 +1,6 @@
 This repository contains code from three sources. The MIT licence in LICENSE covers only the third.
 
-1. Game source code from the Civilization V SDK, copyright Firaxis Games and Take-Two Interactive, all rights reserved. It is used under the SDK's terms for making mods and is not covered by the MIT licence. It is in CvGameCoreSource/, and the frame of the Plugins screen in frontend/AdvancedSetup.xml is adapted from the game's Custom Game screen.
+1. Game source code from the Civilization V SDK, copyright Firaxis Games and Take-Two Interactive, all rights reserved. It is used under the SDK's terms for making mods and is not covered by the MIT licence. It is in CvGameCoreSource/, and the frame of the Plugins screen in frontend/AdvancedSetup.xml is adapted from the game's Custom Game screen, and the crash pop-up in ingame/BazaarStopped.xml from its text pop-up.
 2. whoward69's DLL-VMC: his changes to that source, in CvGameCoreSource/, and the database, text, Lua and art files from his v97 release, in mod/vmc/. The translations in mod/vmc/ are by Serps (German), CCWB (Chinese), Sub6 (Japanese) and Tomahawk.nsk (Russian). Used under his terms: it is never sold or used to make money. Not covered by the MIT licence.
 3. This project's changes to those files, and everything else in this repository, written by spradlin-dev: MIT, see LICENSE. A changed file as a whole is still covered by 1 and 2.
 

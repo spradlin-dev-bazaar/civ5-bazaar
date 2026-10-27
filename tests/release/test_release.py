@@ -654,8 +654,8 @@ class WriteFilesTest(unittest.TestCase):
                 with open(os.path.join(out, name), "w") as f:
                     f.write("x")
 
-        def write_dll_mod(mods_folder, name, mod_id, teaser, dll, plugins_screen=False, version=1):
-            given["mod"] = (name, mod_id, teaser, dll, plugins_screen, version)
+        def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1):
+            given["mod"] = (name, mod_id, teaser, dll, host_screens, version)
             folders = os.path.join(mods_folder, "host"), os.path.join(mods_folder, "bootstrap")
             for path in folders:
                 os.makedirs(path)
