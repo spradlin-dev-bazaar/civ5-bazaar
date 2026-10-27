@@ -294,7 +294,8 @@ They come in two kinds:
 Register for one in `CivPluginEntry` with `RegisterHandHook`. It returns codes from the same table as `RegisterHook`: 0 when it worked, 1 for an unknown hand-placed hook or no function, and 4 when called outside `CivPluginEntry`. The template uses it to log every notification:
 
 ```cpp
-static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
+static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex)
 {
 	++s_notifications;
 	Log("notification %d for %s: %s", notificationType, GET_PLAYER((PlayerTypes)player).getCivilizationShortDescription(), message);
@@ -309,7 +310,8 @@ Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (vo
 The hook's parameters must match the function type named in the comment above the `CIV_HAND_...` constant. For `CIV_HAND_NOTIFICATION_ADDED` that is `CivNotificationAddedFn`, which `CivPluginApi.h` defines further down with a typedef, as a function pointer type:
 
 ```cpp
-typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
+typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex);
 ```
 
 Take every parameter, even the ones you do not use. (`const char*` is a C string.)

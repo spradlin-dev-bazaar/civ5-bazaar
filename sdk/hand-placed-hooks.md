@@ -35,7 +35,7 @@ The city-state greeting depends on VMC's `GLOBAL_CS_GIFTS` option. With it on, t
 
 ## NotificationAdded
 
-An announcement: a notification was added to this player's list. The values are the ones the game's `CvNotifications::Add` received: the notification type, the message, the summary, the plot's x and y, and its two data values. The game keeps notifications only for human players, so it runs only for them.
+An announcement: a notification was added to this player's list. The values are the ones the game's `CvNotifications::Add` received: the notification type, the message, the summary, the plot's x and y, and its two data values, then the notification's lookup index, which `CvNotifications::Dismiss` and `Activate` take. The game keeps notifications only for human players, so it runs only for them.
 
 ## DealResolved
 

@@ -735,12 +735,24 @@ static bool PlaysPlayer(int player)
 	return player == kPlayedPlayer;
 }
 
+#if defined(TOY_HAND)
+static void HeardNotification(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex)
+{
+	char line[256];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "notification %d %d [%s] [%s] %d %d %d %d %d", player, notificationType, message, summary, x, y,
+		data1, data2, lookupIndex);
+	s_host->Log(s_host->pluginIndex, line);
+}
+#else
+// Written as a plugin built before the lookup index was added.
 static void HeardNotification(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
 {
 	char line[256];
 	_snprintf_s(line, sizeof(line), _TRUNCATE, "notification %d %d [%s] [%s] %d %d %d %d", player, notificationType, message, summary, x, y, data1, data2);
 	s_host->Log(s_host->pluginIndex, line);
 }
+#endif
 
 #if defined(TOY_HAND)
 static bool KeepsSlot(int player)

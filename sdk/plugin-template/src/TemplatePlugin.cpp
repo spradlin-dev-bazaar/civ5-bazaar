@@ -43,7 +43,8 @@ static bool BeforeDoTurn(CvPlayer* player)
 	return false;
 }
 
-static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
+static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex)
 {
 	++s_notifications;
 	Log("notification %d for %s: %s", notificationType, GET_PLAYER((PlayerTypes)player).getCivilizationShortDescription(), message);

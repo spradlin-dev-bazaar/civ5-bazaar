@@ -494,7 +494,8 @@ int CvNotifications::Add(NotificationTypes eNotificationType, const char* strMes
 	m_iCurrentLookupIndex++;
 
 #if defined(CIV_HOST_API)
-	CivHandNotificationAdded(m_ePlayer, eNotificationType, strMessage, strSummary, iX, iY, iGameDataIndex, iExtraGameData);
+	CivHandNotificationAdded(m_ePlayer, eNotificationType, strMessage, strSummary, iX, iY, iGameDataIndex, iExtraGameData,
+		newNotification.m_iLookupIndex);
 #endif
 	return newNotification.m_iLookupIndex;
 }

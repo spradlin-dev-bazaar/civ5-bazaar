@@ -49,7 +49,8 @@ enum CivHandHook
 	CIV_HAND_KEEP_DEAD_SLOT_OPEN = 1,
 	// CivPopupRaisedFn: the game raised a popup for this player, or would have if they were at the keyboard.
 	CIV_HAND_POPUP_RAISED = 2,
-	// CivNotificationAddedFn: a notification was added to this player's list.
+	// CivNotificationAddedFn: a notification was added to this player's list; lookupIndex is the number
+	// CvNotifications::Dismiss and Activate take.
 	CIV_HAND_NOTIFICATION_ADDED = 3,
 	// CivDealResolvedFn: a proposed deal was accepted or turned down.
 	CIV_HAND_DEAL_RESOLVED = 4,
@@ -81,7 +82,8 @@ enum CivOrdersCancelledReason
 typedef bool (*CivPlayerQueryFn)(int player);
 // What the values mean depends on the popup; hand-placed-hooks.md lists them.
 typedef void (*CivPopupRaisedFn)(int player, int popupType, int data1, int data2, int data3, bool option1, bool option2, const char* text);
-typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
+typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex);
 typedef void (*CivDealResolvedFn)(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);
 typedef void (*CivUnitOrdersCancelledFn)(CvUnit* unit, int reason);
 typedef void (*CivUnitReplacedFn)(int oldOwner, int oldUnit, CvUnit* newUnit);

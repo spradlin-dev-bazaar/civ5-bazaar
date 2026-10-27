@@ -99,11 +99,14 @@ namespace
 		int y;
 		int data1;
 		int data2;
+		int lookupIndex;
 
+		// A plugin built before lookupIndex was added takes one argument fewer; the caller pops the arguments, so it runs.
 		static void Tell(void* p)
 		{
 			Notification& c = *static_cast<Notification*>(p);
-			reinterpret_cast<CivNotificationAddedFn>(c.civ_h.fn)(c.player, c.notificationType, c.message, c.summary, c.x, c.y, c.data1, c.data2);
+			reinterpret_cast<CivNotificationAddedFn>(c.civ_h.fn)(c.player, c.notificationType, c.message, c.summary, c.x, c.y, c.data1, c.data2,
+				c.lookupIndex);
 		}
 	};
 
@@ -202,9 +205,10 @@ void CivHandPopupRaised(const std::vector<int>& players, int popupType, int data
 		CivHandPopupRaised(players[i], popupType, data1, data2, data3, option1, option2, text);
 }
 
-void CivHandNotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
+void CivHandNotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex)
 {
-	Notification c = { { 0, false }, player, notificationType, Text(message), Text(summary), x, y, data1, data2 };
+	Notification c = { { 0, false }, player, notificationType, Text(message), Text(summary), x, y, data1, data2, lookupIndex };
 	Announce(CIV_HAND_NOTIFICATION_ADDED, &Notification::Tell, &c);
 }
 
