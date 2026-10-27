@@ -1,4 +1,4 @@
 [h1]Template Plugin[/h1]
 A minimal plugin for the Bazaar Multi-DLL Mod Loader.
 
-Requires Bazaar 0.4.0 or newer. Subscribe to Bazaar Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required) too.
+Requires Bazaar 0.5.0 or newer. Subscribe to Bazaar Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required) too.
