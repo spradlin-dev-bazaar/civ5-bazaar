@@ -166,6 +166,18 @@ class DifferenceTest(unittest.TestCase):
         )
         self.assertEqual((found.added, found.removed), (["class C"], ["class A"]))
 
+    def test_bazaar_s_host_info_grown_at_its_end_is_added_not_removed(self):
+        host = "class CivHostInfo\tsize(4):\n\t+---\n 0\t| pluginIndex\n\t+---"
+        types = "types CivHostInfo:\n field pluginIndex: int"
+        then = release.layouts.format_record((0, 5), [("class CivHostInfo", host), ("types CivHostInfo", types)])
+        grown_host = host.replace("size(4)", "size(8)").replace("pluginIndex\n", "pluginIndex\n 4\t| Log\n")
+        grown_types = types + "\n field Log: void (*)(int)"
+        now = release.layouts.format_record(
+            (0, 5), [("class CivHostInfo", grown_host), ("types CivHostInfo", grown_types)]
+        )
+        found = release.layout_difference(then, now)
+        self.assertEqual((found.added, found.removed), (["class CivHostInfo", "types CivHostInfo"], []))
+
     def test_an_enum_value_that_moved_is_removed_and_one_added_at_the_end_is_added(self):
         then = release.layouts.format_record((0, 3), [("enum E::A", "enum E::A = 0"), ("enum E::B", "enum E::B = 1")])
         now = then.replace("E::B = 1", "E::B = 2") + "enum E::C = 3\n\n"

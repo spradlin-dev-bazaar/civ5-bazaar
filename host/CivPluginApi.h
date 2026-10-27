@@ -39,7 +39,8 @@ enum CivHookRegisterResult
 };
 
 // Hand-placed hooks: spots inside engine functions, registered with RegisterHandHook. Each takes the function type named
-// beside it, and plugins are called in load order. Ids only ever grow at the end.
+// beside it, and plugins are called in load order. Ids only ever grow at the end. Later releases may also run a hook
+// in more places, and pass popup types and reasons a plugin does not know yet, which it ignores.
 enum CivHandHook
 {
 	// CivPlayerQueryFn: does a plugin play this player, rather than the person at the keyboard? Any yes wins.
@@ -185,6 +186,7 @@ struct CivPluginInfo
 	const char* id;
 };
 
+// Saves hold what these write, so how they lay out a number or a text never changes, not even in a new major version.
 class CivSaveWriter
 {
 public:

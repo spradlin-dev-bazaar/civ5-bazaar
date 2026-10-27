@@ -99,6 +99,39 @@ class CompareTest(unittest.TestCase):
         lost, new = layouts.compare(layouts.parse_report(report(UNIT)), layouts.parse_report(report(UNIT, CITY)))
         self.assertEqual((lost, new), ([], [block(CITY)]))
 
+    def test_bazaar_s_api_structs_may_grow_at_their_end_but_not_change(self):
+        host = "class CivHostInfo\tsize(8):\n\t+---\n 0\t| pluginIndex\n 4\t| RegisterHook\n\t+---\n"
+        grown = host.replace(" 4\t| RegisterHook\n", " 4\t| RegisterHook\n 8\t| Log\n").replace("size(8)", "size(12)")
+        types = "types CivHostInfo:\n field pluginIndex: int\n field RegisterHook: int (*)(int)\n"
+        more_types = types + " field Log: void (*)(int)\n"
+        lost, new = layouts.compare(
+            layouts.parse_report(report(host, types)), layouts.parse_report(report(grown, more_types))
+        )
+        self.assertEqual((lost, sorted(new)), ([], sorted([block(grown), block(more_types)])))
+        changed = host.replace("RegisterHook", "Unhook")
+        lost, _ = layouts.compare(layouts.parse_report(report(host)), layouts.parse_report(report(changed)))
+        self.assertEqual([key for key, _, _ in lost], ["class CivHostInfo"])
+        inserted = host.replace(" 0\t| pluginIndex\n", " 0\t| pluginIndex\n 4\t| Log\n").replace(
+            " 4\t| RegisterHook", " 8\t| RegisterHook"
+        )
+        lost, _ = layouts.compare(layouts.parse_report(report(host)), layouts.parse_report(report(inserted)))
+        self.assertEqual([key for key, _, _ in lost], ["class CivHostInfo"])
+        retyped = more_types.replace("RegisterHook: int (*)(int)", "RegisterHook: long (*)(int)")
+        lost, _ = layouts.compare(layouts.parse_report(report(types)), layouts.parse_report(report(retyped)))
+        self.assertEqual([key for key, _, _ in lost], ["types CivHostInfo"])
+
+    def test_every_struct_bazaar_hands_to_plugins_may_grow_at_its_end(self):
+        with open(layouts.API_HEADER, encoding="cp1252") as f:
+            structs = re.findall(r"^struct (\w+)\s*$", f.read(), re.M)
+        self.assertIn("CivHostInfo", structs)
+        for name in structs:
+            if name != "CivApiVersion":
+                self.assertTrue({"class " + name, "types " + name} <= layouts.GROWS_AT_END, name)
+
+    def test_an_engine_class_that_grows_at_its_end_is_still_lost(self):
+        lost, _ = layouts.compare(layouts.parse_report(report(UNIT)), layouts.parse_report(report(GROWN)))
+        self.assertEqual([key for key, _, _ in lost], ["class CvUnit"])
+
     def test_nested_classes_that_share_a_name_are_matched_as_a_group(self):
         recorded = layouts.parse_report(report(SECOND, FIRST))
         lost, new = layouts.compare(recorded, layouts.parse_report(report(FIRST, THIRD, SECOND)))
@@ -334,6 +367,13 @@ class RunTest(unittest.TestCase):
         self.version = (0, 4)
         self.assertEqual(self.check(report(UNIT, CITY))[0], 0)
         self.assertEqual(self.saved(), ((0, 3), layouts.parse_report(report(UNIT, CITY))))
+
+    def test_once_frozen_bazaar_s_host_info_may_grow_at_its_end_and_the_record_takes_the_grown_layout(self):
+        host = "class CivHostInfo\tsize(4):\n\t+---\n 0\t| pluginIndex\n\t+---\n"
+        grown = host.replace(" 0\t| pluginIndex\n", " 0\t| pluginIndex\n 4\t| Log\n").replace("size(4)", "size(8)")
+        self.freeze(UNIT, host)
+        self.assertEqual(self.check(report(UNIT, grown))[0], 0)
+        self.assertEqual(self.saved()[1], layouts.parse_report(report(UNIT, grown)))
 
     def test_a_changed_class_fails_says_how_to_accept_and_leaves_the_record_alone(self):
         self.check(report(UNIT, CITY))

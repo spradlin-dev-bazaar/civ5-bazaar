@@ -173,18 +173,43 @@ def parse_record(text):
     return (int(m.group(1)), int(m.group(2))), parse_report(body)
 
 
+# Bazaar makes these and hands them to plugins, so a plugin built for an older one reads only the fields it knows:
+# fields added after the last one are an addition, as CivPluginApi.h's opening comment promises.
+GROWS_AT_END = frozenset(["class CivHostInfo", "class CivPluginInfo", "types CivHostInfo", "types CivPluginInfo"])
+
+
+def grew_at_end(key, old, new):
+    old_lines, new_lines = old.split("\n")[1:], new.split("\n")[1:]
+    if key.startswith("class "):
+        old_lines, new_lines = old_lines[:-1], new_lines[:-1]
+    return key in GROWS_AT_END and len(new_lines) > len(old_lines) and new_lines[: len(old_lines)] == old_lines
+
+
+def grown(recorded, current):
+    """The recorded blocks that the current report has with fields added at their end."""
+    now = {}
+    for key, text in current:
+        now.setdefault(key, []).append(text)
+    return [
+        (key, text)
+        for key, text in recorded
+        if text not in now.get(key, ()) and any(grew_at_end(key, text, later) for later in now.get(key, ()))
+    ]
+
+
 def compare(recorded, current):
     """The recorded blocks the current report lacks, each with the current blocks of the same name (None when the name
     is gone), and the new blocks. Classes nested in different classes can share a name, so a name stands for a group of
-    blocks."""
+    blocks. A block that only grew at its end is not lost, and its grown form is new."""
     leftover = {}
     for key, text in current:
         leftover.setdefault(key, []).append(text)
+    grew = set(grown(recorded, current))
     missing = []
     for key, text in recorded:
         if text in leftover.get(key, ()):
             leftover[key].remove(text)
-        else:
+        elif (key, text) not in grew:
             missing.append((key, text))
     lost = [(key, text, leftover.get(key) or None) for key, text in missing]
     lost_keys = set(key for key, _ in missing)
@@ -361,10 +386,10 @@ def check(project):
             print("\n".join(frozen_advice(tag)))
         return 1
     if new or not recorded_version:
-        write_record(recorded_version or version, recorded + new)
+        write_record(recorded_version or version, current)
     print(
         "class layouts and enum values: %d match %s, %d new added to it"
-        % (len(recorded), common.shown(RECORD), len(new))
+        % (len(current) - len(new), common.shown(RECORD), len(new))
     )
     return 0
 
