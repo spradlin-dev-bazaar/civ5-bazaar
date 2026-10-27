@@ -8,15 +8,17 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 
 ## Status
 
-Bazaar 0.5.0 is the first public release. From 0.5.0 on, what plugins use only grows until the next major version, so plugins built for it keep working with every 0.x release after it. The first real plugin, the MCP server, which lets an AI model play the game, will follow. The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
+Bazaar 0.5.0 is the first public release. From 0.5.0 on, what plugins use only grows until the next major version, so plugins built for it keep working with every 0.x release after it. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
 
 ## Installing
 
 You need Brave New World, on Windows.
 
-1. From the newest release on the [Releases page](https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases), download both packages: `Bazaar-<version>.civ5mod` and `Bazaar-VMC-Bootstrap-97.civ5mod`. The second one holds VMC's database files, and Bazaar needs it.
-2. Put both in your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
-3. In the game's Mods menu, turn on Bazaar Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required), then the plugins you want.
+1. On the Steam Workshop, subscribe to [Bazaar Multi-DLL Mod Loader](https://steamcommunity.com/sharedfiles/filedetails/?id=3825428828) and [Bazaar - VMC Bootstrap (required)](https://steamcommunity.com/sharedfiles/filedetails/?id=3825428468). The second one holds VMC's database files, and Bazaar needs it.
+2. Subscribe to the plugins you want.
+3. In the game's Mods menu, turn on Bazaar Multi-DLL Mod Loader, Bazaar - VMC Bootstrap (required) and your plugins.
+
+To install by hand instead, download both packages from the newest release on the [Releases page](https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases) and put them in your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
 
 ## What it does
 
@@ -30,7 +32,6 @@ You need Brave New World, on Windows.
 - Bazaar keeps each plugin's data in your saved games, so when you load a game, its plugins carry on where they left off.
 - A save made with a plugin's mod turned on loads only with that mod, as with any mod that affects saved games.
 - If you turn a plugin off for a while, Bazaar keeps its data in your saves, and the plugin gets it back when you turn it on again.
-- Games saved with Bazaar 0.4 still load.
 - If Bazaar cannot read its part of a save, it tells you when the save loads, so you can keep a copy before saving over it.
 
 ## Limits
