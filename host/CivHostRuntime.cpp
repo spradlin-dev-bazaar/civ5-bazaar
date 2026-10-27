@@ -680,10 +680,10 @@ namespace
 		return false;
 	}
 
-	bool AlreadyListed(const std::string& path)
+	bool ListedAbove(int plugin)
 	{
-		for (size_t i = 0; i < s_plugins.size(); ++i)
-			if (CivSameText(s_plugins[i].path, path))
+		for (int i = 0; i < plugin; ++i)
+			if (CivSameText(s_plugins[i].path, s_plugins[plugin].path))
 				return true;
 		return false;
 	}
@@ -796,68 +796,51 @@ namespace
 		return false;
 	}
 
-	void LoadOne(const CivPluginFile& file)
+	int AddRecord(const CivPluginFile& file)
 	{
-		const std::string path = CivFullPath(file.path);
-		const int index = (int)s_plugins.size();
-		CivPluginRecord blank;
-		blank.path = path;
-		blank.modId = file.modId;
-		blank.name = CivFileName(path);
-		blank.serial = ++s_lastSerial;
-		const bool duplicate = AlreadyListed(path);
-		s_plugins.push_back(blank);
-		if (duplicate)
-		{
-			Refuse(s_plugins[index], CIV_PLUGIN_DUPLICATE, "It is listed more than once, so this listing was skipped.");
-			return;
-		}
-		if (const KeptPlugin* kept = KeptInMemory(path))
-		{
-			s_plugins[index].name = kept->name;
-			Refuse(s_plugins[index], CIV_PLUGIN_STILL_IN_MEMORY, "It could not be shut down safely earlier, so it stays off until you restart Civilization V.");
-			return;
-		}
-		if (RefusedForApiVersion(s_plugins[index]))
-			return;
+		CivPluginRecord rec;
+		rec.path = CivFullPath(file.path);
+		rec.modId = file.modId;
+		rec.name = CivFileName(rec.path);
+		rec.serial = ++s_lastSerial;
+		s_plugins.push_back(rec);
+		return (int)s_plugins.size() - 1;
+	}
 
-		// Lets a plugin's own helper DLLs load from its folder rather than the game's.
-		HMODULE module = LoadLibraryExW(CivWide(path).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
-		if (!module)
+	// Nothing here may run the plugin's code: a refused plugin must never run.
+	bool RefusedBeforeLoading(int plugin)
+	{
+		CivPluginRecord& rec = s_plugins[plugin];
+		if (ListedAbove(plugin))
 		{
-			char problem[256];
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Windows could not load the file (error %lu).", GetLastError());
-			Refuse(s_plugins[index], CIV_PLUGIN_FILE_NOT_LOADED, problem);
-			return;
+			Refuse(rec, CIV_PLUGIN_DUPLICATE, "It is listed more than once, so this listing was skipped.");
+			return true;
 		}
-		CivPluginEntryFn entry = (CivPluginEntryFn)GetProcAddress(module, CIV_PLUGIN_ENTRY_NAME);
-		if (!entry)
+		if (const KeptPlugin* kept = KeptInMemory(rec.path))
 		{
-			Refuse(s_plugins[index], CIV_PLUGIN_NO_ENTRY, "The file has no " CIV_PLUGIN_ENTRY_NAME " function, so it is not a plugin.");
-			CivCrashForgetModule(module);
-			FreeLibrary(module);
-			return;
+			rec.name = kept->name;
+			Refuse(rec, CIV_PLUGIN_STILL_IN_MEMORY, "It could not be shut down safely earlier, so it stays off until you restart Civilization V.");
+			return true;
 		}
+		return RefusedForApiVersion(rec);
+	}
 
-		// A plugin may keep this pointer for as long as its DLL is loaded.
+	// A plugin may keep this pointer for as long as its DLL is loaded.
+	CivHostInfo* NewHostInfo(int plugin)
+	{
 		CivHostInfo* host = new CivHostInfo;
-		host->pluginIndex = index;
+		host->pluginIndex = plugin;
 		host->RegisterHook = &RegisterHook;
 		host->Log = &PluginLog;
 		host->RegisterHandHook = &RegisterHandHook;
 		host->PushLuaFunction = &PushLuaFunction;
 		host->RegisterSaveData = &RegisterSaveData;
 		host->WriteSaveData = &WriteSaveData;
-		s_plugins[index].module = module;
-		s_plugins[index].host = host;
-		CivPluginInfo info = { 0, 0, 0 };
-		EntryCall call = { entry, host, &info, false };
-		DiscardPending();
-		s_loadingConflict = false;
-		unsigned int code = 0;
-		const bool ran = GuardedEntry(&call, &code);
+		return host;
+	}
 
-		CivPluginRecord& rec = s_plugins[index];
+	void CopyDescription(CivPluginRecord& rec, const CivPluginInfo& info)
+	{
 		char text[256];
 		if (CopyPluginText(info.name, text, sizeof(text)) && *text)
 			rec.name = text;
@@ -865,41 +848,83 @@ namespace
 		rec.version = text;
 		CopyPluginText(info.id, text, sizeof(text));
 		rec.pluginId = text;
+	}
 
+	// When this is false, the plugin was refused and what it registered was discarded.
+	bool EntryAccepted(int plugin)
+	{
+		// Held across the entry function: nothing a plugin can call while it loads adds or removes a record.
+		CivPluginRecord& rec = s_plugins[plugin];
+		// Lets a plugin's own helper DLLs load from its folder rather than the game's.
+		HMODULE module = LoadLibraryExW(CivWide(rec.path).c_str(), 0, LOAD_WITH_ALTERED_SEARCH_PATH);
+		if (!module)
+		{
+			Refuse(rec, CIV_PLUGIN_FILE_NOT_LOADED, Format("Windows could not load the file (error %lu).", GetLastError()));
+			return false;
+		}
+		CivPluginEntryFn entry = (CivPluginEntryFn)GetProcAddress(module, CIV_PLUGIN_ENTRY_NAME);
+		if (!entry)
+		{
+			Refuse(rec, CIV_PLUGIN_NO_ENTRY, "The file has no " CIV_PLUGIN_ENTRY_NAME " function, so it is not a plugin.");
+			CivCrashForgetModule(module);
+			FreeLibrary(module);
+			return false;
+		}
+
+		rec.module = module;
+		rec.host = NewHostInfo(plugin);
+		CivPluginInfo info = { 0, 0, 0 };
+		EntryCall call = { entry, rec.host, &info, false };
+		DiscardPending();
+		s_loadingConflict = false;
+		unsigned int code = 0;
+		const bool ran = GuardedEntry(&call, &code);
+		CopyDescription(rec, info);
 		if (!ran)
 		{
-			char problem[256];
-			_snprintf_s(problem, sizeof(problem), _TRUNCATE, "It stopped working while loading (code 0x%08X) and was turned off until you return to the main menu.", code);
 			DiscardPending();
 			rec.quarantined = true;
-			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, problem);
+			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, Format("It stopped working while loading (code 0x%08X) and was turned off until you return to the main menu.", code));
 			LogCrash(&code);
-			return;
+			return false;
 		}
 		if (!call.accepted)
 		{
 			DiscardPending();
 			Refuse(rec, CIV_PLUGIN_ENTRY_DECLINED, "Declined to load.");
-			Unload(index);
-			return;
+			Unload(plugin);
+			return false;
 		}
-		if (RefusedForSaveKey(index))
+		return true;
+	}
+
+	void KeepOrTurnAway(int plugin)
+	{
+		CivPluginRecord& rec = s_plugins[plugin];
+		if (RefusedForSaveKey(plugin))
 		{
 			DiscardPending();
-			Unload(index);
+			Unload(plugin);
 			return;
 		}
-		const bool heldBack = !s_loadingConflict && ReportPossibleConflicts(index);
+		const bool heldBack = !s_loadingConflict && ReportPossibleConflicts(plugin);
 		if (s_loadingConflict || heldBack)
 		{
 			DiscardPending();
 			rec.status = heldBack ? CIV_PLUGIN_POSSIBLE_CONFLICT : CIV_PLUGIN_REPLACE_CONFLICT;
-			Unload(index);
+			Unload(plugin);
 			return;
 		}
-		CommitPending(index);
+		CommitPending(plugin);
 		rec.status = CIV_PLUGIN_LOADED;
 		Log("Plugin %s %s loaded (built for API %d.%d).", rec.name.c_str(), rec.version.c_str(), rec.builtApiMajor, rec.builtApiMinor);
+	}
+
+	void LoadOne(const CivPluginFile& file)
+	{
+		const int plugin = AddRecord(file);
+		if (!RefusedBeforeLoading(plugin) && EntryAccepted(plugin))
+			KeepOrTurnAway(plugin);
 	}
 
 	void DeleteEntries(CivHookEntry* e)
