@@ -6,6 +6,7 @@ the path, as it is under tests/runtime/run.cmd.
 
 import io
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "generator"))
 
+import common  # noqa: E402
 import layouts  # noqa: E402
 
 UNIT = "class CvUnit\tsize(12):\n\t+---\n 0\t| {vfptr}\n 4\t| m_iX\n 8\t| m_iY\n\t+---\n"
@@ -97,6 +99,39 @@ class CompareTest(unittest.TestCase):
         lost, new = layouts.compare(layouts.parse_report(report(UNIT)), layouts.parse_report(report(UNIT, CITY)))
         self.assertEqual((lost, new), ([], [block(CITY)]))
 
+    def test_bazaar_s_api_structs_may_grow_at_their_end_but_not_change(self):
+        host = "class CivHostInfo\tsize(8):\n\t+---\n 0\t| pluginIndex\n 4\t| RegisterHook\n\t+---\n"
+        grown = host.replace(" 4\t| RegisterHook\n", " 4\t| RegisterHook\n 8\t| Log\n").replace("size(8)", "size(12)")
+        types = "types CivHostInfo:\n field pluginIndex: int\n field RegisterHook: int (*)(int)\n"
+        more_types = types + " field Log: void (*)(int)\n"
+        lost, new = layouts.compare(
+            layouts.parse_report(report(host, types)), layouts.parse_report(report(grown, more_types))
+        )
+        self.assertEqual((lost, sorted(new)), ([], sorted([block(grown), block(more_types)])))
+        changed = host.replace("RegisterHook", "Unhook")
+        lost, _ = layouts.compare(layouts.parse_report(report(host)), layouts.parse_report(report(changed)))
+        self.assertEqual([key for key, _, _ in lost], ["class CivHostInfo"])
+        inserted = host.replace(" 0\t| pluginIndex\n", " 0\t| pluginIndex\n 4\t| Log\n").replace(
+            " 4\t| RegisterHook", " 8\t| RegisterHook"
+        )
+        lost, _ = layouts.compare(layouts.parse_report(report(host)), layouts.parse_report(report(inserted)))
+        self.assertEqual([key for key, _, _ in lost], ["class CivHostInfo"])
+        retyped = more_types.replace("RegisterHook: int (*)(int)", "RegisterHook: long (*)(int)")
+        lost, _ = layouts.compare(layouts.parse_report(report(types)), layouts.parse_report(report(retyped)))
+        self.assertEqual([key for key, _, _ in lost], ["types CivHostInfo"])
+
+    def test_every_struct_bazaar_hands_to_plugins_may_grow_at_its_end(self):
+        with open(layouts.API_HEADER, encoding="cp1252") as f:
+            structs = re.findall(r"^struct (\w+)\s*$", f.read(), re.M)
+        self.assertIn("CivHostInfo", structs)
+        for name in structs:
+            if name != "CivApiVersion":
+                self.assertTrue({"class " + name, "types " + name} <= layouts.GROWS_AT_END, name)
+
+    def test_an_engine_class_that_grows_at_its_end_is_still_lost(self):
+        lost, _ = layouts.compare(layouts.parse_report(report(UNIT)), layouts.parse_report(report(GROWN)))
+        self.assertEqual([key for key, _, _ in lost], ["class CvUnit"])
+
     def test_nested_classes_that_share_a_name_are_matched_as_a_group(self):
         recorded = layouts.parse_report(report(SECOND, FIRST))
         lost, new = layouts.compare(recorded, layouts.parse_report(report(FIRST, THIRD, SECOND)))
@@ -150,12 +185,23 @@ class RecordTest(unittest.TestCase):
 
 
 class AcceptAllowedTest(unittest.TestCase):
-    def test_before_1_0_a_change_may_always_be_accepted(self):
-        for tag in (None, "v0.3.0"):
-            self.assertTrue(layouts.accept_allowed((0, 3), (0, 4), tag), tag)
+    def test_the_host_refuses_plugins_from_before_the_same_freeze(self):
+        with open(os.path.join(common.HOST_DIR, "CivHostRuntime.h"), encoding="utf-8") as f:
+            text = f.read()
+        found = [re.search(r"#define CIV_HOST_FREEZE_%s (\d+)" % part, text) for part in ("MAJOR", "MINOR")]
+        self.assertTrue(all(found))
+        self.assertEqual(tuple(int(m.group(1)) for m in found), common.FREEZE)
 
-    def test_1_0_freezes_the_layouts_of_the_0_x_releases(self):
-        for tag in (None, "v0.9.0", "v1.0.0"):
+    def test_before_the_freeze_a_change_may_always_be_accepted(self):
+        for tag in (None, "v0.3.0", "v0.4.1"):
+            self.assertTrue(layouts.accept_allowed((0, 3), (0, 4), tag), tag)
+        self.assertTrue(layouts.accept_allowed((0, 4), (0, 5), "v0.4.1"), "the release that freezes, while prepared")
+
+    def test_the_freeze_fixes_the_layouts_of_the_releases_before_it(self):
+        for tag in ("v0.5.0", "v0.9.0"):
+            self.assertFalse(layouts.accept_allowed((0, 5), (0, 5), tag), tag)
+            self.assertFalse(layouts.accept_allowed((0, 5), (0, 9), tag), tag)
+        for tag in (None, "v1.0.0"):
             self.assertFalse(layouts.accept_allowed((0, 9), (1, 0), tag), tag)
 
     def test_within_a_released_major_version_a_change_is_refused(self):
@@ -163,17 +209,19 @@ class AcceptAllowedTest(unittest.TestCase):
         self.assertFalse(layouts.accept_allowed((2, 0), (2, 1), "v2.0.0"))
 
     def test_the_major_version_after_the_last_release_s_may_change_them_again_until_released(self):
+        self.assertTrue(layouts.accept_allowed((0, 5), (1, 0), "v0.5.0"))
         self.assertTrue(layouts.accept_allowed((1, 4), (2, 0), "v1.4.0"))
         self.assertTrue(layouts.accept_allowed((2, 0), (2, 0), "v1.4.0"))
 
-    def test_a_number_raised_past_it_or_put_back_to_0_after_1_0_is_refused(self):
+    def test_a_number_raised_past_it_or_put_back_to_0_after_the_freeze_is_refused(self):
         self.assertFalse(layouts.accept_allowed((1, 4), (3, 0), "v1.4.0"))
         self.assertFalse(layouts.accept_allowed((1, 4), (0, 4), "v1.4.0"))
 
-    def test_without_a_release_tag_only_a_record_and_number_still_at_0_may_change(self):
+    def test_without_a_release_tag_only_a_record_and_number_before_the_freeze_may_change(self):
         self.assertFalse(layouts.accept_allowed((1, 4), (2, 0), None))
         self.assertFalse(layouts.accept_allowed((0, 4), (2, 0), None))
         self.assertFalse(layouts.accept_allowed((1, 4), (0, 4), None))
+        self.assertFalse(layouts.accept_allowed((0, 4), (0, 5), None))
 
 
 class ShippedHeadersTest(unittest.TestCase):
@@ -305,7 +353,7 @@ class RunTest(unittest.TestCase):
         return layouts.read_record((0, 0))
 
     def freeze(self, *blocks):
-        """A record saved before 1.0, and the version moved to 1.4, the last release's."""
+        """A record saved before the freeze, and the version moved to 1.4, the last release's."""
         self.check(report(*blocks))
         self.version = (1, 4)
         self.tag = "v1.4.0"
@@ -319,6 +367,13 @@ class RunTest(unittest.TestCase):
         self.version = (0, 4)
         self.assertEqual(self.check(report(UNIT, CITY))[0], 0)
         self.assertEqual(self.saved(), ((0, 3), layouts.parse_report(report(UNIT, CITY))))
+
+    def test_once_frozen_bazaar_s_host_info_may_grow_at_its_end_and_the_record_takes_the_grown_layout(self):
+        host = "class CivHostInfo\tsize(4):\n\t+---\n 0\t| pluginIndex\n\t+---\n"
+        grown = host.replace(" 0\t| pluginIndex\n", " 0\t| pluginIndex\n 4\t| Log\n").replace("size(4)", "size(8)")
+        self.freeze(UNIT, host)
+        self.assertEqual(self.check(report(UNIT, grown))[0], 0)
+        self.assertEqual(self.saved()[1], layouts.parse_report(report(UNIT, grown)))
 
     def test_a_changed_class_fails_says_how_to_accept_and_leaves_the_record_alone(self):
         self.check(report(UNIT, CITY))
@@ -370,7 +425,7 @@ class RunTest(unittest.TestCase):
         code, out = self.check(report(UNIT))
         self.assertEqual(code, 1)
         self.assertIn("gone: class CvCity", out)
-        self.assertIn("From 1.0 on, the release\nwithout it must be a new major version", out)
+        self.assertIn("From 0.5 on, the release\nwithout it must be a new major version", out)
 
     def test_a_layout_the_host_sees_differently_fails_and_names_the_defines_that_differ(self):
         self.host_defines = self.host_defines + ["CVGAMECOREDLL_EXPORTS"]
@@ -386,8 +441,8 @@ class RunTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("reported no class layouts", out)
 
-    def test_from_1_0_on_a_missing_record_is_not_made_again(self):
-        self.version = (1, 0)
+    def test_from_the_freeze_on_a_missing_record_is_not_made_again(self):
+        self.version = (0, 5)
         self.assertEqual(self.check(report(UNIT))[0], 1)
         self.assertEqual(self.accept(report(UNIT))[0], 1)
         self.assertFalse(os.path.exists(layouts.RECORD))
@@ -421,12 +476,12 @@ class RunTest(unittest.TestCase):
     def test_without_a_release_tag_the_advice_says_to_fetch_the_tags(self):
         self.assertIn("git fetch --tags", "\n".join(layouts.frozen_advice(None)))
 
-    def test_until_1_0_is_tagged_a_change_is_made_under_0(self):
-        self.assertIn("CivPluginApi.h to 0 and run", "\n".join(layouts.frozen_advice("v0.9.0")))
-        for tag in ("v1.0.0", "v1-beta"):
+    def test_until_the_freeze_is_tagged_a_change_is_made_under_0(self):
+        self.assertIn("CivPluginApi.h to 0 and run", "\n".join(layouts.frozen_advice("v0.4.1")))
+        for tag, major in (("v0.5.0", 1), ("v0.9.0", 1), ("v1.0.0", 2), ("v1-beta", 2)):
             advice = "\n".join(layouts.frozen_advice(tag))
             self.assertNotIn("to 0 and run", advice, tag)
-            self.assertIn("CivPluginApi.h to 2,", advice, tag)
+            self.assertIn("CivPluginApi.h to %d," % major, advice, tag)
 
     def test_accept_of_a_gone_class_is_allowed_once_frozen_and_keeps_the_version(self):
         self.freeze(UNIT, CITY)

@@ -187,7 +187,7 @@ the game calls the function
 the game gets the result
 ```
 
-- **Before-hooks** run in load order. Returning `true` **vetoes** the call: the game's function does not run, and neither do the replacement or the before-hooks after this one. The caller still gets a return value: whatever the hook stored in `result` (see [Writing a hook](#writing-a-hook)), or, if it stored nothing, a default: zero, `false`, or an empty string or object. Functions that return a reference work differently; see [Functions that return a reference](#functions-that-return-a-reference). Returning `false` lets the call go ahead. The after-hooks run either way.
+- **Before-hooks** run in load order. Returning `true` **vetoes** the call: the game's function does not run, and neither do the replacement or the before-hooks after this one. The caller still gets a return value: whatever this hook, or a before-hook above it, stored in `result` (see [Writing a hook](#writing-a-hook)), or, if none stored anything, a default: zero, `false`, or an empty string or object. Functions that return a reference work differently; see [Functions that return a reference](#functions-that-return-a-reference). Returning `false` lets the call go ahead. The after-hooks run either way.
 - **A replacement** runs instead of the game's function. It gets the game's own version as its first parameter, `original`, and calling `original` runs it. Only one plugin can replace a function. If two try, the one lower in the list is not loaded at all, and the Plugins screen names both and says to move it higher to use it instead.
 - **After-hooks** run in reverse load order, so the plugin highest in the list has the last word. They run after the game's function or the replacement, and also after a veto. Each can read the return value and change it.
 
@@ -211,7 +211,7 @@ A hook's parameters must match the game's function exactly. Build them from the 
 
 - **`original`** is a function pointer: `original(self, bFinal, bVictory)` runs the game's own version.
 - **`self`** is the object the method was called on (what C++ calls `this`). For a const method it is a pointer to const: the hook can read the object but not change it. Static methods and functions outside any class have no `self`.
-- **`result`** is a reference to the value the caller will get, so assigning to it changes what the game gets back. In a before-hook the game's function has not run yet, so `result` holds a default (zero, `false` or empty), not the game's answer. Functions that return `void` have no `result`.
+- **`result`** is a reference to the value the caller will get, so assigning to it changes what the game gets back. In a before-hook the game's function has not run yet, so `result` holds a default (zero, `false` or empty), or what a before-hook above yours stored, not the game's answer. Functions that return `void` have no `result`.
 
 A before-hook returns a `bool` (`true` vetoes the call), an after-hook returns `void`, and a replacement returns the same type as the game's function, `const` included: for `const bool CvBuildingEntry::GetArtInfoCulturalVariation() const`, a replacement and its `original` return `const bool`. So for `GetScore`, the three kinds are declared like this (each still needs its `{ ... }` body when you write it):
 
@@ -294,7 +294,8 @@ They come in two kinds:
 Register for one in `CivPluginEntry` with `RegisterHandHook`. It returns codes from the same table as `RegisterHook`: 0 when it worked, 1 for an unknown hand-placed hook or no function, and 4 when called outside `CivPluginEntry`. The template uses it to log every notification:
 
 ```cpp
-static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2)
+static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex)
 {
 	++s_notifications;
 	Log("notification %d for %s: %s", notificationType, GET_PLAYER((PlayerTypes)player).getCivilizationShortDescription(), message);
@@ -309,7 +310,8 @@ Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (vo
 The hook's parameters must match the function type named in the comment above the `CIV_HAND_...` constant. For `CIV_HAND_NOTIFICATION_ADDED` that is `CivNotificationAddedFn`, which `CivPluginApi.h` defines further down with a typedef, as a function pointer type:
 
 ```cpp
-typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
+typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex);
 ```
 
 Take every parameter, even the ones you do not use. (`const char*` is a C string.)
@@ -512,7 +514,7 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
 
 Make each release with `release.cmd`, in your plugin's folder. Besides what building needs, it needs only Windows 10 version 1803 or later, for the `tar` that comes with it: no git and no website.
 
-1. In `VERSION`, set the release. Its `release` line is a whole number, such as `2`, or a semantic version, such as `1.2.0`. A whole number is also the mod's version, which the game and the package's name use (`(v 2)`), so raise it for each release. With a semantic version, the script keeps a `mod` line for the mod's version and raises it itself. The `bazaar` line names the oldest Bazaar release your plugin needs; the template already names the oldest one that can run a plugin built with this SDK. `workshop-description.txt` must say the same, in its "Requires Bazaar … or newer." sentence. Before 1.0, a new Bazaar may change the API in a way that needs your plugin rebuilt (see [Bazaar versions](#bazaar-versions)); when that happens, rebuild it with the new SDK and make a new release.
+1. In `VERSION`, set the release. Its `release` line is a whole number, such as `2`, or a semantic version, such as `1.2.0`. A whole number is also the mod's version, which the game and the package's name use (`(v 2)`), so raise it for each release. With a semantic version, the script keeps a `mod` line for the mod's version and raises it itself. The `bazaar` line names the oldest Bazaar release your plugin needs; the template already names the oldest one that can run a plugin built with this SDK. `workshop-description.txt` must say the same, in its "Requires Bazaar … or newer." sentence. A new major version of Bazaar, such as 1.0, needs your plugin rebuilt (see [Bazaar versions](#bazaar-versions)); when one comes out, rebuild your plugin with its SDK and make a new release.
 2. Add a section for the release to the top of `CHANGES.txt`, starting with the line `[b]<release>[/b]` and saying what changed. It is written in the Steam Workshop's BBCode, ready to paste. Without one, the script warns.
 3. Run `release.cmd` from a Command Prompt. It writes the version into the `.civ5proj` and `src\PluginVersion.h`, builds the plugin, checks the package and copies it into `Releases\<release>\`. If something is wrong, it stops before releasing anything and says what to fix. Keep `Releases\`: it is how the script knows which mod versions are already out, so that none is used twice.
 4. In ModBuddy, choose **Tools > Upload to Steam Workshop > Upload new Mod...**, and accept the terms. Click **[...]** and select the package in `Releases\<release>\`, such as `Releases\1\Score Doubler (v 1).civ5mod`. Paste `workshop-description.txt` as the description, and your `CHANGES.txt` section as the change note. For a later release, update your existing Workshop item with the new package instead of uploading a new mod.
@@ -530,7 +532,7 @@ Most plugins can leave this part until one of these comes up.
 
 Bazaar's plugin API has a version in two parts, major and minor: `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR` in `CivPluginApi.h`. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;` exports the version your plugin was built against. Every plugin needs it, written once, outside any function, in one of its `.cpp` files.
 
-Bazaar runs a plugin built for its own version or an older one. It refuses a plugin built for a newer version, or for a different major version, and says so in its log, on the Plugins screen and in a notice in the game. Before 1.0, a new Bazaar may also change the API in a way that needs your plugin rebuilt with the new SDK.
+Bazaar runs a plugin built for its own version or an older one. It refuses a plugin built for a newer version, or for a different major version, and says so in its log, on the Plugins screen and in a notice in the game. From 0.5 on, the API only grows within a major version. Releases before 0.5 could also change it, so Bazaar 0.5 and later refuse a plugin built for one of them until it is rebuilt with a newer SDK.
 
 Bazaar reads the version from your DLL file before running any of your plugin's code, so a plugin it refuses never runs. That includes a plugin that uses functions an older Bazaar lacks, which Windows could not load: Bazaar refuses it with a message naming both versions instead. A DLL without the line is refused as built for an older Bazaar.
 

@@ -277,7 +277,7 @@ def next_version(base, diffs, major=False):
     numbers = version.numbers(base.release)
     if major:
         release = "%d.0.0" % (numbers[0] + 1)
-    elif numbers[0] >= 1 and any(d.removed for d in diffs):
+    elif common.frozen(numbers) and any(d.removed for d in diffs):
         return None
     elif any(d.added or d.removed for d in diffs):
         release = "%d.%d.0" % (numbers[0], numbers[1] + 1)
@@ -326,7 +326,10 @@ def plan(lists, major):
     report(tag, diffs)
     new = next_version(base, diffs, major)
     if new is None:
-        stop("from 1.0 on, removing or changing what plugins use needs a new major version: run it with --major")
+        stop(
+            "from %s on, removing or changing what plugins use needs a new major version: run it with --major"
+            % common.FREEZE_SHOWN
+        )
     say("the next release is %s, mod version %d" % new)
     if any(d.removed for d in diffs):
         say("every plugin must be rebuilt for it, and the release notes must say so")
@@ -391,8 +394,8 @@ def require_build_as_prepared(current):
         expected = next_version(base, diffs, major)
         if expected is None:
             stop(
-                "this build removes or changes what plugins use, which from 1.0 on needs a new major version: prepare"
-                " the release again with --major"
+                "this build removes or changes what plugins use, which from %s on needs a new major version: prepare"
+                " the release again with --major" % common.FREEZE_SHOWN
             )
         if expected != current:
             stop(
@@ -525,7 +528,7 @@ def publish(notes):
         stop("%s already tags another commit: if it was never pushed, delete it with git tag -d %s" % (tag, tag))
     git("push", "origin", "refs/tags/" + tag)
     cmd = [gh, "release", "create", tag, "--verify-tag", "--draft", "--title", title, "--notes-file", notes]
-    if version.numbers(current.release)[0] == 0:
+    if not common.frozen(version.numbers(current.release)):
         cmd.append("--prerelease")
     done = subprocess.run(cmd + paths, cwd=common.REPO, capture_output=True, text=True, errors="replace")
     if done.returncode != 0:

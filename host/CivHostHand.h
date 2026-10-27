@@ -12,7 +12,8 @@ void CivHandPopupRaised(int player, int popupType, int data1, int data2, int dat
 // For a popup raised for a team: each of the players runs the hook.
 void CivHandPopupRaised(const std::vector<int>& players, int popupType, int data1, int data2, int data3, bool option1, bool option2,
 	const char* text);
-void CivHandNotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
+void CivHandNotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex);
 void CivHandDealResolved(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);
 void CivHandUnitOrdersCancelled(CvUnit* unit, int reason);
 void CivHandUnitReplaced(int oldOwner, int oldUnit, CvUnit* newUnit);

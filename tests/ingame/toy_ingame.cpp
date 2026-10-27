@@ -163,7 +163,7 @@ static void HeardPopup(int player, int popupType, int data1, int data2, int data
 	Log("popup %d for player %d: %d %d %d %d %d [%s]", popupType, player, data1, data2, data3, option1, option2, text);
 }
 
-static void HeardNotification(int player, int, const char* message, const char*, int, int, int, int)
+static void HeardNotification(int player, int, const char* message, const char*, int, int, int, int, int)
 {
 	Log("notification for player %d: %s", player, message);
 }

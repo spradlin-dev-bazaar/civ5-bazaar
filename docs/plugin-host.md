@@ -98,7 +98,7 @@ Raw detouring is not used on host functions. It remains only for the closed exec
 | `CvDllPlayer::IsHuman`, `CvDllPreGame::isHuman` | generated after-hooks on both |
 | `CvPlayer::setAlive` → keep the dead slot open | question `KeepDeadSlotOpen(player)` |
 | `CvUnit::UnitPathTo` six cancellation sites and `CvUnit::setPromotionReady` | announcement `UnitOrdersCancelled(unit, reason)`, with a reason number in place of the MCP server's text |
-| `CvNotifications::Add` | announcement `NotificationAdded(player, type, message, summary, x, y, data1, data2)` |
+| `CvNotifications::Add` | announcement `NotificationAdded(player, type, message, summary, x, y, data1, data2, lookupIndex)` |
 | popup sites (wonder, great person, city captured, goody, golden age, natural wonder, tech, era, barbarian camp, city-state greeting) | announcement `PopupRaised(player, type, data1, data2, data3, option1, option2, text)` |
 | `CvDiplomacyRequests` request and deal interception | generated before-hooks on both versions of `SendRequest` and `SendDealRequest`, which can veto |
 | deal resolved (`CvDealClasses` in the MCP server's DLL, `CvDllNetMessageHandler` in VMC) | announcement `DealResolved(from, to, actingPlayer, accepted, finalized)` |

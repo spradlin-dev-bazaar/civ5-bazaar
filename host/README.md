@@ -1,6 +1,6 @@
 The host's own code, compiled into the host DLL. Every `.cpp` file here is built into it, and the runtime tests build all of them but `CivHostEngine.cpp`.
 
-- `CivPluginApi.h`: the contract with plugin DLLs.
+- `CivPluginApi.h`: the contract with plugin DLLs. The Plugins screen's `bazaar:` calls and its `BazaarPlugins` table are Bazaar's own, not part of it, so they may change in any release.
 - `CivHostRuntime`: loading and unloading plugins, running their hooks and their save and load functions, and catching their crashes.
 - `CivHostSaves`: Bazaar's part of a saved game: each plugin's data under its mod's ID and plugin ID, and the data of plugins that are off, kept for the next save.
 - `CivHostValues`: the values plugins keep on players, cities, units and plots: reading and setting them, carrying them over to a new unit or city, and their place in Bazaar's part of a save.

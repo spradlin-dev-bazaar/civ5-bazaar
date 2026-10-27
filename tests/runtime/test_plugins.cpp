@@ -90,6 +90,9 @@ void TestLoading()
 	Check(!LogHas("[Toy Newer]"), "a plugin built for a newer host never runs: its version is read from its file");
 	Check(HasStatus("toy_major.dll", CIV_PLUGIN_OTHER_MAJOR), "a plugin built for another major version is refused");
 	Check(!LogHas("[Toy Major]"), "a plugin built for another major version never runs");
+	Check(CivApiRefusedAsBeforeFreeze(0, 5, 0, 4) && CivApiRefusedAsBeforeFreeze(0, 9, 0, 3) && !CivApiRefusedAsBeforeFreeze(0, 5, 0, 5)
+		&& !CivApiRefusedAsBeforeFreeze(1, 2, 1, 0), "from the freeze on, a plugin built before it is refused");
+	Check(!CivApiRefusedAsBeforeFreeze(0, 4, 0, 3), "before the freeze, a plugin built for an older minor version still loads");
 	Check(HasStatus("toy_no_version.dll", CIV_PLUGIN_NO_API_VERSION), "a plugin that does not export its API version is refused");
 	Check(ReportRow("toy_no_version.dll").problems.find("which Bazaar") != std::string::npos, "the Plugins screen says the plugin does not say which Bazaar it was built for");
 	Check(!LogHas("[Toy No Version]"), "a plugin that does not export its API version never runs");

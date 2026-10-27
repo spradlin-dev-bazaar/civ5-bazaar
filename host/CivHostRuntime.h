@@ -6,6 +6,11 @@
 #include <utility>
 #include <vector>
 
+// From this API on, what plugins use only grows within a major version. tools/generator/common.py's FREEZE says the
+// same, and tests/generator/test_layouts.py keeps the two equal.
+#define CIV_HOST_FREEZE_MAJOR 0
+#define CIV_HOST_FREEZE_MINOR 5
+
 enum CivPluginStatus
 {
 	CIV_PLUGIN_LOADED,
@@ -115,6 +120,8 @@ CivPluginListResult CivHostSetPlugins(const std::vector<CivPluginFile>& files, c
 bool CivHostUnloadPlugins();
 const std::vector<CivPluginRecord>& CivHostPlugins();
 void CivHostLogLine(const char* line);
+// A plugin built before the freeze compiled in what the freeze changed, so a host from the freeze on refuses it.
+bool CivApiRefusedAsBeforeFreeze(int hostMajor, int hostMinor, int builtMajor, int builtMinor);
 const char* CivHostPluginName(int plugin);
 // The refusal of a second plugin with the same key, the lookup of saved data and the finding of published values all
 // use this, or data would mix.

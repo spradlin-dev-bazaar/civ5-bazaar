@@ -46,9 +46,9 @@ void TestHandHooks()
 	CivHandPopupRaised(team, 11, 0, 0, 0, false, true, 0);
 	Check(LogCount("[Toy Hand] popup 1 11 0 0 0 0 1 []") == 1 && LogCount("[Toy Hand] popup 6 11 0 0 0 0 1 []") == 1,
 		"a popup for a team reaches the plugin once for each of the team's players, and missing text arrives empty");
-	CivHandNotificationAdded(1, 7, "A message", "A summary", 4, 5, 6, 8);
-	Check(LoggedInOrder("[Toy Hand] notification 1 7 [A message] [A summary] 4 5 6 8", "[Toy Hand Second] notification 1 7 [A message] [A summary] 4 5 6 8"),
-		"an announcement reaches every plugin that listens, in load order, with all its values");
+	CivHandNotificationAdded(1, 7, "A message", "A summary", 4, 5, 6, 8, 9);
+	Check(LoggedInOrder("[Toy Hand] notification 1 7 [A message] [A summary] 4 5 6 8 9", "[Toy Hand Second] notification 1 7 [A message] [A summary] 4 5 6 8"),
+		"an announcement reaches every plugin that listens, in load order, with all its values, also one written before the lookup index");
 	CivHandDealResolved(1, 2, 2, true, false);
 	Check(LogHas("[Toy Hand] deal 1 2 2 1 0"), "a resolved deal reaches the plugin with all its values");
 	unit.CancelOrders(CIV_ORDERS_NO_PATH);

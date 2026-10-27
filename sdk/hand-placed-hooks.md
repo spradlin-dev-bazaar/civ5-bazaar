@@ -2,6 +2,8 @@
 
 A hand-placed hook is a spot inside an engine function where Bazaar calls plugins. A plugin registers for one in its entry function with `RegisterHandHook(pluginIndex, hook, function)`, using a `CIV_HAND_*` number and a function of the type `CivPluginApi.h` names for it. Plugins are called in load order. A question stops at the first plugin that answers yes. An announcement reaches every plugin that registered for it.
 
+Later releases may add places where a hook runs, popup types and reasons, and only a new major version takes any away. Ignore a value you don't know.
+
 A replacement that does not run the original also stops the spots inside it from running. When that could happen between two plugins, Bazaar holds one of them back; see "What a replacement skips" in the plugin guide.
 
 ## IsPluginControlledPlayer
@@ -33,7 +35,7 @@ The city-state greeting depends on VMC's `GLOBAL_CS_GIFTS` option. With it on, t
 
 ## NotificationAdded
 
-An announcement: a notification was added to this player's list. The values are the ones the game's `CvNotifications::Add` received: the notification type, the message, the summary, the plot's x and y, and its two data values. The game keeps notifications only for human players, so it runs only for them.
+An announcement: a notification was added to this player's list. The values are the ones the game's `CvNotifications::Add` received: the notification type, the message, the summary, the plot's x and y, and its two data values, then the notification's lookup index, which `CvNotifications::Dismiss` and `Activate` take. The game keeps notifications only for human players, so it runs only for them.
 
 ## DealResolved
 

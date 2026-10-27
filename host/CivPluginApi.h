@@ -1,6 +1,6 @@
 #pragma once
 
-// The contract between the host and plugin DLLs. From 1.0 on, structures here only grow at the end, except CivApiVersion, which never changes.
+// The contract between the host and plugin DLLs. From 0.5 on, structures here only grow at the end, except CivApiVersion, which never changes.
 
 #ifdef _UNICODE
 #error Set your project's Character Set to Use Multi-Byte Character Set, as Bazaar's is.
@@ -39,7 +39,8 @@ enum CivHookRegisterResult
 };
 
 // Hand-placed hooks: spots inside engine functions, registered with RegisterHandHook. Each takes the function type named
-// beside it, and plugins are called in load order. Ids only ever grow at the end.
+// beside it, and plugins are called in load order. Ids only ever grow at the end. Later releases may also run a hook
+// in more places, and pass popup types and reasons a plugin does not know yet, which it ignores.
 enum CivHandHook
 {
 	// CivPlayerQueryFn: does a plugin play this player, rather than the person at the keyboard? Any yes wins.
@@ -48,7 +49,8 @@ enum CivHandHook
 	CIV_HAND_KEEP_DEAD_SLOT_OPEN = 1,
 	// CivPopupRaisedFn: the game raised a popup for this player, or would have if they were at the keyboard.
 	CIV_HAND_POPUP_RAISED = 2,
-	// CivNotificationAddedFn: a notification was added to this player's list.
+	// CivNotificationAddedFn: a notification was added to this player's list; lookupIndex is the number
+	// CvNotifications::Dismiss and Activate take.
 	CIV_HAND_NOTIFICATION_ADDED = 3,
 	// CivDealResolvedFn: a proposed deal was accepted or turned down.
 	CIV_HAND_DEAL_RESOLVED = 4,
@@ -80,7 +82,8 @@ enum CivOrdersCancelledReason
 typedef bool (*CivPlayerQueryFn)(int player);
 // What the values mean depends on the popup; hand-placed-hooks.md lists them.
 typedef void (*CivPopupRaisedFn)(int player, int popupType, int data1, int data2, int data3, bool option1, bool option2, const char* text);
-typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2);
+typedef void (*CivNotificationAddedFn)(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
+	int lookupIndex);
 typedef void (*CivDealResolvedFn)(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized);
 typedef void (*CivUnitOrdersCancelledFn)(CvUnit* unit, int reason);
 typedef void (*CivUnitReplacedFn)(int oldOwner, int oldUnit, CvUnit* newUnit);
@@ -185,6 +188,7 @@ struct CivPluginInfo
 	const char* id;
 };
 
+// Saves hold what these write, so how they lay out a number or a text never changes, not even in a new major version.
 class CivSaveWriter
 {
 public:
