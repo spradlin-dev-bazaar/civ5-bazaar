@@ -7,3 +7,9 @@ Don't use it together with whoward69's own VMC mod.
 
 [h2]Credits[/h2]
 Everything in this mod is whoward69's work, from VMC version 97, with the credits to his translators that VMC carries.
+
+[h2]Links[/h2]
+[list]
+[*][url=https://discord.gg/zuRynuzNxr]Bazaar's Discord[/url]
+[*][url=https://github.com/spradlin-dev-bazaar/civ5-bazaar]Bazaar's source code on GitHub[/url]
+[/list]
