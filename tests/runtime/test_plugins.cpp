@@ -79,7 +79,7 @@ namespace
 void TestLoading()
 {
 	const char* const names[] = {"toy_basic.dll", "toy_second.dll", "toy_shapes.dll", "toy_conflict.dll", "toy_newer.dll",
-		"toy_major.dll", "toy_no_version.dll", "toy_newer_imports.dll", "toy_older.dll", "toy_ordinals.dll", "toy_no_entry.dll",
+		"toy_major.dll", "toy_no_version.dll", "toy_newer_imports.dll", "toy_older.dll", "toy_before_freeze.dll", "toy_ordinals.dll", "toy_no_entry.dll",
 		"toy_missing.dll", "toy_entry_fault.dll", "toy_load_fails.dll", "toy_64bit.dll", "toy_empty_name.dll"};
 	StartWith(names);
 
@@ -102,8 +102,18 @@ void TestLoading()
 	if (unloadable)
 		FreeLibrary(unloadable);
 	Check(LogHas(LoadedLine("Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR).c_str()), "the host reads the version a plugin exports");
-	Check(HasStatus("toy_older.dll", CIV_PLUGIN_LOADED), "a plugin built for an older minor version loads");
-	Check(LogHas(LoadedLine("Toy Older", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1).c_str()), "the host reads an older plugin's own version");
+	// At the release the freeze starts from, the minor version before it is from before the freeze, and is refused.
+	const bool previousMinorFrozen = CIV_HOST_API_MINOR > 0
+		&& (CIV_HOST_API_MAJOR > CIV_HOST_FREEZE_MAJOR || CIV_HOST_API_MINOR - 1 >= CIV_HOST_FREEZE_MINOR);
+	if (previousMinorFrozen)
+	{
+		Check(HasStatus("toy_older.dll", CIV_PLUGIN_LOADED), "a plugin built for an older minor version loads");
+		Check(LogHas(LoadedLine("Toy Older", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1).c_str()), "the host reads an older plugin's own version");
+	}
+	Check(HasStatus("toy_before_freeze.dll", CIV_PLUGIN_OTHER_MAJOR)
+			&& ReportRow("toy_before_freeze.dll").problems.find("Rebuild it with a newer SDK") != std::string::npos
+			&& !LogHas("[Toy Before Freeze]"),
+		"a plugin built for the version before the freeze is refused, told to rebuild, and never runs");
 	Check(HasStatus("toy_ordinals.dll", CIV_PLUGIN_LOADED), "a plugin whose exports are numbered out of name order loads: its version is found by name");
 	Check(HasStatus("toy_no_entry.dll", CIV_PLUGIN_NO_ENTRY), "a DLL without the entry point is refused");
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
