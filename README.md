@@ -38,7 +38,7 @@ To install by hand instead, download both packages from the newest release on th
 
 - Windows only. Single player only.
 - It doesn't work with any other mod that replaces the game DLL, such as the Community Patch or whoward69's own VMC mod. Bazaar already includes VMC, so turn VMC's own mod off.
-- Another mod that replaces Advanced Setup, if installed after Bazaar, shows its own screen instead of the Plugins screen ([#55](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues/55)).
+- If another mod that replaces Advanced Setup is turned on and was installed or updated after Bazaar, the first Next in Mods takes about 15 seconds longer: Bazaar switches the mods off and on again so that its Plugins screen comes first.
 
 ## Getting help
 

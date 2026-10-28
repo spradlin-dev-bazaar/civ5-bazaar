@@ -26,6 +26,7 @@ void TestEntryBreak();
 void TestThreads();
 void TestOrder();
 void TestReplacedSetup();
+void TestSetupOrder();
 void TestHandHooks();
 void TestHandHookFaults();
 void TestPossibleConflicts();
@@ -109,6 +110,7 @@ namespace
 		{"threads", &TestThreads},
 		{"order", &TestOrder},
 		{"replaced setup", &TestReplacedSetup},
+		{"setup order", &TestSetupOrder},
 		{"hand-placed hooks", &TestHandHooks},
 		{"hand-placed hook faults", &TestHandHookFaults},
 		{"possible conflicts", &TestPossibleConflicts},

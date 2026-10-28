@@ -492,6 +492,119 @@ namespace
 		LogLine(("Continue opened Advanced Setup from " + setup.xmlSource + " and " + setup.luaSource + ".").c_str());
 		lua_pushstring(L, setup.copy.c_str());
 	}
+
+	// Set from the move until Bazaar's DLL loads again: switching the mods off unloads it, so only the process keeps this.
+	const char* const kReloading = "BAZAAR_SETUP_RELOADING";
+	bool s_reloaded = false;
+	bool s_waitingForNext = false;
+
+	bool InstalledMods(std::vector<CivInstalledMod>* mods)
+	{
+		Database::Connection* modding = gDLL->GetModsDatabase();
+		Database::Results rows;
+		if (!modding || !modding->Execute(rows,
+			"SELECT m.RowID, m.ModID, (SELECT p.Value FROM ModProperties p WHERE p.ModID = m.ModID AND p.Version = m.Version "
+			"AND p.Name = 'Name'), m.Activated, f.EvaluatedPath FROM Mods m LEFT JOIN ModFiles f ON f.ModID = m.ModID "
+			"AND f.Version = m.Version AND f.Import = 1 ORDER BY m.RowID, f.rowid"))
+			return false;
+		while (rows.Step())
+			CivAddInstalledModRow(mods, rows.GetInt(0), Text(rows, 1), Text(rows, 2), rows.GetInt(3) != 0, CivUtf8(CivWide(Text(rows, 4))));
+		return true;
+	}
+
+	bool CheckSetupOrder(CivSetupOrder* order, std::string* ownId)
+	{
+		std::vector<CivActiveMod> active;
+		std::vector<CivInstalledMod> installed;
+		if (!ActiveMods(&active) || !InstalledMods(&installed))
+		{
+			LogLine("Could not read the game's list of installed mods, so Bazaar could not check that its Plugins screen comes first.");
+			return false;
+		}
+		*ownId = CivOwnModId(active, OwnFolder());
+		*order = CivCheckSetupOrder(installed, *ownId);
+		return true;
+	}
+
+	bool MoveLast(const std::string& ownId)
+	{
+		Database::Connection* modding = gDLL->GetModsDatabase();
+		Database::Results move;
+		if (!modding || !modding->Execute(move, "UPDATE Mods SET RowID = (SELECT MAX(RowID) FROM Mods) + 1 WHERE ModID = ? AND Activated = 1"))
+			return false;
+		move.Bind(1, ownId.c_str());
+		return move.Execute();
+	}
+
+	// Runs once Next has switched the mods on, when the game has already chosen whose Advanced Setup shows. It reaches
+	// Bazaar only through UI.GetMapPreview, which goes to whichever DLL is loaded, never by a pointer into this one.
+	const char* const kAfterNext =
+		"local handler\n"
+		"local fired = false\n"
+		"handler = function(kind, tag)\n"
+		"\tif fired or kind ~= SystemUpdateUIType.RestoreUI or tag ~= 'ModsMenu' then return end\n"
+		"\tfired = true\n"
+		"\tpcall(Events.SystemUpdateUI.Remove, handler)\n"
+		"\tlocal asked, reload = pcall(UI.GetMapPreview, 'bazaar:movelast')\n"
+		"\treload = asked and reload == true\n"
+		"\tif reload then\n"
+		"\t\tpcall(Modding.DeactivateMods)\n"
+		"\t\tpcall(Modding.ActivateEnabledMods)\n"
+		"\tend\n"
+		"\tlocal found, problem = pcall(UI.GetMapPreview, 'bazaar:setupwinner')\n"
+		// Switching the mods rebuilds the front end, and MainMenu.lua reopens the Mods menu on this event, as after Next.
+		"\tif reload then Events.SystemUpdateUI(SystemUpdateUIType.RestoreUI, 'ModsMenu') end\n"
+		"\tif found and type(problem) == 'string' then Events.FrontEndPopup.CallImmediate(problem) end\n"
+		"end\n"
+		"Events.SystemUpdateUI.Add(handler)\n";
+
+	void WaitForNext()
+	{
+		if (s_waitingForNext)
+			return;
+		ICvEngineScriptSystem1* scripts = gDLL->GetScriptSystem();
+		lua_State* L = scripts ? scripts->CreateLuaThread("Bazaar after Next") : NULL;
+		if (!L)
+			return;
+		if (luaL_loadstring(L, kAfterNext) == 0 && lua_pcall(L, 0, 0, 0) == 0)
+		{
+			// Kept: the in-game checks ran with it kept, and freeing it was never tried.
+			s_waitingForNext = true;
+			lua_settop(L, 0);
+			return;
+		}
+		const char* why = lua_tostring(L, -1);
+		LogLine((std::string("Bazaar could not set up its check that the Plugins screen comes first: ") + (why ? why : "")).c_str());
+		scripts->FreeLuaThread(L);
+	}
+
+	// True when the mods must be switched off and on again for the Plugins screen to come first.
+	bool MoveLastAfterNext()
+	{
+		s_waitingForNext = false;
+		CivSetupOrder order;
+		std::string ownId;
+		if (s_reloaded || !CheckSetupOrder(&order, &ownId) || !order.newer)
+			return false;
+		const CivSetupMove move = CivSetupMoveOutcome(order, MoveLast(ownId));
+		if (!move.logLine.empty())
+			LogLine(move.logLine.c_str());
+		if (move.reload)
+			SetEnvironmentVariableA(kReloading, "1");
+		return move.reload;
+	}
+
+	std::string SetupWinnerPopup()
+	{
+		CivSetupOrder order;
+		std::string ownId;
+		if (!CheckSetupOrder(&order, &ownId))
+			return std::string();
+		const CivSetupWinner winner = CivSetupWinnerOutcome(order, s_reloaded);
+		if (!winner.logLine.empty())
+			LogLine(winner.logLine.c_str());
+		return winner.popup;
+	}
 }
 
 std::vector<int> CivHostTeamPlayers(int team)
@@ -506,6 +619,15 @@ std::vector<int> CivHostTeamPlayers(int team)
 void CivHostOnDatabaseReady()
 {
 	UseListedPlugins(SavedOrder(), NULL);
+	if (GetEnvironmentVariableA(kReloading, NULL, 0) != 0)
+	{
+		s_reloaded = true;
+		SetEnvironmentVariableA(kReloading, NULL);
+	}
+	CivSetupOrder order;
+	std::string ownId;
+	if (!s_reloaded && CheckSetupOrder(&order, &ownId) && order.newer)
+		WaitForNext();
 }
 
 // A type added to CivValueType without a case here fails the build.
@@ -559,6 +681,16 @@ bool CivHostOnFrontEndCall(lua_State* L, int* results)
 		lua_pushboolean(L, SaveAndReloadFromScreen(L));
 	else if (request == "bazaar:nextsetup")
 		PushReplacedSetup(L);
+	else if (request == "bazaar:movelast")
+		lua_pushboolean(L, MoveLastAfterNext());
+	else if (request == "bazaar:setupwinner")
+	{
+		const std::string popup = SetupWinnerPopup();
+		if (popup.empty())
+			lua_pushnil(L);
+		else
+			lua_pushstring(L, popup.c_str());
+	}
 	else
 	{
 		LogLine(("The Plugins screen sent a request Bazaar could not use: " + request).c_str());
