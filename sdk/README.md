@@ -101,7 +101,7 @@ Bazaar's own mod creates that table. The first line only keeps the game's databa
 
 ### Load order and the Plugins screen
 
-When the game enables mods, Bazaar loads every plugin listed in `DllPlugins`, one after another, in the order shown on the **Plugins screen**. Bazaar puts that screen in place of the game's Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup). The order of its list, top first, is the **load order**, and it matters when two plugins hook the same function. On the screen, the player can move a plugin up or down, uncheck it to skip it without turning off its mod, and reload the plugins.
+When the game enables mods, Bazaar loads every plugin listed in `DllPlugins`, one after another, in the order shown on the **Plugins screen**. Bazaar puts that screen in place of the game's Advanced Setup (Mods > Single Player > Set Up Game > Advanced Setup). The order of its list, top first, is the **load order**, and it matters when two plugins hook the same function. On the screen, the player can move a plugin up or down, uncheck it to skip it without turning off its mod, and reload the plugins. Bazaar can't tell when the order of two plugins matters, so if yours must be above or below another, say so in your mod's description.
 
 ### The entry function: CivPluginEntry
 
@@ -164,7 +164,7 @@ When you search:
 - Classes whose names start with `CvLua` hold the functions Lua calls, and many of them only pass the call on to a game function. Hook that game function instead. Lua's `GetScore`, for example, calls `CvPlayer::GetScore`, so a hook on `CvPlayer::GetScore` also changes the score Lua sees.
 - A function can run in more than one situation. `CvCity::CreateBuilding` runs when a city finishes a building, and also when the player buys one, so a hook on it runs in both cases.
 - When a function is overloaded (several functions share a name but take different parameters), the first keeps the plain name and the others add their parameter types to it, such as `CvCity_getProductionNeeded_with_BuildingTypes_const`.
-- Nearly every function written in one of the game's `.cpp` files is in the list. Functions defined in headers are not: they are inline, compiled into each place that calls them, so there is no single place where Bazaar could hook them. Constructors, destructors, templates and a few unusual functions are left out too.
+- Nearly every function written in one of the game's `.cpp` files is in the list. Functions defined in headers are not: they are inline, compiled into each place that calls them, so there is no single place where Bazaar could hook them. To change what one of them does, hook or replace the functions that call it. Constructors, destructors, templates and a few unusual functions are left out too.
 
 ### The three kinds of hook
 
@@ -381,6 +381,8 @@ Bazaar can keep two kinds of data for your plugin in the player's saved games: *
 
 Bazaar keeps the data under your mod's ID, the GUID on the `.civ5proj`'s `<Guid>` line, so changing that ID loses the data in saves made before. If your mod has more than one plugin that keeps data, give each a plugin ID in `CivPluginEntry`, such as `plugin->id = "battles";`: a short name that must never change either. Bazaar refuses a plugin that keeps data when one above it in the load order has the same mod ID and plugin ID and keeps data too, and the Plugins screen says why.
 
+A Lua mod keeps data in saves through the game's own store, `Modding.OpenSaveData()`, as Firaxis's scenarios do. A plugin with a Lua part can use it too, but nothing in Lua runs just before the game saves: the Lua part must write its data every time it changes, and after a load your C++ code has none of it until the Lua part hands it over. Values and data of your own have neither problem.
+
 ### Values
 
 A value is a named piece of data on every object of one kind: every player, every city, every unit or every plot. You declare it once, with its type and its starting value, and then read and set it for any object. These are the template's pieces:
@@ -498,6 +500,7 @@ const int turns = s_turnsToVictory.Call(player, &called);
 
 Keep in mind:
 
+- Call other plugins only this way, never by loading their DLL and calling into it yourself. Then a crash counts against the plugin that crashed, not yours, and a call to a plugin that is off or unloaded doesn't run.
 - A crash in a published function counts as a crash of the plugin that published it, even when the caller handed it something bad, such as a pointer to a unit that is gone. See [When something goes wrong](#when-something-goes-wrong).
 - Bazaar tells types apart by their names. A type of your own, such as a struct, matches any type of the same name, so both plugins must build with the same definition of it, such as from a header the publisher shares. If the type changes, publish the function under a new name.
 - If your plugin cannot work without the other one, check what `Find` returns in `CivPluginEntry`, and return `false` when it finds nothing so your plugin is not loaded. That works only when your plugin is below the other on the Plugins screen, so say so in your mod's description. Otherwise check `called`, and carry on without the other plugin's answer.
@@ -553,6 +556,8 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
   - Turned off after a crash;
   - Skipped: the player unchecked it.
 - **If your plugin crashes inside a hook, a Lua function or a published function,** Bazaar turns it off and ends the game. A pop-up in the middle of the screen names your plugin and tells the player they will be returned to the main menu, since the game may now be damaged; until then the game is not saved. A common cause is a hook whose parameters do not match the game's function. `Bazaar.log` then says where it crashed: what memory it touched, and the call stack, innermost first. Each line gives the DLL and an offset into it, such as `MyPlugin.dll+0x00001A2B`. On the machine you built the plugin on, while the `.pdb` file the build wrote is still where the build put it, the line also names the function and the source line, such as `(BeforeDoTurn, MyPlugin.cpp line 42)`. Without the `.pdb`, as on a player's machine, the call stack may skip some calls, but its first line is always where the crash happened.
+- **If your replacement crashes,** the game's own version of the function runs in its place, on top of whatever your replacement had already changed. That lasts only until the player closes the pop-up, and nothing is saved in between.
+- **Bazaar catches only crashes.** A plugin that damages the game's state without crashing goes unnoticed.
 
 ## Publishing
 
