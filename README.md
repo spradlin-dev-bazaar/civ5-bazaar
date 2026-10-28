@@ -72,7 +72,7 @@ Other jobs:
 
 ## Making a release
 
-A release is made on the developer's machine with `tools\release.py`, in four steps: `number`, `prepare`, `build` and `publish`. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: checking the release in the game, approving the release notes, and uploading to the Steam Workshop with the descriptions in `workshop\`.
+A release is made on the developer's machine with `tools\release.py`, in four steps: `number`, `prepare`, `build` and `publish`. The script picks the number from what changed for plugins: the last number goes up when nothing they use changed, and the middle one when something was added. Removing or changing anything needs a new major version, the first number, which the script makes only when run with `--major`, and every plugin must then be rebuilt. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: checking the release in the game, approving the release notes, and uploading to the Steam Workshop with the descriptions in `workshop\`.
 
 ## Credits and licence
 

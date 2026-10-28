@@ -18,12 +18,13 @@ After that: a list of plugins that players can share, which also tells them whic
 
 ## 1.0: a clean core
 
-Bazaar 1.0 will be the first release that breaks older plugins. It's the release where Bazaar becomes a clean base with no gameplay changes of its own. It keeps the game's own code and what mods made for VMC rely on, such as VMC's Lua events. VMC's gameplay changes and bug fixes, which are part of Bazaar today, move out into plugins: one for each of whoward69's pick'n'mix mods and one for the bug fixes. Then you choose which of them you want.
+Bazaar 1.0 will be the first release that breaks older plugins. It's the release where Bazaar becomes a clean base with no gameplay changes of its own. It keeps the game's own code and what mods made for VMC rely on, such as VMC's Lua events. VMC's gameplay changes and bug fixes, which are part of Bazaar today, move out into plugins: one for each of whoward69's pick'n'mix mods and one for the bug fixes. They come from one repository of their own and are released together with each Bazaar release. Then you choose which of them you want.
 
 - The first step is sorting every one of VMC's changes into what stays in Bazaar and what moves.
 - Bazaar 1.0 comes on new Steam Workshop items, not as an update. Games saved with 0.x need the 0.x mod, so its items stay up, and plugins built for 0.x keep working there.
 - Every plugin is rebuilt for 1.0.
 - Bazaar marks whoward69's original pick'n'mix mods as incompatible, and its Workshop page links to the new plugins.
+- Each feature that moves is checked in the game before 1.0 is released.
 
 ## Not planned
 
