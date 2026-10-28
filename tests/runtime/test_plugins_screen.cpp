@@ -1,5 +1,5 @@
-// The Plugins screen's host logic, which needs no plugins: the player's order, Bazaar's notes and notices, and the
-// Advanced Setup screen it replaced.
+// The Plugins screen's host logic, which needs no plugins: the player's order, Bazaar's notes and notices, the Advanced
+// Setup screen it replaced, and whether another mod's Advanced Setup comes first.
 #include "harness.h"
 #include "CivHostNotices.h"
 #include "CivHostOrder.h"
@@ -291,4 +291,94 @@ void TestReplacedSetup()
 	const CivReplacedSetup failed = CivCopyReplacedSetup(root + "\\NoGame", own, withoutRas, false);
 	Check(failed.copy.empty(), "a screen that cannot be copied gives no path");
 	Check(failed.problem.find("Could not copy") == 0, "a screen that cannot be copied gives a reason");
+}
+
+void TestSetupOrder()
+{
+	std::vector<CivActiveMod> active;
+	active.push_back(Mod("ras-id", 15));
+	active.back().files.push_back(File("C:\\MODS\\RAS (v 15)\\UI Overrides/AdvancedSetup.lua", true));
+	active.push_back(Mod("bazaar-id", 4));
+	active.back().files.push_back(File("C:\\MODS\\Bazaar (v 4)/CvGameCore_Expansion2.dll", true));
+	Check(CivOwnModId(active, "C:\\MODS\\Bazaar (v 4)") == "bazaar-id", "Bazaar's own mod is the one with a file in its folder");
+	Check(CivOwnModId(active, "C:\\MODS\\Bazaar").empty(), "a folder whose name only starts the same is not Bazaar's");
+
+	// Mixed slashes and cases, as the game's mod database gives them.
+	std::vector<CivInstalledMod> mods;
+	CivAddInstalledModRow(&mods, 21, "ras-id", "Really Advanced Setup", true, "C:\\MODS\\RAS (v 15)\\UI Overrides/advancedsetup.LUA");
+	CivAddInstalledModRow(&mods, 21, "ras-id", "Really Advanced Setup", true, "C:\\MODS\\RAS (v 15)\\UI Overrides/AdvancedSetup.xml");
+	CivAddInstalledModRow(&mods, 360, "bazaar-id", "Bazaar", true, "C:\\MODS\\Bazaar (v 4)\\frontend/AdvancedSetup.lua");
+	CivAddInstalledModRow(&mods, 365, "mcp-id", "MCP Server", true, "");
+	CivAddInstalledModRow(&mods, 367, "other-id", "Other", true, "C:\\MODS\\Other (v 1)/Other.lua");
+	Check(mods.size() == 4, "each installed version is one mod, whatever number of files it imports");
+	Check(mods[0].replacesSetup && !mods[2].replacesSetup && !mods[3].replacesSetup,
+		"a mod replaces Advanced Setup when it imports either of its files, in any case");
+
+	const CivSetupOrder first = CivCheckSetupOrder(mods, "bazaar-id");
+	Check(!first.newer && !first.newerOn, "Bazaar installed after every other mod that replaces Advanced Setup stays where it is");
+
+	// The rows below are added in RowID order, as the game's mod database gives them.
+	std::vector<CivInstalledMod> off(mods);
+	CivAddInstalledModRow(&off, 370, "aaa-id", "AAA Setup Check", false, "C:\\MODS\\AAA (v 1)\\AdvancedSetup.xml");
+	const CivSetupOrder moveOnly = CivCheckSetupOrder(off, "bazaar-id");
+	Check(moveOnly.newer && !moveOnly.newerOn && moveOnly.newerName == "AAA Setup Check",
+		"a newer mod that replaces Advanced Setup but is switched off moves Bazaar to the end, with no reload");
+
+	std::vector<CivInstalledMod> on(mods);
+	CivAddInstalledModRow(&on, 368, "late-id", "", true, "C:\\MODS\\Late (v 2)\\AdvancedSetup.lua");
+	CivAddInstalledModRow(&on, 370, "aaa-id", "AAA Setup Check", false, "C:\\MODS\\AAA (v 1)\\AdvancedSetup.xml");
+	const CivSetupOrder reload = CivCheckSetupOrder(on, "bazaar-id");
+	Check(reload.newer && reload.newerOn, "a newer mod that replaces Advanced Setup and is switched on needs a reload, even below a newer one switched off");
+	Check(reload.newerName == "late-id", "the one named is the newest switched on, by ID when it has no name, before a newer one switched off");
+
+	std::vector<CivInstalledMod> twice(on);
+	CivAddInstalledModRow(&twice, 380, "both-id", "Both", true, "C:\\MODS\\Both (v 1)\\AdvancedSetup.lua");
+	Check(CivCheckSetupOrder(twice, "bazaar-id").newerName == "Both", "of two newer ones switched on, the newest is named");
+
+	std::vector<CivInstalledMod> versions(mods);
+	CivAddInstalledModRow(&versions, 390, "bazaar-id", "Bazaar", false, "C:\\MODS\\Bazaar (v 5)\\frontend/AdvancedSetup.lua");
+	Check(!CivCheckSetupOrder(versions, "bazaar-id").newer, "a newer install of Bazaar itself is not another mod");
+	std::vector<CivInstalledMod> update(mods);
+	CivAddInstalledModRow(&update, 380, "both-id", "Both", true, "C:\\MODS\\Both (v 1)\\AdvancedSetup.lua");
+	CivAddInstalledModRow(&update, 390, "bazaar-id", "Bazaar", false, "C:\\MODS\\Bazaar (v 5)\\frontend/AdvancedSetup.lua");
+	const CivSetupOrder updated = CivCheckSetupOrder(update, "bazaar-id");
+	Check(updated.newer && updated.newerOn && updated.newerName == "Both",
+		"Bazaar's place is its switched-on install's row, not a newer install's that is switched off");
+	Check(!CivCheckSetupOrder(on, "").newer, "with Bazaar's own mod unknown, nothing moves");
+
+	Check(!CivSetupMoveOutcome(first, true).reload && CivSetupMoveOutcome(first, true).logLine.empty(),
+		"with no newer mod, nothing is reloaded or logged");
+	const CivSetupMove offMoved = CivSetupMoveOutcome(moveOnly, true);
+	Check(!offMoved.reload && offMoved.logLine.find("after AAA Setup Check, which also replaces Advanced Setup but is turned off") != std::string::npos,
+		"moving past a mod that is switched off needs no reload, and is logged");
+	const CivSetupMove offStuck = CivSetupMoveOutcome(moveOnly, false);
+	Check(!offStuck.reload && offStuck.logLine.empty(), "a failed move past a mod that is switched off is not logged, since nothing is hidden yet");
+	const CivSetupMove onMoved = CivSetupMoveOutcome(reload, true);
+	Check(onMoved.reload && onMoved.logLine.find("late-id's Advanced Setup screen was newer") == 0,
+		"moving past a mod that is switched on reloads the mods, and is logged");
+	const CivSetupMove onStuck = CivSetupMoveOutcome(reload, false);
+	Check(!onStuck.reload && onStuck.logLine.find("could not move itself") != std::string::npos,
+		"a failed move past a mod that is switched on is logged, with no reload");
+
+	Check(CivSetupWinnerOutcome(first, true).popup.empty() && CivSetupWinnerOutcome(moveOnly, true).popup.empty(),
+		"no pop-up when no switched-on mod's screen comes first");
+	const CivSetupWinner afterReload = CivSetupWinnerOutcome(reload, true);
+	Check(afterReload.popup == CivSetupPopupText("late-id") && afterReload.logLine.find("After switching the mods off and on again, late-id") == 0,
+		"a screen still first after the reload gets the pop-up and a log line");
+	const CivSetupWinner withoutReload = CivSetupWinnerOutcome(reload, false);
+	Check(!withoutReload.popup.empty() && withoutReload.logLine.empty(), "without a reload, the pop-up alone, since the failed move was logged already");
+
+	const std::string popup = CivSetupPopupText("AAA Setup Check");
+	Check(popup.find("AAA Setup Check's Advanced Setup screen") == 0, "the pop-up names the mod whose screen shows");
+	const std::string longName(300, 'x');
+	const std::string longPopup = CivSetupPopupText(longName);
+	Check(longPopup.size() <= CIV_SETUP_POPUP_MOST && longPopup.find("...'s Advanced Setup") != std::string::npos,
+		"a long name is shortened so the whole pop-up fits");
+	const std::string cyrillic = std::string(1, '\xD0') + "\x9C";
+	std::string longCyrillic;
+	for (int i = 0; i < 100; ++i)
+		longCyrillic += cyrillic;
+	const std::string cyrillicPopup = CivSetupPopupText(longCyrillic);
+	Check(cyrillicPopup.size() <= CIV_SETUP_POPUP_MOST && CivUtf8(CivWide(cyrillicPopup)) == cyrillicPopup,
+		"a long name is shortened between letters, not inside one");
 }

@@ -10,7 +10,7 @@ The host's own code, compiled into the host DLL. Every `.cpp` file here is built
 - `CivHostOrder`: the plugin order the player sets on the Plugins screen: the text it is saved as, matching it to the listed plugins, and the screen's rows and notes.
 - `CivHostNotices`: the notices waiting for a game to show them, and naming a lasting problem only once a game.
 - `CivHostMods`: the mods the game has switched on, as its own mod database lists them: finding a plugin's DLL or a screen's file among their files, and refusing a plugin whose mod does not affect saved games.
-- `CivHostSetup`: finding the Advanced Setup screen that the Plugins screen replaced, so Continue can open it.
+- `CivHostSetup`: finding the Advanced Setup screen that the Plugins screen replaced, so Continue can open it, and checking that no other mod's Advanced Setup comes before the Plugins screen.
 - `CivHostPath`: file names and paths. Bazaar keeps them in UTF-8 and gives them to Windows as wide characters, so names in any language work.
 - `CivHostEngine`: the link to the game: the plugin list and the switched-on mods from its databases, the saved order file, the Plugins screen's calls, the log file, Bazaar's part of the game's saves, telling which player, city, unit or plot a value is on, Lua's `Game.GetPluginValue`, and showing notices in the game.
 - `CivHostHooks.h`: what the generated hook wrappers need from the runtime.

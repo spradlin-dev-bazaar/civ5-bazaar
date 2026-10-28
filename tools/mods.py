@@ -39,9 +39,6 @@ HOST_TEASER = (
     " whoward69's Various Mod Components (VMC), so mods that need VMC work with it."
 )
 BNW_DLC = "6DA07636-4123-4018-B643-6575B4EC336B"
-# Also replaces Advanced Setup; referencing it makes the game switch the host on after it, so the host's screen wins.
-RAS_ID = "34feb829-33fb-4241-956f-462e6877e070"
-RAS_NAME = "Really Advanced Setup"
 VMC_DATA_NAME = "Bazaar - VMC Bootstrap (required)"
 # The id whoward69's VMC and the Community Patch share; mods made for either reference it.
 VMC_MOD_ID = "d1b6328c-ff44-4b0d-aad7-c657f83610cd"
@@ -236,11 +233,9 @@ def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, ve
     license_files = copy_license_files(folder)
     vmc_folder, vmc_version = write_vmc_data_mod(mods_folder)
     files = [("CvGameCore_Expansion2.dll", 1), ("DllPlugins.sql", 0)] + license_files
-    references = []
     entries = []
     if host_screens:
         files += copy_host_screens(folder)
-        references.append((RAS_ID, RAS_NAME))
         entries.append(STOPPED_POPUP)
     write_modinfo(
         folder,
@@ -251,7 +246,6 @@ def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, ve
         ["DllPlugins.sql"],
         entries,
         dll="CvGameCore_Expansion2.dll",
-        references=references,
         dependencies=[(VMC_MOD_ID, VMC_DATA_NAME, vmc_version)],
         version=version,
     )

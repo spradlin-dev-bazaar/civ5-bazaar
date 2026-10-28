@@ -82,16 +82,14 @@ class LayoutTest(unittest.TestCase):
             self.assertEqual(imported.get(dll), "1")
             self.assertEqual([u.text for u in root.find("Actions/OnModActivated")], ["DllPlugins.sql"])
 
-    def test_the_host_screens_come_with_their_files_reference_and_entry_point(self):
+    def test_the_host_screens_come_with_their_files_and_entry_point(self):
         for host_screens in (True, False):
             with tempfile.TemporaryDirectory() as folder, self.subTest(host_screens=host_screens):
                 host, _ = lay_out(os.path.join(folder, "MODS"), host_screens=host_screens)
                 root = modinfo(host)
-                references = [m.get("id") for m in root.find("References")]
                 files = [f.text for f in root.find("Files")]
                 entries = root.find("EntryPoints")
                 addins = [] if entries is None else [(e.get("type"), e.get("file")) for e in entries]
-                self.assertEqual(mods.RAS_ID in references, host_screens)
                 self.assertEqual(any(f.startswith("frontend/") for f in files), host_screens)
                 self.assertEqual(addins, [mods.STOPPED_POPUP[:2]] if host_screens else [])
                 if host_screens:
