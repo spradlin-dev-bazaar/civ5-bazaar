@@ -1,3 +1,17 @@
+[b]0.5.1[/b]
+Fixes one problem for players: another mod could hide the Plugins screen. Plugins built for 0.5.0 work with it unchanged.
+
+For players:
+[list]
+[*]A mod that replaces Advanced Setup and was installed or updated after Bazaar no longer hides the Plugins screen. When such a mod is turned on, the first Next in Mods takes about 15 seconds longer: Bazaar switches the mods off and on again so that its Plugins screen comes first. If the other mod's screen still comes first, a pop-up names the mod and says how to fix it.
+[/list]
+For plugin authors:
+[list]
+[*]Nothing plugins use was added, removed or changed, so plugins built for 0.5.0 keep working without a rebuild.
+[*]The SDK guide, on the release's GitHub page, has a few new notes: say in your mod's description when your plugin must be above or below another on the Plugins screen; to change what a function written in a header does, hook the functions that call it; how a plugin's Lua part can use the game's own save data; call other plugins only through Bazaar; what happens when a replacement crashes; and that Bazaar catches only crashes.
+[/list]
+This is plugin API version 0.5.
+
 [b]0.5.0[/b]
 The first public release. From this release on, what plugins use only grows until the next major version.
 
