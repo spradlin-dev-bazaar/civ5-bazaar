@@ -28,13 +28,14 @@ Ask the developer before each step that publishes something or changes git: comm
 
 ## 4. Check in the game
 
-This step is the developer's: explain it, then wait for the result. Skip it when Bazaar's mod is the same as at the last release apart from its version number, as in a release that only updates the SDK or the docs.
+This step is the developer's: explain it, then wait for the result. Skip it when Bazaar's mod is the same as at the last release apart from its version number and the release its description names, as in a release that only updates the SDK or the docs.
 
 1. Move any other Bazaar folders, such as test builds, out of `Documents\My Games\Sid Meier's Civilization 5\MODS`.
 2. Copy the two `.civ5mod` files from `dist\v<number>\` into MODS. The game unpacks them when it starts.
 3. Unzip the SDK zip into a folder outside the repository, run `Bazaar SDK\plugin-template\build.cmd` there, and copy the folder it makes, `Build\Template Plugin`, into MODS.
-4. In the game's Mods menu, turn on Bazaar - VMC Bootstrap (required), Bazaar Multi-DLL Mod Loader and Template Plugin, and start a game.
-5. `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log` must show `Plugin Template Plugin 1 loaded`, and a line from the template at the start of each turn.
+4. In the game's Mods menu, select Bazaar Multi-DLL Mod Loader: its description must end with `This is Bazaar <number>.`
+5. In the game's Mods menu, turn on Bazaar - VMC Bootstrap (required), Bazaar Multi-DLL Mod Loader and Template Plugin, and start a game.
+6. `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log` must show `Plugin Template Plugin 1 loaded`, and a line from the template at the start of each turn.
 
 If anything fails, stop. The fix goes to main through a pull request, and the release starts again at step 1, since the fix may change the number.
 

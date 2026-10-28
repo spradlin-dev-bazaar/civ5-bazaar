@@ -97,6 +97,18 @@ class LayoutTest(unittest.TestCase):
                         self.assertIn(path, files)
                         self.assertTrue(os.path.isfile(os.path.join(host, path)))
 
+    def test_the_description_is_the_teaser_unless_one_is_given(self):
+        given = "Teaser. This is Bazaar 0.5.2."
+        for description, shown in ((None, "Teaser."), (given, given)):
+            with tempfile.TemporaryDirectory() as folder, self.subTest(description=description):
+                host, _ = lay_out(os.path.join(folder, "MODS"), description=description)
+                properties = modinfo(host).find("Properties")
+                self.assertEqual(properties.findtext("Teaser"), "Teaser.")
+                self.assertEqual(properties.findtext("Description"), shown)
+
+    def test_the_host_description_ends_by_naming_the_release(self):
+        self.assertEqual(mods.host_description("0.5.2"), mods.HOST_TEASER + " This is Bazaar 0.5.2.")
+
     def test_the_bootstrap_keeps_vmcs_credits_and_save_setting(self):
         vmc = mods.vmc_mod_parts()
         with tempfile.TemporaryDirectory() as folder:

@@ -42,7 +42,7 @@ To install by hand instead, download both packages from the newest release on th
 
 ## Getting help
 
-Ask on [Bazaar's Discord](https://discord.gg/zuRynuzNxr), or report a bug in [GitHub's issues](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues).
+Ask on [Bazaar's Discord](https://discord.gg/zuRynuzNxr), or report a bug in [GitHub's issues](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues). When you report a problem, say which release of Bazaar you have: [VERSIONS.md](VERSIONS.md) gives the release for each mod version, and releases after 0.5.1 also name it in their description in the Mods menu.
 
 ## For mod makers
 
