@@ -106,6 +106,22 @@ class DisagreementTest(unittest.TestCase):
             found = version.check()[1]
         self.assertTrue(any("plugin template needs" in problem for problem in found), found)
 
+    def test_a_mod_versions_list_whose_newest_row_is_another_release_is_named(self):
+        for listed, words in (
+            (version.Version("0.5.1", 5), "is mod version 5, Bazaar 0.5.1, not mod version 6, Bazaar 0.5.2"),
+            (version.Version("0.5.1", 6), "is mod version 6, Bazaar 0.5.1, not mod version 6, Bazaar 0.5.2"),
+        ):
+            with self.subTest(listed=listed):
+                found = version.listed_disagreements(version.Version("0.5.2", 6), [listed])
+                self.assertEqual(len(found), 1)
+                self.assertIn(words, found[0])
+        self.assertIn("lists no mod versions", version.listed_disagreements(version.Version("0.5.2", 6), [])[0])
+
+    def test_the_check_covers_the_mod_versions_list(self):
+        with mock.patch.object(version, "listed_versions", return_value=[version.Version("0.1.0", 1)]):
+            found = version.check()[1]
+        self.assertTrue(any("newest row of VERSIONS.md" in problem for problem in found), found)
+
     def test_this_repository_agrees_with_itself(self):
         self.assertEqual(version.check()[1], [], "run python tools/version.py and fix what it names")
 
@@ -153,6 +169,24 @@ class EditTest(unittest.TestCase):
             self.assertIn("does not name a Bazaar release to set", str(stop.exception))
             with open(version_path, newline="") as f:
                 self.assertEqual(f.read(), "release 1\nbazaar 0.4.0\n", "VERSION changed before the stop")
+
+    def test_a_new_mod_version_goes_on_top_of_the_list_and_nothing_else_changes(self):
+        text = "# Versions\n\nA list.\n\n| Mod version | Bazaar release |\n|---|---|\n| 5 | 0.5.1 |\n| 4 | 0.5.0 |\n"
+        for newline in ("\n", "\r\n"):
+            with tempfile.TemporaryDirectory() as folder, self.subTest(newline=newline):
+                path = write(folder, text, newline)
+                version.add_listed_version(version.Version("0.5.2", 6), path)
+                with open(path, newline="") as f:
+                    expected = text.replace("| 5 |", "| 6 | 0.5.2 |\n| 5 |").replace("\n", newline)
+                    self.assertEqual(f.read(), expected)
+                self.assertEqual(version.listed_versions(path)[:2], [("0.5.2", 6), ("0.5.1", 5)])
+
+    def test_a_mod_versions_list_without_rows_stops(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write(folder, "# Versions\n\n| Mod version | Bazaar release |\n|---|---|\n")
+            with self.assertRaises(SystemExit) as stop:
+                version.add_listed_version(version.Version("0.5.2", 6), path)
+            self.assertIn("has no mod versions to add to", str(stop.exception))
 
     def test_a_bazaar_line_with_more_spaces_is_read(self):
         with tempfile.TemporaryDirectory() as folder:

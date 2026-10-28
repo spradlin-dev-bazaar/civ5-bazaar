@@ -1,6 +1,6 @@
 """The version of a Bazaar release, kept in VERSION at the top of the repository, and the numbers that must follow it:
-the plugin API version in CivPluginApi.h, the Claude plugin's version, and the Bazaar release the SDK's plugin template
-says it needs.
+the plugin API version in CivPluginApi.h, the Claude plugin's version, the Bazaar release the SDK's plugin template
+says it needs, and the newest row of VERSIONS.md's list of mod versions.
 
     python tools/version.py
 """
@@ -21,8 +21,10 @@ VERSION_FILE = os.path.join(common.REPO, "VERSION")
 PLUGIN_JSON = os.path.join(common.REPO, "claude-plugin", ".claude-plugin", "plugin.json")
 TEMPLATE_VERSION = os.path.join(common.REPO, "sdk", "plugin-template", "VERSION")
 TEMPLATE_WORKSHOP = os.path.join(common.REPO, "sdk", "plugin-template", "workshop-description.txt")
+VERSIONS_LIST = os.path.join(common.REPO, "VERSIONS.md")
 NUMBER = "(?:0|[1-9][0-9]*)"
 FORMAT = re.compile(r"release (%s\.%s\.%s)\nmod ([1-9][0-9]*)\n?" % (NUMBER, NUMBER, NUMBER))
+VERSIONS_ROW = re.compile(r"^\| ([1-9][0-9]*) \| (%s\.%s\.%s) \|(\r?)$" % (NUMBER, NUMBER, NUMBER), re.M)
 TEMPLATE_BAZAAR = re.compile(r"^bazaar +(\S+)", re.M)
 REQUIRES_SENTENCE = "Requires Bazaar %s or newer."
 REQUIRES = re.compile(re.escape(REQUIRES_SENTENCE).replace(re.escape("%s"), r"(\S+)"))
@@ -100,6 +102,23 @@ def set_template_bazaar(bazaar, version_path=TEMPLATE_VERSION, workshop_path=TEM
             f.write(text)
 
 
+def listed_versions(path=VERSIONS_LIST):
+    """VERSIONS.md's rows, newest first, as Versions."""
+    with open(path, encoding="utf-8") as f:
+        return [Version(release, int(mod)) for mod, release, _ in VERSIONS_ROW.findall(f.read())]
+
+
+def add_listed_version(version, path=VERSIONS_LIST):
+    with open(path, encoding="utf-8", newline="") as f:
+        text = f.read()
+    newest = VERSIONS_ROW.search(text)
+    if not newest:
+        raise SystemExit("version: %s has no mod versions to add to" % common.shown(path))
+    row = "| %d | %s |%s\n" % (version.mod, version.release, newest.group(3))
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text[: newest.start()] + row + text[newest.start() :])
+
+
 def disagreements(version, api, plugin):
     """api is CivPluginApi.h's (major, minor), plugin the Claude plugin's version."""
     major, minor, _ = numbers(version.release)
@@ -134,10 +153,23 @@ def template_disagreements(release, template):
     return found
 
 
+def listed_disagreements(version, listed):
+    """listed is what listed_versions returns."""
+    if not listed:
+        return ["%s lists no mod versions" % common.shown(VERSIONS_LIST)]
+    if listed[0] != version:
+        return [
+            "the newest row of %s is mod version %d, Bazaar %s, not mod version %d, Bazaar %s"
+            % (common.shown(VERSIONS_LIST), listed[0].mod, listed[0].release, version.mod, version.release)
+        ]
+    return []
+
+
 def check():
     version = read()
     found = disagreements(version, layouts.api_version(), plugin_version())
-    return version, found + template_disagreements(version.release, template_bazaar())
+    found += template_disagreements(version.release, template_bazaar())
+    return version, found + listed_disagreements(version, listed_versions())
 
 
 def main():

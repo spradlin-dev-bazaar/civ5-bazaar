@@ -529,6 +529,7 @@ class PrepareTest(unittest.TestCase):
             (release.layouts, "set_api_version", steps.step("API version")),
             (release.version, "set_plugin_version", steps.step("plugin version")),
             (release.version, "set_template_bazaar", steps.step("template bazaar")),
+            (release.version, "add_listed_version", steps.step("mod versions")),
             (release, "require_numbers_agree", steps.step("numbers agree")),
             (release, "restore_history", steps.step("restore history")),
             (release.build_docs, "build", steps.step("docs")),
@@ -544,6 +545,7 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(names[: names.index("VERSION")].count("run"), 5)
         self.assertLess(names.index("plugin version"), names.index("numbers agree"))
         self.assertLess(names.index("template bazaar"), names.index("numbers agree"))
+        self.assertLess(names.index("mod versions"), names.index("numbers agree"))
         self.assertLess(names.index("restore history"), names.index("docs"))
         self.assertEqual(steps.arguments("git"), [(("switch", "-c", "release-0.4.0"), {})])
         self.assertEqual(names[-1], "git")
@@ -554,6 +556,7 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(steps.arguments("API version"), [((0, 4), {})])
         self.assertEqual(steps.arguments("plugin version"), [(("0.4.0",), {})])
         self.assertEqual(steps.arguments("template bazaar"), [(("0.4.0",), {})])
+        self.assertEqual(steps.arguments("mod versions"), [((version.Version("0.4.0", 2),), {})])
         self.assertEqual(steps.arguments("restore history"), [(("v0.3.0",), {})])
         ((_, docs),) = steps.arguments("docs")
         self.assertEqual(docs, {"release": "0.4.0"})
@@ -654,8 +657,9 @@ class WriteFilesTest(unittest.TestCase):
                 with open(os.path.join(out, name), "w") as f:
                     f.write("x")
 
-        def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1):
+        def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1, description=None):
             given["mod"] = (name, mod_id, teaser, dll, host_screens, version)
+            given["description"] = description
             folders = os.path.join(mods_folder, "host"), os.path.join(mods_folder, "bootstrap")
             for path in folders:
                 os.makedirs(path)
@@ -697,10 +701,12 @@ class WriteFilesTest(unittest.TestCase):
         self.assertEqual(given["release"], "0.4.0")
         expected_mod = (release.mods.HOST_NAME, release.mods.HOST_ID, release.mods.HOST_TEASER, release.common.HOST_DLL)
         self.assertEqual(given["mod"], expected_mod + (True, 2))
+        self.assertEqual(given["description"], release.mods.host_description("0.4.0"))
 
-    def test_a_trial_leaves_the_release_marks_out_of_the_docs(self):
+    def test_a_trial_leaves_the_release_out_of_the_docs_and_the_mod_s_description(self):
         _, _, given = self.write(release_marks=False)
         self.assertIsNone(given["release"])
+        self.assertIsNone(given["description"])
 
 
 class FileTest(unittest.TestCase):

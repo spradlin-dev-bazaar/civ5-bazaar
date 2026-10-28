@@ -370,6 +370,7 @@ def write_release_files(current, out, release_marks):
         common.HOST_DLL,
         host_screens=True,
         version=current.mod,
+        description=mods.host_description(current.release) if release_marks else None,
     )
     for folder, name in ((host_folder, names.host), (bootstrap_folder, names.bootstrap)):
         problem = mods.pack(folder, os.path.join(out, name))
@@ -437,6 +438,7 @@ def prepare(major):
         layouts.set_api_version(new_major, new_minor)
         version.set_plugin_version(new.release)
         version.set_template_bazaar(version.oldest_bazaar(new.release))
+        version.add_listed_version(new)
         require_numbers_agree()
         restore_history(tag)
         build_docs.build(common.engine_project(), build_docs.DEFAULT_OUT, release=new.release)
