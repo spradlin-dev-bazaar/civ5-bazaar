@@ -4,6 +4,7 @@
     python tools/release.py prepare [--major]      on main: a release branch with the new numbers and saved lists
     python tools/release.py build [--trial]        on main, once the release branch has merged: the release's files
     python tools/release.py publish --notes FILE   tag the commit the files were built from and draft its GitHub release
+    python tools/release.py workshop               once the GitHub release is published: Bazaar's mod to the Workshop
 
 --major starts a new major version, such as 1.0.0. build --trial runs on any branch, leaves the release marks out of the
 docs, and writes to dist/trial, which publish never uses.
@@ -12,6 +13,7 @@ docs, and writes to dist/trial, which publish never uses.
 import argparse
 import collections
 import difflib
+import json
 import os
 import posixpath
 import re
@@ -24,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "generator"))
 sys.path.insert(0, os.path.join(HERE, "docs"))
 sys.path.insert(0, os.path.join(HERE, "..", "sdk"))
+sys.path.insert(0, os.path.join(HERE, "workshop"))
 
 import build_docs  # noqa: E402
 import build_sdk  # noqa: E402
@@ -31,6 +34,7 @@ import common  # noqa: E402
 import generate  # noqa: E402
 import layouts  # noqa: E402
 import mods  # noqa: E402
+import upload  # noqa: E402
 import version  # noqa: E402
 
 RELEASED = os.path.join(HERE, "released")
@@ -500,6 +504,15 @@ def build(trial):
     return 0
 
 
+def require_gh():
+    gh = shutil.which("gh")
+    if gh is None:
+        stop("gh, GitHub's command-line tool, was not found: install it, then log in with gh auth login")
+    if subprocess.run([gh, "auth", "status"], capture_output=True).returncode != 0:
+        stop("gh is not logged in to GitHub: run gh auth login")
+    return gh
+
+
 def publish(notes):
     current = version.read()
     tag = tag_of(current.release)
@@ -517,11 +530,7 @@ def publish(notes):
         stop("these release files are missing: " + ", ".join(missing))
     if not os.path.isfile(notes) or not read_text(notes).strip():
         stop("the release notes file %s is missing or empty" % notes)
-    gh = shutil.which("gh")
-    if gh is None:
-        stop("gh, GitHub's command-line tool, was not found: install it, then log in with gh auth login")
-    if subprocess.run([gh, "auth", "status"], capture_output=True).returncode != 0:
-        stop("gh is not logged in to GitHub: run gh auth login")
+    gh = require_gh()
     title = "Bazaar " + current.release
     tagged = tagged_commit(tag)
     if tagged is None:
@@ -543,6 +552,31 @@ def publish(notes):
     return 0
 
 
+def workshop():
+    current = version.read()
+    tag = tag_of(current.release)
+    require_main()
+    tagged = tagged_commit(tag)
+    if tagged is None or not on_github(tag):
+        stop("%s is not tagged on GitHub: publish the release first" % current.release)
+    out = release_folder(current.release)
+    built_from = os.path.join(out, BUILT_FROM)
+    if not os.path.exists(built_from) or read_text(built_from).strip() != tagged:
+        stop("%s does not hold the files tagged %s, which were published on GitHub" % (out, tag))
+    package = os.path.join(out, release_files(current.release).host)
+    if not os.path.isfile(package):
+        stop("%s is missing" % package)
+    gh = require_gh()
+    view = [gh, "release", "view", tag, "--json", "isDraft"]
+    done = subprocess.run(view, cwd=common.REPO, capture_output=True, text=True, errors="replace")
+    if done.returncode != 0:
+        stop("gh could not show the GitHub release %s: %s" % (tag, done.stderr.strip()))
+    if json.loads(done.stdout).get("isDraft") is not False:
+        stop("the GitHub release %s is still a draft: publish it there first" % tag)
+    upload.upload(current.release, package)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -550,6 +584,7 @@ def main():
     commands.add_parser("prepare").add_argument("--major", action="store_true")
     commands.add_parser("build").add_argument("--trial", action="store_true")
     commands.add_parser("publish").add_argument("--notes", required=True)
+    commands.add_parser("workshop")
     args = parser.parse_args()
     if args.command == "number":
         return number(args.major)
@@ -557,6 +592,8 @@ def main():
         return prepare(args.major)
     if args.command == "build":
         return build(args.trial)
+    if args.command == "workshop":
+        return workshop()
     return publish(os.path.abspath(args.notes))
 
 

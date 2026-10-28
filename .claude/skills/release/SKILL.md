@@ -7,7 +7,7 @@ description: Make a release of Bazaar, the Civilization V multi-DLL mod loader, 
 
 `tools/release.py` does the repeatable work of a release; this skill adds the steps around it that need a person or judgment. The commands below are for PowerShell, run from the repository root with the project's Python, `.venv\Scripts\python.exe`. When something is not as the script expects, it stops with a message that says what to do: follow the message, and do not work around it.
 
-Ask the developer before each step that publishes something or changes git: committing, pushing, opening the pull request, and `publish`, which pushes a tag. Show every text other people will read, word for word, and get it approved before using it: the release branch's commit message and pull request, and the release notes.
+Ask the developer before each step that publishes something or changes git: committing, pushing, opening the pull request, running `publish`, which pushes a tag, and running `workshop`, which updates Bazaar's item on the Steam Workshop. Show every text other people will read, word for word, and get it approved before using it: the release branch's commit message and pull request, and the release notes.
 
 ## 1. Choose the number
 
@@ -55,4 +55,10 @@ Work from what `number` listed, `git log v<last release>..HEAD`, and the pull re
 
 ## 7. Steam Workshop
 
-The developer uploads every release that changes Bazaar's mod, pre-releases included, with ModBuddy, by hand: Bazaar's package each time, pasting the description from `workshop\bazaar.txt`, and the VMC Bootstrap, with `workshop\vmc-bootstrap.txt`, only when it has changed. A release that only updates the SDK or the docs is not uploaded and gets no change note, since the Workshop page points to GitHub for both. Before the upload, add the release's notes to the top of `workshop\changes.txt` in BBCode, without the install paragraph or the file names, and get them approved; the developer pastes that section as the update's change note, and it goes to main through a small pull request. A new major version goes up as new Workshop items, not as an update: games saved with the old version need its mod, so the old items stay up.
+Every release that changes Bazaar's mod, pre-releases included, updates Bazaar's item on the Steam Workshop. A release that only updates the SDK or the docs is not uploaded and gets no change note, since the Workshop page points to GitHub for both.
+
+1. Add the release's notes to the top of `workshop\changes.txt` in BBCode, under a `[b]<number>[/b]` line and without the install paragraph or the file names, and get them approved. They go to main through a small pull request.
+2. Once it has merged, pull main. With the developer's go-ahead, run `.venv\Scripts\python.exe tools\release.py workshop`. It needs Steam running and signed in to the account that owns the item, and the Sid Meier's Civilization V SDK installed from Steam; ModBuddy itself need not be open. It uploads Bazaar's package with the release's own section of `workshop\changes.txt` as the change note and `workshop\bazaar.txt` as the item's description, then checks that Steam shows the new file.
+3. If the VMC Bootstrap has changed, the developer uploads it with ModBuddy, by hand, pasting the description from `workshop\vmc-bootstrap.txt`.
+
+A new major version goes up as new Workshop items, published with ModBuddy, not as an update: games saved with the old version need its mod, so the old items stay up. The new item's number then goes into `tools\workshop\upload.py`, so that `workshop` updates it.
