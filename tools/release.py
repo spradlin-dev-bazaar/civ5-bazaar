@@ -1,4 +1,4 @@
-"""Make a Bazaar release, as docs/plugin-host.md describes under Making a release.
+"""Make a Bazaar release.
 
     python tools/release.py number [--major]       after build-hooked.cmd: the next release's number, and what changed
     python tools/release.py prepare [--major]      on main: a release branch with the new numbers and saved lists

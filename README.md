@@ -8,7 +8,7 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 
 ## Status
 
-Bazaar 0.5.0 is the first public release. From 0.5.0 on, what plugins use only grows until the next major version, so plugins built for it keep working with every 0.x release after it. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). The full plan is in [docs/plugin-host.md](docs/plugin-host.md).
+Bazaar 0.5.0 is the first public release. From 0.5.0 on, what plugins use only grows until the next major version, so plugins built for it keep working with every 0.x release after it. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). What's planned next is in [ROADMAP.md](ROADMAP.md).
 
 ## Installing
 
@@ -72,7 +72,7 @@ Other jobs:
 
 ## Making a release
 
-A release is made on the developer's machine with `tools\release.py`, in four steps: `number`, `prepare`, `build` and `publish`. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: checking the release in the game, approving the release notes, and uploading to the Steam Workshop with the descriptions in `workshop\`. The plan explains each step under [Making a release](docs/plugin-host.md#making-a-release).
+A release is made on the developer's machine with `tools\release.py`, in four steps: `number`, `prepare`, `build` and `publish`. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: checking the release in the game, approving the release notes, and uploading to the Steam Workshop with the descriptions in `workshop\`.
 
 ## Credits and licence
 

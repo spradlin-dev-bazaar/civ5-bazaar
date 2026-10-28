@@ -2,7 +2,7 @@
 
 Applies to every run in this repository.
 
-Bazaar is a replacement game core for Civilization V, Firaxis's engine with whoward69's VMC, that loads plugin DLLs which other people build against a released SDK. Most of the rules below exist because a plugin built months ago must keep working with today's Bazaar. docs/plugin-host.md holds the reasons; this lens holds the checks. Pitfalls in writing a plugin belong to the bazaar-plugin lens.
+Bazaar is a replacement game core for Civilization V, Firaxis's engine with whoward69's VMC, that loads plugin DLLs which other people build against a released SDK. Most of the rules below exist because a plugin built months ago must keep working with today's Bazaar. Pitfalls in writing a plugin belong to the bazaar-plugin lens.
 
 ## Binary compatibility with built plugins
 
