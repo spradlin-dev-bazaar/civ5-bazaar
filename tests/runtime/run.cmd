@@ -25,7 +25,7 @@ rem CivHostEngine.cpp needs the engine's headers, which the tests replace with a
 (for %%F in ("%HERE%..\..\host\*.cpp") do if /i not "%%~nxF"=="CivHostEngine.cpp" echo "%%~fF")>"%OUT%\host.rsp"
 cl %FLAGS% /Fo"%OUT%\\" /Fe"%OUT%\harness.exe" "%HERE%harness.cpp" "%HERE%test_plugins.cpp" "%HERE%test_lifecycle.cpp" "%HERE%test_plugins_screen.cpp" "%HERE%test_hand_hooks.cpp" "%HERE%test_paths.cpp" "%HERE%test_mods.cpp" "%HERE%test_lua.cpp" "%HERE%test_saves.cpp" "%HERE%test_values.cpp" "%HERE%test_functions.cpp" "%GEN%\src\fixture\fake_engine.cpp" "%GEN%\src\fixture\CivHookTable.cpp" @"%OUT%\host.rsp" >"%OUT%\build.log"
 if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
-for %%T in (BASIC SECOND SHAPES CONFLICT NEWER MAJOR NO_VERSION OLDER FAULT_REPLACE FAULT_BEFORE FAULT_KEPT KEPT ENTRY_FAULT ENTRY_BREAK BENCH REENTRANT THREADS NO_ENTRY DECLINE LATE_FAULT BAD_HOOKS THROW VETO NO_SHUTDOWN HAND HAND_SECOND HAND_FAULT HAND_REPLACE EMPTY_NAME LUA SAVE SAVE_SECOND SAVE_TWIN VALUES VALUES_READER TAKE_REPLACE FUNCTION_TWIN KEPT_CALLER) do (
+for %%T in (BASIC SECOND SHAPES CONFLICT NEWER MAJOR NO_VERSION OLDER BEFORE_FREEZE FAULT_REPLACE FAULT_BEFORE FAULT_KEPT KEPT ENTRY_FAULT ENTRY_BREAK BENCH REENTRANT THREADS NO_ENTRY DECLINE LATE_FAULT BAD_HOOKS THROW VETO NO_SHUTDOWN HAND HAND_SECOND HAND_FAULT HAND_REPLACE EMPTY_NAME LUA SAVE SAVE_SECOND SAVE_TWIN VALUES VALUES_READER TAKE_REPLACE FUNCTION_TWIN KEPT_CALLER) do (
 	cl %FLAGS% /LD /DTOY_%%T /Fo"%OUT%\toy_%%T.obj" /Fe"%OUT%\toy_%%T.dll" "%HERE%toy_plugins.cpp" >>"%OUT%\build.log"
 	if errorlevel 1 (type "%OUT%\build.log" & exit /b 1)
 )

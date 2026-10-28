@@ -1,6 +1,7 @@
 // One source, built once per toy plugin with a TOY_* define.
 #include "fake_engine.h"
 #include "CivHooks.h"
+#include "CivHostRuntime.h"
 #include "toy_api.h"
 
 #include <stdio.h>
@@ -75,6 +76,8 @@ TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HO
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR + 1, 0};
 #elif defined(TOY_OLDER)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1};
+#elif defined(TOY_BEFORE_FREEZE)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_FREEZE_MAJOR, CIV_HOST_FREEZE_MINOR - 1};
 #elif defined(TOY_ORDINALS)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR};
 #elif !defined(TOY_NO_VERSION)
@@ -907,13 +910,15 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
-#elif defined(TOY_OLDER) || defined(TOY_ORDINALS)
+#elif defined(TOY_OLDER) || defined(TOY_ORDINALS) || defined(TOY_BEFORE_FREEZE)
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
 #if defined(TOY_OLDER)
 	Describe(info, "Toy Older");
+#elif defined(TOY_BEFORE_FREEZE)
+	Describe(info, "Toy Before Freeze");
 #else
 	Describe(info, "Toy Ordinals");
 #endif
