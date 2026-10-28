@@ -8,7 +8,7 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 
 ## Status
 
-Bazaar 0.5.0 is the first public release. From 0.5.0 on, what plugins use only grows until the next major version, so plugins built for it keep working with every 0.x release after it. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). What's planned next is in [ROADMAP.md](ROADMAP.md).
+Bazaar 0.5.0 is the first public release. Plugins made for it will keep working with every later 0.x release, because until 1.0, new releases only add things for plugins to use and never change or remove what is already there. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). What's planned next is in [ROADMAP.md](ROADMAP.md).
 
 ## Installing
 
