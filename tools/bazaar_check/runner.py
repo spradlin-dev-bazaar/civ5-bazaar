@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import tomllib
 
-from . import CheckError, files, game
+from . import CheckError, files, game, tuner
 
 SETTINGS = {
     "mods": (list, tuple),
@@ -236,7 +236,8 @@ def crash_check(g, expected):
 
 def asked(g, step, what, answer, passes):
     """Ask once, or with within, ask again until the answer passes or that many seconds run out. Returns the last
-    answer and None, or None and why the game never answered. The game closing ends the run instead."""
+    answer and None, or None and why the game gave no answer, such as a Lua error. The game closing ends the run
+    instead."""
     answers = []
 
     def ready():
@@ -244,7 +245,10 @@ def asked(g, step, what, answer, passes):
         return passes(answers[-1])
 
     if "within" not in step:
-        ready()
+        try:
+            ready()
+        except (tuner.NoSuchState, tuner.LuaError) as e:
+            return None, str(e)
         return answers[-1], None
     try:
         g.wait(what, ready, step["within"])

@@ -13,7 +13,7 @@ from unittest import mock
 
 from fakes import HERE, write_mod
 
-from bazaar_check import CheckError, files, game, runner
+from bazaar_check import CheckError, files, game, runner, tuner
 
 REPO = os.path.join(HERE, "..", "..")
 
@@ -318,6 +318,27 @@ class PlayTest(FolderTest):
         self.assertEqual([r.passed for r in results[:3]], [True, False, False])
         self.assertEqual((results[1].what, results[1].found), ("MainMenu: b", "it gave false"))
 
+    def test_a_lua_error_or_a_missing_state_fails_its_check_and_the_run_goes_on(self):
+        g = FakeGame(self.root, self.installed)
+        errors = {
+            "bad": tuner.LuaError("[string]:1: attempt to call a nil value"),
+            "gone": tuner.NoSuchState("the game has no Lua state named BazaarStopped"),
+        }
+
+        def text(state, expression, timeout=30):
+            if expression in errors:
+                raise errors[expression]
+            return "true"
+
+        g.text = text
+        results = []
+        for step in ({"lua": "bad"}, {"lua": "gone", "state": "BazaarStopped"}, {"lua": "fine"}):
+            runner.do_step(g, step, results, runner.Marks([]))
+        self.assertEqual(
+            [(r.passed, r.found) for r in results],
+            [(False, str(errors["bad"])), (False, str(errors["gone"])), (True, "it gave true")],
+        )
+
     def test_a_check_s_name_is_what_its_result_says(self):
         steps = [
             {"lua": "a", "what": "the gold is right"},
@@ -575,6 +596,14 @@ class SourceContractTest(unittest.TestCase):
         self.assertRegex("Plugin %s: %s" % ("Toy Fault", fault % (5, "doTurn")), runner.CRASH)
         self.assertRegex("Plugin %s: %s" % ("Toy Fault", refusal.replace("%08X", "%d") % 5), runner.CRASH)
         self.assertNotRegex("Plugin Template Plugin 1 loaded (built for API 0.6).", runner.CRASH)
+
+    def test_the_status_words_a_checks_file_compares_are_the_ones_the_plugins_screen_shows(self):
+        source = ""
+        for name in ("CivHostRuntime.cpp", "CivHostRuntime.h", "CivHostOrder.cpp"):
+            with open(os.path.join(REPO, "host", name), encoding="latin-1") as f:
+                source += f.read()
+        for status in ("Loaded", "Not loaded", "Turned off after a crash", "Skipped"):
+            self.assertIn('"%s"' % status, source)
 
 
 if __name__ == "__main__":

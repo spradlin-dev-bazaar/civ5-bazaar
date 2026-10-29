@@ -60,7 +60,6 @@ PART_WAY = (
 CHECK_FOLDER = os.path.join(tempfile.gettempdir(), "Bazaar release check")
 CHECKED = "checked.txt"
 TEMPLATE_LOADED = r"^Plugin Template Plugin \S+ loaded \(built for API %d\.%d\)"
-TEMPLATE_TURN = r"^\[Template Plugin\] .+ starts turn %d "
 
 EXPORT_LINE = re.compile(r"^ +\d+ +[0-9A-F]+ +[0-9A-F]{8} (\S+)", re.M)
 EXPORT_COUNT = re.compile(r"^ +(\d+) number of names$", re.M)
@@ -517,7 +516,8 @@ def build(trial):
 
 def build_template(sdk_zip):
     """Built outside the repository from the SDK zip alone, so the check fails on anything the SDK left out. The
-    template's build uses BAZAAR_SDK when it is set, so it is pointed at the unzipped SDK."""
+    template's build uses BAZAAR_SDK when it is set, so it is pointed at the unzipped SDK. Returns the template's own
+    checks, from its checks.toml."""
     if os.path.isdir(CHECK_FOLDER):
         shutil.rmtree(CHECK_FOLDER)
     with zipfile.ZipFile(sdk_zip) as z:
@@ -532,22 +532,26 @@ def build_template(sdk_zip):
     built = [folder for folder in built if os.path.isdir(folder) and files.mod_key(folder)]
     if len(built) != 1:
         stop("the template plugin's build made %d mod folders in %s, not one" % (len(built), out))
-    return built[0]
+    return read_template_checks(template, built[0])
 
 
-def release_checks(current, packages, template, trial):
-    """A trial build does not name its release, so its description is not checked."""
+def read_template_checks(template, built):
+    checks = runner.read_checks(os.path.join(template, "checks.toml"))
+    if [os.path.normcase(mod) for mod in checks.mods] != [os.path.normcase(os.path.normpath(built))]:
+        stop("the template's checks.toml checks %s, not %s, the mod its build made" % (", ".join(checks.mods), built))
+    return checks
+
+
+def release_checks(current, packages, template_checks, trial):
+    """The template's own checks, the ones plugin authors start from, after the release's. A trial build does not name
+    its release, so its description is not checked."""
     api = version.numbers(current.release)[:2]
-    steps = [
-        {
-            "log": "Bazaar.log",
-            "has": TEMPLATE_LOADED % api,
-            "what": "Bazaar.log says the template plugin loaded, built for API %d.%d" % api,
-        },
-        {"start_game": "duel"},
-        {"end_turns": 1},
-        {"log": "Bazaar.log", "has": TEMPLATE_TURN % 1, "what": "the template plugin logged the start of turn 1"},
-    ]
+    loaded = {
+        "log": "Bazaar.log",
+        "has": TEMPLATE_LOADED % api,
+        "what": "Bazaar.log says the template plugin loaded, built for API %d.%d" % api,
+    }
+    steps = [loaded] + list(template_checks.steps)
     if not trial:
         description = {
             "description_of": mods.HOST_ID,
@@ -556,7 +560,7 @@ def release_checks(current, packages, template, trial):
             "what": "Bazaar's description in the Mods menu names %s" % current.release,
         }
         steps.insert(0, description)
-    return runner.Checks(packages + [template], steps=steps)
+    return template_checks._replace(mods=packages + list(template_checks.mods), steps=steps)
 
 
 def check(trial):
@@ -576,10 +580,10 @@ def check(trial):
         g = game.Game(say)
         g.preflight()
         say("building the template plugin from %s" % names.sdk)
-        template = build_template(sdk_zip)
+        template_checks = build_template(sdk_zip)
     except game.ERRORS + (OSError,) as e:
         stop("the in-game check could not start: %s" % e)
-    failed = runner.run(release_checks(current, packages, template, trial), g)
+    failed = runner.run(release_checks(current, packages, template_checks, trial), g)
     if failed:
         stop("the in-game check " + failed)
     if not trial:

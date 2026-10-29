@@ -1,6 +1,6 @@
 """Bazaar's in-game checks: build the test plugins, then play each checks file in checks/ in Civilization V with nobody
 at the keyboard, and print what passed. Needs a build-hooked.cmd build. The test plugins and the VMC check mod it puts
-into MODS are removed when it ends; the test build of Bazaar stays.
+into MODS are removed when it ends; the test build of Bazaar and the VMC Bootstrap stay.
 
     python tests/ingame/run.py [NAME ...]     NAME is a checks file in checks/, such as crash_turn; all by default
 """

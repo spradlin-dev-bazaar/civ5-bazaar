@@ -18,8 +18,10 @@ from xml.parsers import expat
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "sdk"))
+sys.path.insert(0, os.path.join(REPO, "tools"))
 
 import build_sdk  # noqa: E402
+from bazaar_check import runner  # noqa: E402
 
 SKILLS = os.path.join(REPO, "claude-plugin", "skills")
 NEW_LUA_MOD = os.path.join(SKILLS, "new-lua-mod", "scripts", "new-lua-mod.ps1")
@@ -37,6 +39,7 @@ BUILD_OUTPUT = [
     os.path.join("mod", "TemplatePlugin.dll"),
     os.path.join("src", "TemplatePlugin.vcproj.PC.user"),
     "TemplatePlugin.ncb",
+    os.path.join("bazaar_check", "__pycache__", "runner.cpython-312.pyc"),
 ]
 
 
@@ -213,6 +216,12 @@ class ScaffoldTest(unittest.TestCase):
             self.assertEqual(
                 f.read(), header + b"UPDATE CustomModOptions SET Value = 1 WHERE Name = 'EVENTS_PLAYER_TURN';\n"
             )
+        checks = runner.read_checks(os.path.join(made, "checks.toml"))
+        self.assertEqual(checks.mods, [os.path.join(made, "Build", "Tom's Turn Logger (x)")])
+        with open(os.path.join(made, "mod", "TomSTurnLoggerX.lua"), encoding="utf-8") as f:
+            before, after = re.search(r'print\("([^"]*)" \.\. iPlayer \.\. "([^"]*)"\)', f.read()).groups()
+        (log,) = [step for step in checks.steps if "log" in step]
+        self.assertRegex(before + "0" + after, log["has"])
 
     def test_a_lua_mod_with_no_options_description_or_author_keeps_the_template_s_defaults(self):
         done = self.run_script(NEW_LUA_MOD, "-DisplayName", "Turn Logger", "-Options", "none", "-Destination", self.out)
@@ -236,7 +245,11 @@ class ScaffoldTest(unittest.TestCase):
         teaser = "Score Doubler, a plugin for the Bazaar Multi-DLL Mod Loader."
         template = dict(tracked(PLUGIN_TEMPLATE), **{os.path.join("art", "Icon.png"): icon})
         values = {"Teaser": teaser, "Description": teaser, "Authors": "Jane Doe"}
-        self.assert_made_like(template, done, os.path.join(self.out, "ScoreDoubler"), PLUGIN_NAMES, values)
+        made = os.path.join(self.out, "ScoreDoubler")
+        self.assert_made_like(template, done, made, PLUGIN_NAMES, values)
+        checks = runner.read_checks(os.path.join(made, "checks.toml"))
+        self.assertEqual(checks.mods, [os.path.join(made, "Build", "Score Doubler")])
+        self.assertEqual([step["plugin"] for step in checks.steps if "plugin" in step], ["ScoreDoubler.dll"])
 
     def test_a_plugin_made_without_an_author_keeps_the_template_s_placeholder(self):
         sdk = self.make_sdk(os.path.join(self.folder, "Bazaar SDK"))

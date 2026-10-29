@@ -182,6 +182,8 @@ namespace
 	{
 		CivPluginRecord& rec = s_plugins[plugin];
 		char problem[512];
+		// The in-game checker that mod authors keep a copy of finds crashes by this line and the load fault's below, and
+		// a Bazaar update cannot change their copies, so changed words would let a crash pass their checks unseen.
 		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", *code, where);
 		Log("Plugin %s: %s", rec.name.c_str(), problem);
 		LogCrash(code);
@@ -1043,6 +1045,7 @@ namespace
 		{
 			DiscardPending();
 			rec.quarantined = true;
+			// Authors' copies of the in-game checker find load crashes by these words; see Quarantine.
 			Refuse(rec, CIV_PLUGIN_FAULTED_AT_LOAD, Format("It stopped working while loading (code 0x%08X) and was turned off until you return to the main menu.", code));
 			LogCrash(&code);
 			return false;

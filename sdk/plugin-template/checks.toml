@@ -1,0 +1,23 @@
+# What check.cmd plays in Civilization V once it has built the mod. Every run also fails if a plugin stops working or
+# Lua.log has a Lua error. bazaar_check\README.md lists every step a checks file can take.
+mods = ["Build/Template Plugin"]
+
+[[steps]]
+plugin = "TemplatePlugin.dll"
+status = "Loaded"
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+end_turns = 1
+
+[[steps]]
+log = "Bazaar.log"
+has = ' starts turn 1 with \d+ gold'
+what = "Template Plugin logged the start of turn 1"
+
+[[steps]]
+lua = "Game.TemplateHello()"
+has = "."
+what = "Template Plugin's Lua function answers"

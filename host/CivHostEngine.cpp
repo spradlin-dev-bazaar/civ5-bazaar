@@ -125,6 +125,7 @@ namespace
 		return text;
 	}
 
+	// The in-game checker that mod authors keep a copy of reads File, Status and Problems, so those columns stay.
 	bool InsertPluginRows(const std::vector<CivPluginReportRow>& rows)
 	{
 		Database::Results insert;

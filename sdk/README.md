@@ -37,12 +37,13 @@ For example, to make every player's score count double, you add an after-hook to
 - **The Microsoft Visual Studio 2010 Shell (Isolated) Redistributable**, which ModBuddy runs in. The Civilization V SDK's launcher will not start ModBuddy without it. Microsoft no longer offers it either, but the Internet Archive kept [Microsoft's original installer, `VSIsoShell.exe`](https://web.archive.org/web/20201112013416/http://download.microsoft.com/download/1/9/3/1939AD78-F8E8-4336-83F3-E2470F422C62/VSIsoShell.exe); its digital signature is Microsoft's.
 - **ModBuddy started once**, from the Civilization V SDK, before your first build. Its updater copies the build steps `build.cmd` uses into `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy`.
 - **The Bazaar SDK**, the folder that holds this guide.
+- **Python 3.11 or newer**, from [python.org](https://www.python.org/downloads/windows/), only to check your plugin in the game with `check.cmd` (see [Checking your plugin in the game](#checking-your-plugin-in-the-game)).
 
 ### What is in the Bazaar SDK
 
 | In the SDK | What it is |
 |---|---|
-| `plugin-template\` | A small working plugin to start from, with the script that makes its releases. |
+| `plugin-template\` | A small working plugin to start from, with the script that makes its releases and `check.cmd`, which plays it in the game. |
 | `include\CivHooks.h` | Every game function you can hook, with its hook ID and the types of its hooks. |
 | `include\CivPluginApi.h` | The interface between Bazaar and a plugin: the structs, function types and constants both sides use. |
 | the rest of `include\` | The game's headers, in the versions Bazaar was built from. |
@@ -72,7 +73,7 @@ For example, to make every player's score count double, you add an after-hook to
 
 1. Copy `plugin-template` to a folder of your own. If you built it in Step 1, leave out `Build\`, `Packages\`, `src\out\` and `mod\TemplatePlugin.dll`: those are the template's build output.
 2. Unless that folder sits directly inside the Bazaar SDK folder, set the environment variable `BAZAAR_SDK` to the SDK folder: without it, the build looks for the SDK in the folder above yours. Open a new Command Prompt afterwards, so that it sees the variable, or set it for one Command Prompt with `set BAZAAR_SDK=<the SDK folder>` before running `build.cmd`.
-3. Choose a file name without spaces, such as `ScoreDoubler`, and a display name, such as `Score Doubler`, without commas: the build passes the display name to MSBuild, which splits it at a comma. Rename the four files with `TemplatePlugin` in their names (`src\TemplatePlugin.cpp`, `src\TemplatePlugin.vcproj`, `mod\TemplatePlugin.sql` and `mod\TemplatePlugin.civ5proj`). Then, in every text file in the folder (the `.cpp`, `.vcproj`, `.sql`, `.civ5proj`, `build.cmd` and `workshop-description.txt`), replace `TemplatePlugin` with the file name and `Template Plugin` with the display name.
+3. Choose a file name without spaces, such as `ScoreDoubler`, and a display name, such as `Score Doubler`, without commas: the build passes the display name to MSBuild, which splits it at a comma. Rename the four files with `TemplatePlugin` in their names (`src\TemplatePlugin.cpp`, `src\TemplatePlugin.vcproj`, `mod\TemplatePlugin.sql` and `mod\TemplatePlugin.civ5proj`). Then, in every text file in the folder (the `.cpp`, `.vcproj`, `.sql`, `.civ5proj`, `build.cmd`, `checks.toml` and `workshop-description.txt`), replace `TemplatePlugin` with the file name and `Template Plugin` with the display name.
 
    No other mod may ship a DLL with the same name as yours: Bazaar finds each plugin by its file name, among the files of the mods that are turned on. So keep the DLL's `<Content>` entry in the `.civ5proj`: it makes the DLL one of the mod's files.
 4. Give your mod its own ID: replace the GUID on the `.civ5proj`'s `<Guid>` line with a new one (PowerShell's `New-Guid` makes one). It becomes the mod's ID in the `.modinfo`. Leave the `<ProjectGuid>` line above it alone: that one is ModBuddy's ID for the project. Every mod needs its own ID, so the game can tell yours apart from the template.
@@ -82,6 +83,8 @@ For example, to make every player's score count double, you add an after-hook to
    - `NotificationAdded` logs each notification;
    - `Hello` and `AfterRegisterGame` add `Game.TemplateHello()` to Lua;
    - `s_turnsStarted`, `s_notifications`, `SaveData` and `LoadData` keep two counts in saved games. Delete them with their `RegisterSaveData` and `Declare` lines in `CivPluginEntry`, and the lines in `BeforeDoTurn` and `NotificationAdded` that use the counts.
+
+   `checks.toml` checks the first and third, so remove its steps for any you delete.
 7. Run `build.cmd` again. The `Build` folder now holds a folder with your display name.
 
 Your code goes in the `.cpp` file. Its first `#include`, `CvGameCoreDLLPCH.h`, brings in most of the game's headers; the next two are Bazaar's, and the fourth, `PluginVersion.h`, holds your plugin's version. A new `.cpp` file needs the first three, and an entry in the `.vcproj`'s file list (copy the existing `<File>` entry).
@@ -546,6 +549,12 @@ Windows does not let you replace a DLL while the game has it loaded, and Bazaar 
 2. run `build.cmd` in your plugin's folder;
 3. copy the new mod folder from `Build` into MODS, over the old one;
 4. start a game.
+
+## Checking your plugin in the game
+
+`check.cmd`, in your plugin's folder, builds the plugin and then plays `checks.toml` in Civilization V with nobody at the keyboard. It starts the game through Steam, switches on your mod and the mods it needs, and plays the steps `checks.toml` lists. The template's steps start a small game, end a turn, and check that the plugin loaded, logged the start of the turn, and answers `Game.TemplateHello()`. Every run also fails if a plugin stops working or `Lua.log` has a Lua error. Afterwards it closes the game and puts back your Mods menu choices, plugin order, `config.ini` and autosaves. Run it from a Command Prompt; for the template, a run takes two or three minutes.
+
+Change `checks.toml` to check what your plugin does. `bazaar_check\README.md`, beside it, lists what a checks file can do and what a run needs: Python 3.11 or newer, the game's tuner port and logging switched on in its `config.ini`, and DirectX 11 chosen in Steam.
 
 ## When something goes wrong
 

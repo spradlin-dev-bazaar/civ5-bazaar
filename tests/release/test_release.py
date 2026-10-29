@@ -766,42 +766,49 @@ class FileTest(unittest.TestCase):
 class ReleaseChecksTest(unittest.TestCase):
     CURRENT = version.Version("0.6.0", 6)
     LOADED = "Plugin Template Plugin 1 loaded (built for API 0.6)."
-    TURN = "[Template Plugin] Rome starts turn 1 with 0 gold (turns started: 1, notifications seen: 0)"
+    TEMPLATE = release.runner.read_checks(os.path.join(release.common.REPO, "sdk", "plugin-template", "checks.toml"))
 
     def checks(self, trial):
-        return release.release_checks(self.CURRENT, ["host.civ5mod", "vmc.civ5mod"], "Template Plugin", trial)
+        return release.release_checks(self.CURRENT, ["host.civ5mod", "vmc.civ5mod"], self.TEMPLATE, trial)
 
-    def test_a_release_names_itself_loads_the_template_and_logs_its_first_turn(self):
+    def test_a_release_names_itself_and_loads_the_template_then_plays_the_template_s_own_checks(self):
         checks = self.checks(trial=False)
-        self.assertEqual(checks.mods, ["host.civ5mod", "vmc.civ5mod", "Template Plugin"])
-        self.assertEqual(list(checks.plugin_order), [])
+        self.assertEqual(checks.mods, ["host.civ5mod", "vmc.civ5mod"] + list(self.TEMPLATE.mods))
         release.runner.validate(checks)
-        kinds = [release.runner.kind_of(step) for step in checks.steps]
-        self.assertEqual(kinds, ["description_of", "log", "start_game", "end_turns", "log"])
+        self.assertEqual([release.runner.kind_of(step) for step in checks.steps[:2]], ["description_of", "log"])
+        self.assertEqual(checks.steps[2:], list(self.TEMPLATE.steps))
+        kinds = [release.runner.kind_of(step) for step in self.TEMPLATE.steps]
+        self.assertLess(kinds.index("start_game"), kinds.index("end_turns"))
+        self.assertLess(kinds.index("end_turns"), kinds.index("log"))
         description = checks.steps[0]
         self.assertEqual((description["description_of"], description["version"]), (release.mods.HOST_ID, 6))
         self.assertEqual(description["is"], release.mods.host_description("0.6.0"))
-        self.assertEqual(checks.steps[3]["end_turns"], 1)
         self.assertEqual(
-            [step.get("what") for step in checks.steps if "what" in step],
+            [step["what"] for step in checks.steps[:2]],
             [
                 "Bazaar's description in the Mods menu names 0.6.0",
                 "Bazaar.log says the template plugin loaded, built for API 0.6",
-                "the template plugin logged the start of turn 1",
             ],
         )
 
-    def test_the_log_checks_find_the_template_built_for_this_api_and_its_first_turn_only(self):
-        loaded, turn = (step["has"] for step in self.checks(trial=False).steps if "log" in step)
+    def test_the_loaded_check_finds_the_template_built_for_this_api_only(self):
+        loaded = self.checks(trial=False).steps[1]["has"]
         self.assertRegex(self.LOADED, loaded)
         self.assertNotRegex(self.LOADED.replace("0.6", "0.5"), loaded)
-        self.assertRegex(self.TURN, turn)
-        self.assertNotRegex(self.TURN.replace("turn 1 ", "turn 7 "), turn)
 
     def test_a_trial_build_is_not_asked_to_name_its_release(self):
         steps = self.checks(trial=True).steps
         self.assertNotIn("description_of", [key for step in steps for key in step])
-        self.assertEqual(len(steps), 4)
+        self.assertEqual(len(steps), 1 + len(self.TEMPLATE.steps))
+
+    def test_the_template_s_checks_must_check_the_mod_its_build_made(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with open(os.path.join(folder, "checks.toml"), "w") as f:
+                f.write('mods = ["Build/Template Plugin"]\n')
+            built = os.path.join(folder, "Build", "Template Plugin")
+            self.assertEqual(release.read_template_checks(folder, built).mods, [built])
+            with self.assertRaisesRegex(SystemExit, "checks.toml checks .+Template Plugin, not .+Other, the mod"):
+                release.read_template_checks(folder, os.path.join(folder, "Build", "Other"))
 
 
 class CheckTest(unittest.TestCase):
@@ -821,7 +828,7 @@ class CheckTest(unittest.TestCase):
                     f.write("abc123\n")
             g = mock.create_autospec(release.game.Game, instance=True)
             g.preflight.side_effect = preflight
-            template = os.path.join(folder, "Template Plugin")
+            template = release.runner.Checks([os.path.join(folder, "Template Plugin")], steps=[{"end_turns": 1}])
             with (
                 mock.patch.object(release.version, "read", return_value=self.CURRENT),
                 mock.patch.object(release, "release_folder", return_value=out),
@@ -881,14 +888,6 @@ class SourceContractTest(unittest.TestCase):
             r'Log\("(Plugin %s %s loaded \(built for API %d\.%d\)\.)"', self.source("host", "CivHostRuntime.cpp")
         )
         self.assertRegex(fmt % ("Template Plugin", "1", 0, 6), release.TEMPLATE_LOADED % (0, 6))
-
-    def test_the_turn_line_is_the_one_the_template_writes_through_bazaar(self):
-        plugin_line = re.search(r'Log\("\[%s\] %s"', self.source("host", "CivHostRuntime.cpp"))
-        template = self.source("sdk", "plugin-template", "src", "TemplatePlugin.cpp")
-        (fmt,) = re.findall(r'Log\("(%s starts turn %d [^"]*)"', template)
-        self.assertIsNotNone(plugin_line)
-        self.assertIn('plugin->name = "Template Plugin";', template)
-        self.assertRegex("[Template Plugin] " + fmt % ("Rome", 4, 0, 1, 0), release.TEMPLATE_TURN % 4)
 
     def test_the_plugin_order_file_is_the_one_bazaar_reads(self):
         self.assertIn(

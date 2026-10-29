@@ -74,6 +74,7 @@ The template's project file makes the mod depend on Bazaar, which also makes the
 
 - Report the files it made (`Build\<Display Name>\`, holding the `.modinfo`, `.lua` and `.sql`, and `Packages\<Display Name> (v N).civ5mod`). Then tell the user how to test in the game: copy `Build\<Display Name>`, the built mod, into MODS (not the folder the script made, which holds the project files); enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and the mod; and, if the mod prints, turn on logging and look in `Logs\Lua.log`.
 - Do not copy anything into MODS or start the game unless the user asks: installing mods is theirs to do.
+- The folder also has `check.cmd`, which builds the mod and plays `checks.toml` in Civilization V with nobody at the keyboard. It installs the mod into MODS and starts the game, so run it only if the user asks. `bazaar_check\README.md` says what it needs and how to write checks. When you replace the template's example Lua, replace the `checks.toml` step that looks for its line in `Lua.log` with steps that check what the mod does.
 
 ## 5. Releases
 
