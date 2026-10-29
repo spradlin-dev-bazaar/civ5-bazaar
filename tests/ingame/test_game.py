@@ -8,16 +8,30 @@ import tempfile
 import unittest
 from unittest import mock
 
-from fakes import PLAYER_AUTOSAVES, TASKLIST_DX11, TASKLIST_NONE, FakeClock, read_files, rotate_autosaves, write_files
+from fakes import (
+    PLAYER_AUTOSAVES,
+    TASKLIST_DX11,
+    TASKLIST_NONE,
+    FakeClock,
+    mods,
+    read_files,
+    rotate_autosaves,
+    use_own_temp,
+    write_files,
+)
 
 from bazaar_check import CheckError, files, game, tuner
+
+CONFIG_INI = b"[CONFIG]\r\nEnableTuner = 1\r\nSyncRandSeed = 0\r\n\r\n; seed for maps\r\nMapRandSeed = 0\r\n"
 
 
 class UserFolderTest(unittest.TestCase):
     def setUp(self):
         self.user = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.user)
+        use_own_temp(self)
         os.makedirs(os.path.join(self.user, "MODS"))
+        write_files(self.user, {files.CONFIG: CONFIG_INI})
         self.game = game.Game(say=lambda text: None, user=self.user)
         patcher = mock.patch.object(game, "game_processes", return_value=[])
         patcher.start()
@@ -50,7 +64,8 @@ class HelpersTest(unittest.TestCase):
 
 
 class ScriptedGame(game.Game):
-    """A Game whose calls to the game are recorded, and answered or failed as a test sets up."""
+    """A Game whose calls to the game are recorded, and answered or failed as a test sets up. Starting it rotates the
+    autosaves and switches mods on, as the real game does."""
 
     def __init__(self, user):
         self.said = []
@@ -66,16 +81,8 @@ class ScriptedGame(game.Game):
 
     def start(self, timeout=300):
         rotate_autosaves(self.files.user)
+        write_files(self.files.user, {files.MODS_DATABASE: b"the check's mods"})
         self.step("start")
-
-    def mods(self, enabled_only=True):
-        return self.step("mods", [("player-mod", 2, "Player Mod")])
-
-    def to_main_menu(self, timeout=180):
-        self.step("to_main_menu")
-
-    def set_mods(self, wanted):
-        self.step("set_mods %s" % wanted)
 
     def quit(self, timeout=120):
         self.step("quit")
@@ -86,10 +93,14 @@ class SessionTest(UserFolderTest):
         g = ScriptedGame(self.user)
         g.failing = failing
         write_files(self.path(files.AUTOSAVES), PLAYER_AUTOSAVES)
+        write_files(self.user, {files.MODS_DATABASE: b"the player's mods"})
         return g
 
     def autosaves(self):
         return read_files(self.path(files.AUTOSAVES))
+
+    def mods(self):
+        return read_files(self.user)[files.MODS_DATABASE]
 
     def copies_folder(self, g):
         """Where the session said it kept the copies; removed when the test ends."""
@@ -97,56 +108,48 @@ class SessionTest(UserFolderTest):
         self.addCleanup(shutil.rmtree, folder, True)
         return folder
 
-    def test_a_good_run_puts_the_mods_back_then_quits(self):
+    def test_a_good_run_puts_everything_back_once_the_game_has_closed(self):
         g = self.scripted()
-        with game.session(g):
+        with game.session(g, 7):
             g.step("check")
-        self.assertEqual(g.calls, ["start", "mods", "check", "to_main_menu", "set_mods [('player-mod', 2)]", "quit"])
+            with open(self.path(files.CONFIG), "rb") as f:
+                during = f.read()
+        self.assertEqual(g.calls, ["start", "check", "quit"])
+        self.assertEqual(during, CONFIG_INI.replace(b"Seed = 0", b"Seed = 7"))
+        self.assertEqual(read_files(self.user)[files.CONFIG], CONFIG_INI)
+        self.assertEqual(self.mods(), b"the player's mods")
         self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
         self.assertFalse(os.path.exists(self.copies_folder(g)))
-        self.assertEqual(g.said[-1], "your Mods menu choices, plugin order and autosaves are as they were")
+        self.assertEqual(g.said[-1], "your Mods menu choices, config.ini and autosaves are as they were")
 
     def test_a_failing_check_still_puts_everything_back_and_keeps_its_error(self):
         g = self.scripted()
         with self.assertRaisesRegex(CheckError, "turn 1 cannot end"):
-            with game.session(g):
+            with game.session(g, 1):
                 raise CheckError("turn 1 cannot end")
-        self.assertEqual(g.calls[-3:], ["to_main_menu", "set_mods [('player-mod', 2)]", "quit"])
-        self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
-
-    def test_when_the_menus_never_come_back_the_player_is_told_which_mods_to_switch_on(self):
-        g = self.scripted(to_main_menu=tuner.TunerError("the game closed the tuner connection"))
-        with self.assertRaisesRegex(CheckError, "the plugin crashed"):
-            with game.session(g):
-                raise CheckError("the plugin crashed")
-        self.assertIn("quit", g.calls)
-        self.assertTrue(any("Player Mod (v 2)" in line for line in g.said))
-        self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
-
-    def test_a_mod_list_never_read_asks_for_no_mods_and_keeps_the_real_error(self):
-        closed = tuner.TunerError("the game closed the tuner connection")
-        g = self.scripted(mods=closed, to_main_menu=closed)
-        with self.assertRaisesRegex(tuner.TunerError, "closed the tuner connection"):
-            with game.session(g):
-                pass
-        self.assertEqual(g.calls, ["start", "mods", "to_main_menu", "quit"])
-        self.assertFalse(any("switch these on" in line for line in g.said))
-        self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
+        self.assertEqual(g.calls[-1], "quit")
+        self.assertEqual((self.mods(), self.autosaves()), (b"the player's mods", PLAYER_AUTOSAVES))
 
     def test_a_problem_putting_things_back_after_a_good_run_is_an_error(self):
         g = self.scripted(quit=CheckError("Civilization V closing did not happen"))
         with self.assertRaisesRegex(CheckError, "close Civilization V by hand"):
-            with game.session(g):
+            with game.session(g, 1):
                 pass
 
-    def test_a_game_that_will_not_close_after_a_good_run_keeps_the_autosaves_copy(self):
+    def test_a_game_that_will_not_close_keeps_the_copies_of_what_it_holds(self):
         g = self.scripted(quit=CheckError("Civilization V closing did not happen"))
         with mock.patch.object(game, "game_processes", return_value=["civilizationv_dx11.exe"]):
-            with self.assertRaisesRegex(CheckError, "still running.+the copies stay in"):
-                with game.session(g):
+            with self.assertRaisesRegex(
+                CheckError, "Mods menu choices, config.ini and autosaves were not put back.+the copies"
+            ):
+                with game.session(g, 1):
                     pass
-        self.assertNotEqual(self.autosaves(), PLAYER_AUTOSAVES)
-        self.assertEqual(read_files(os.path.join(self.copies_folder(g), "auto")), PLAYER_AUTOSAVES)
+        seeded = CONFIG_INI.replace(b"Seed = 0", b"Seed = 1")
+        self.assertEqual((self.mods(), read_files(self.user)[files.CONFIG]), (b"the check's mods", seeded))
+        folder = self.copies_folder(g)
+        self.assertEqual(read_files(os.path.join(folder, "auto")), PLAYER_AUTOSAVES)
+        self.assertEqual(read_files(folder)["Civ5ModsDatabase.db"], b"the player's mods")
+        self.assertEqual(read_files(folder)["config.ini"], CONFIG_INI)
 
     def test_a_failed_start_leaves_the_autosaves_it_never_touched(self):
         g = self.scripted(start=CheckError("Steam started civilizationv.exe"))
@@ -158,10 +161,11 @@ class SessionTest(UserFolderTest):
 
         g.start = start
         with self.assertRaisesRegex(CheckError, "Steam started"):
-            with game.session(g):
+            with game.session(g, 1):
                 pass
         self.assertEqual(g.calls, ["start"])
         self.assertEqual(self.autosaves(), dict(PLAYER_AUTOSAVES, **since))
+        self.assertEqual(read_files(self.user)[files.CONFIG], CONFIG_INI)
         self.assertFalse(os.path.exists(self.copies_folder(g)))
         self.assertEqual(len(g.said), 1)
 
@@ -175,38 +179,38 @@ class SessionTest(UserFolderTest):
         g.start = start
         with mock.patch.object(game, "game_processes", return_value=["civilizationv_dx11.exe"]):
             with self.assertRaises(KeyboardInterrupt):
-                with game.session(g):
+                with game.session(g, 1):
                     pass
         self.assertEqual(g.said[-1], "close Civilization V by hand")
         self.copies_folder(g)
 
-    def test_a_second_ctrl_c_while_putting_things_back_still_puts_the_autosaves_back(self):
-        g = self.scripted(to_main_menu=KeyboardInterrupt())
+    def test_a_second_ctrl_c_while_putting_things_back_still_puts_the_files_back(self):
+        g = self.scripted(quit=KeyboardInterrupt())
         with self.assertRaises(KeyboardInterrupt):
-            with game.session(g):
+            with game.session(g, 1):
                 raise CheckError("turn 1 cannot end")
-        self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
-        self.assertTrue(any("(the check was stopped)" in line and "Player Mod (v 2)" in line for line in g.said))
-        self.assertNotIn("quit", g.calls)
+        self.assertEqual((self.mods(), self.autosaves()), (b"the player's mods", PLAYER_AUTOSAVES))
+        self.assertEqual(g.calls.count("quit"), 1)
 
-    def test_an_unexpected_error_putting_things_back_still_closes_the_game_and_names_the_error(self):
-        g = self.scripted(to_main_menu=ValueError("a mistake in the check"))
+    def test_an_unexpected_error_closing_the_game_tries_once_more(self):
+        g = self.scripted(quit=ValueError("a mistake in the check"))
         with self.assertRaisesRegex(ValueError, "a mistake in the check"):
-            with game.session(g):
+            with game.session(g, 1):
                 pass
-        self.assertEqual(g.calls[-1], "quit")
-        self.assertTrue(any("(a mistake in the check)" in line and "Player Mod (v 2)" in line for line in g.said))
-        self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
+        self.assertEqual(g.calls.count("quit"), 2)
+        self.assertEqual((self.mods(), self.autosaves()), (b"the player's mods", PLAYER_AUTOSAVES))
 
-    def test_a_game_left_running_is_named_and_its_autosaves_left_alone(self):
-        g = self.scripted(to_main_menu=KeyboardInterrupt())
+    def test_a_game_left_running_is_named_and_what_it_holds_left_alone(self):
+        g = self.scripted(quit=KeyboardInterrupt())
         with mock.patch.object(game, "game_processes", return_value=["civilizationv_dx11.exe"]):
             with self.assertRaises(KeyboardInterrupt):
-                with game.session(g):
+                with game.session(g, 1):
                     pass
         self.assertEqual(g.said[-1], "close Civilization V by hand")
+        self.assertEqual(self.mods(), b"the check's mods")
         self.assertNotEqual(self.autosaves(), PLAYER_AUTOSAVES)
-        self.assertIn("the copies stay in %s" % self.copies_folder(g), g.said)
+        folder = self.copies_folder(g)
+        self.assertTrue(any(said.startswith("the copies stay in %s, " % folder) for said in g.said))
 
 
 class StartTest(UserFolderTest):
@@ -227,6 +231,24 @@ class StartTest(UserFolderTest):
     def test_the_directx_9_version_is_refused(self):
         with self.assertRaisesRegex(CheckError, "civilizationv.exe, not the DirectX 11 version"):
             self.started(["civilizationv.exe"], ["civilizationv.exe"])
+
+
+class StartedSessionTest(UserFolderTest):
+    def test_a_session_starts_the_game_with_its_own_copies_made(self):
+        write_files(self.user, {files.CONFIG: CONFIG_INI + b"LoggingEnabled = 1\r\n"})
+        dx11 = ["civilizationv_dx11.exe"]
+        with (
+            mock.patch.object(game, "game_processes", side_effect=[[], dx11, dx11] + [[]] * 5),
+            mock.patch.object(game.os, "startfile", create=True) as startfile,
+            mock.patch.object(self.game.tuner, "connect"),
+            mock.patch.object(self.game, "menu_ready", return_value=True),
+            mock.patch.object(self.game, "quit"),
+            mock.patch.object(game, "time", FakeClock()),
+        ):
+            with game.session(self.game, 1):
+                pass
+        startfile.assert_called_once_with(game.GAME_URL)
+        self.assertEqual(files.leftover_copies(), [])
 
 
 class LoadScreenTest(UserFolderTest):
@@ -277,10 +299,48 @@ class EndTurnTest(UserFolderTest):
             mock.patch.object(g, "turn", return_value=4),
             mock.patch.object(g, "blocker", return_value=(game.NOT_BLOCKED, "NO_ENDTURN_BLOCKING_TYPE")),
             mock.patch.object(g, "lua", side_effect=lua),
+            mock.patch.object(g, "close_popups") as close_popups,
             mock.patch.object(game, "time", FakeClock()),
         ):
             self.assertEqual(g.end_turn(), 5)
         self.assertEqual(len(sent), 3)
+        self.assertEqual(close_popups.call_count, 2)
+
+    def test_the_game_s_pop_ups_are_closed_but_bazaar_s_is_left(self):
+        said = []
+        g = game.Game(say=said.append, user=self.user)
+        states = [
+            (5, "CityStateGreetingPopup"),
+            (6, game.BAZAAR_STOPPED),
+            (7, "TechPopup"),
+            (8, "CityStateGreetingPopup"),
+        ]
+        asked = []
+
+        def lua(state, code, timeout=30):
+            asked.append(state)
+            return ["closed"] if state == "CityStateGreetingPopup" else []
+
+        with mock.patch.object(g.tuner, "states", return_value=states), mock.patch.object(g, "lua", side_effect=lua):
+            self.assertEqual(g.close_popups(), ["CityStateGreetingPopup"])
+        self.assertEqual(asked, ["CityStateGreetingPopup", "TechPopup"])
+        self.assertEqual(said, ["closed CityStateGreetingPopup"])
+
+    def test_bazaar_s_pop_up_is_the_state_its_file_gives_and_is_not_closed(self):
+        self.assertEqual(os.path.splitext(os.path.basename(mods.STOPPED_POPUP[1]))[0], game.BAZAAR_STOPPED)
+        self.assertFalse(game.BAZAAR_STOPPED.endswith("Popup"))
+
+    def test_a_game_that_closes_while_a_turn_ends_is_not_reported_as_a_stuck_turn(self):
+        g = game.Game(say=lambda text: None, user=self.user)
+        with (
+            mock.patch.object(g, "turn", return_value=4),
+            mock.patch.object(g, "lua", return_value=[]),
+            mock.patch.object(g, "wait", side_effect=game.GameClosed("Civilization V closed while waiting")),
+            mock.patch.object(g, "blocker") as blocker,
+        ):
+            with self.assertRaisesRegex(game.GameClosed, "^Civilization V closed while waiting$"):
+                g.end_turn()
+        blocker.assert_not_called()
 
     def end_turn_failing(self, blocker):
         g = game.Game(say=lambda text: None, user=self.user)
@@ -288,6 +348,7 @@ class EndTurnTest(UserFolderTest):
             mock.patch.object(g, "turn", return_value=4),
             mock.patch.object(g, "blocker", return_value=blocker),
             mock.patch.object(g, "lua", return_value=["false"]),
+            mock.patch.object(g.tuner, "states", return_value=[]),
             mock.patch.object(game, "time", FakeClock()),
         ):
             g.end_turn()
@@ -319,7 +380,7 @@ class WaitTest(UserFolderTest):
         def ready():
             raise tuner.TunerError("the game closed the tuner connection")
 
-        with self.assertRaisesRegex(CheckError, "closed while waiting"):
+        with self.assertRaisesRegex(game.GameClosed, "closed while waiting"):
             g.wait("the game starting", ready, 60)
 
 

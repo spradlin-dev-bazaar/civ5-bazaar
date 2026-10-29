@@ -1,6 +1,6 @@
 """Drive Civilization V for the in-game checks through its tuner port (tuner.py): start it through Steam, choose the
-mods, start a game, end turns, save, load and quit, with nobody at the keyboard. The player's own mod choices, plugin
-order and autosaves are put back afterwards.
+mods, start a game, end turns, save, load and quit, with nobody at the keyboard. The player's Mods menu choices, plugin
+order, config.ini and autosaves are put back afterwards.
 
 The game must be set up for it once: EnableTuner = 1 and LoggingEnabled = 1 in its config.ini, and DirectX 11 chosen
 the last time it was started from Steam, since starting it through steam://rungameid starts the version chosen last.
@@ -25,8 +25,9 @@ LOAD_SCREEN = "LoadScreen"
 LEGAL_SCREEN = "LegalScreen"
 NOT_BLOCKED = -1
 REFUSED = "refused: "
-STOPPED = "the check was stopped"
 ERRORS = (CheckError, tuner.TunerError, tuner.LuaError)
+# Bazaar's crash pop-up; close_popups leaves it, since its name does not end in Popup, for a check to see.
+BAZAAR_STOPPED = "BazaarStopped"
 
 
 def config_problems(text):
@@ -64,11 +65,6 @@ def mod_table(mods):
     return "{%s}" % ", ".join("{%s, %d}" % (tuner.lua_text(i), v) for i, v in mods)
 
 
-def menu_not_back(mods, why):
-    names = ", ".join("%s (v %d)" % (name, v) for _, v, name in mods)
-    return "your Mods menu could not be put back (%s); switch these on there again: %s" % (why, names)
-
-
 LIST_MODS = r"""
 for _, v in pairs(Modding.GetModBrowserInstalledListings()) do
     local name = tostring(v.Title or v.Name):gsub("[\t\r\n]", " ")
@@ -97,8 +93,14 @@ for row in DB.Query("SELECT File, Status, Problems FROM BazaarPlugins ORDER BY P
 end
 """
 
-# What the game's own setup screen does from the Mods menu, which leaves the player's Play Now settings alone.
+# What the game's own setup screen does from the Mods menu, which leaves the player's Play Now settings alone. The
+# civilizations, difficulty, speed and era are fixed too, so with the same seeds and the same saved game options, the
+# same game is played.
 START_GAME = r"""
+if not (GameInfo.Civilizations.CIVILIZATION_AMERICA and GameInfo.Civilizations.CIVILIZATION_ROME) then
+    print("%(refused)sthe checks play America against Rome, and a mod switched on has removed one of them")
+    return
+end
 PreGame.SetPrivateGame(false)
 PreGame.SetGameType(GameTypes.GAME_SINGLE_PLAYER)
 PreGame.ResetSlots()
@@ -106,6 +108,11 @@ PreGame.ResetGameOptions()
 PreGame.ResetMapOptions()
 PreGame.LoadPreGameSettings()
 PreGame.SetPersistSettings(false)
+PreGame.SetCivilization(0, GameInfo.Civilizations.CIVILIZATION_AMERICA.ID)
+PreGame.SetCivilization(1, GameInfo.Civilizations.CIVILIZATION_ROME.ID)
+PreGame.SetHandicap(0, GameInfo.HandicapInfos.HANDICAP_PRINCE.ID)
+PreGame.SetGameSpeed(GameInfo.GameSpeeds.GAMESPEED_STANDARD.ID)
+PreGame.SetEra(GameInfo.Eras.ERA_ANCIENT.ID)
 PreGame.SetLoadWBScenario(false)
 for row in GameInfo.MapScripts() do
     if row.FileName and string.find(row.FileName, "\\Continents.lua", 1, true) then
@@ -122,6 +129,8 @@ Events.SerialEventStartGame()
 UIManager:SetUICursor(1)
 """
 
+CLOSE_POPUP = 'if not ContextPtr:IsHidden() then UIManager:DequeuePopup(ContextPtr) print("closed") end'
+
 LOAD_GAME = r"""
 local ending = %(ending)s
 local files = {}
@@ -136,8 +145,30 @@ end
 print("%(refused)sthe game does not list the save " .. ending)
 """
 
-# Ending a turn waits for every unit to have orders, so the checks spend their units' moves.
-FINISH_MOVES = "for u in Players[Game.GetActivePlayer()]:Units() do u:FinishMoves() end"
+# Ending a turn waits for every unit to have orders, every city to build something and research to be chosen, so the
+# checks spend their units' moves and choose the first unit each idle city can train and the first research open.
+READY_TO_END = r"""
+local player = Players[Game.GetActivePlayer()]
+for unit in player:Units() do unit:FinishMoves() end
+for city in player:Cities() do
+    if city:GetOrderQueueLength() == 0 then
+        for unit in GameInfo.Units() do
+            if city:CanTrain(unit.ID) then
+                city:PushOrder(OrderTypes.ORDER_TRAIN, unit.ID, -1, false, false, false)
+                break
+            end
+        end
+    end
+end
+if player:GetCurrentResearch() == -1 then
+    for tech in GameInfo.Technologies() do
+        if player:CanResearch(tech.ID) then
+            player:PushResearch(tech.ID, true)
+            break
+        end
+    end
+end
+"""
 
 BLOCKER = r"""
 local t = Players[Game.GetActivePlayer()]:GetEndTurnBlockingType()
@@ -152,6 +183,10 @@ local turn = Game.GetGameTurn()
 if turn == %(turn)d then Game.DoControl(GameInfoTypes.CONTROL_ENDTURN) end
 print(tostring(turn > %(turn)d and Players[Game.GetActivePlayer()]:IsTurnActive()))
 """
+
+
+class GameClosed(CheckError):
+    pass
 
 
 class Game:
@@ -190,7 +225,7 @@ class Game:
             except tuner.TunerError as e:
                 last = e
                 if not game_processes():
-                    raise CheckError("Civilization V closed while waiting for %s" % what)
+                    raise GameClosed("Civilization V closed while waiting for %s" % what)
                 with contextlib.suppress(tuner.TunerError):
                     self.tuner.connect(min(20, max(deadline - time.time(), 1)))
             if time.time() > deadline:
@@ -290,7 +325,7 @@ class Game:
 
     def start_game(self, timeout=300):
         self.say("starting a game")
-        self._through_load_screen(FRONT_END, START_GAME, timeout)
+        self._through_load_screen(FRONT_END, START_GAME % {"refused": REFUSED}, timeout)
 
     def load(self, name, timeout=300):
         self.say("loading %s" % name)
@@ -308,17 +343,32 @@ class Game:
             raise CheckError("the game reported what it waits for as %r" % lines)
         return int(fields[0]), fields[1]
 
+    def close_popups(self):
+        """Close the game's pop-ups, which hold a turn while they are open, as their own Close buttons do."""
+        closed = []
+        for name in sorted({name for _, name in self.tuner.states() if name.endswith("Popup")}):
+            if self.lua(name, CLOSE_POPUP) == ["closed"]:
+                closed.append(name)
+        if closed:
+            self.say("closed " + ", ".join(closed))
+        return closed
+
     def end_turn(self, timeout=180):
         """End the human player's turn; returns the new turn's number."""
         turn = self.turn()
-        self.lua(IN_GAME, FINISH_MOVES)
+        self.lua(IN_GAME, READY_TO_END)
+
+        def next_turn():
+            if self.lua(IN_GAME, END_TURN % {"turn": turn}) == ["true"]:
+                return True
+            self.close_popups()
+            return False
+
         try:
             self.wait("turn %d ready to end" % turn, lambda: self.blocker()[0] == NOT_BLOCKED, 20)
-            self.wait(
-                "turn %d starting" % (turn + 1),
-                lambda: self.lua(IN_GAME, END_TURN % {"turn": turn}) == ["true"],
-                timeout,
-            )
+            self.wait("turn %d starting" % (turn + 1), next_turn, timeout)
+        except GameClosed:
+            raise
         except CheckError as e:
             waiting = "the check could not read what the game is waiting for"
             with contextlib.suppress(ERRORS):
@@ -361,49 +411,28 @@ class Game:
         self.tuner.close()
         self.wait("Civilization V closing", lambda: not game_processes(), timeout)
 
-    def put_menu_back(self, mods):
-        """Why the player's Mods menu could not be put back, or None."""
-        try:
-            self.to_main_menu()
-            if mods is not None:
-                self.set_mods([(m, v) for m, v, _ in mods])
-        except ERRORS as e:
-            return e
-        return None
-
-    def leftovers(self, mods, menu, copies, running):
-        """What the player has left to put back by hand."""
-        left = [menu_not_back(mods, menu)] if menu is not None and mods is not None else []
-        return left + self.files.put_back(copies, game_running=running)
-
-    def clean_up(self, mods, copies):
-        """Put the player's game back as it was; returns what could not be. Stopped part way, as by a second Ctrl+C or
-        an error it did not expect, it still puts the files back and says what is left before stopping."""
-        menu = None
-        settled = False
+    def clean_up(self, copies):
+        """Close the game and put the player's files back; returns what could not be. Stopped part way, as by a second
+        Ctrl+C or an error it did not expect, it still puts the files back and says what is left before stopping."""
         problems = []
         try:
-            menu = self.put_menu_back(mods)
-            settled = True
             self.quit()
         except ERRORS as e:
             problems.append("%s; close Civilization V by hand" % e)
         except BaseException as e:
-            if not settled:
-                menu = e if isinstance(e, Exception) else STOPPED
             # After Ctrl+C the player wants it to stop now, so the game is left for them to close.
             if isinstance(e, Exception):
                 with contextlib.suppress(Exception):
                     self.quit(30)
             running = bool(game_processes())
-            for problem in self.leftovers(mods, menu, copies, running):
+            for problem in self.files.put_back(copies, game_running=running):
                 self.say(problem)
             if running:
                 self.say("close Civilization V by hand")
             raise
-        problems = self.leftovers(mods, menu, copies, bool(game_processes())) + problems
+        problems = self.files.put_back(copies, game_running=bool(game_processes())) + problems
         if not problems:
-            self.say("your Mods menu choices, plugin order and autosaves are as they were")
+            self.say("your %s are as they were" % files.copied(copies))
         return problems
 
     def log(self, name="Bazaar.log"):
@@ -411,26 +440,27 @@ class Game:
 
 
 @contextlib.contextmanager
-def session(game):
-    """Start the game, and close it afterwards with the player's mods, plugin order and autosaves as they were. A
-    problem putting things back is reported without hiding the error that ended the run."""
+def session(game, seed):
+    """Start the game with these seeds, and close it afterwards with the player's Mods menu choices, plugin order,
+    config.ini and autosaves as they were. A problem putting things back is reported without hiding the error that
+    ended the run."""
     copies = game.files.copy_aside()
     try:
+        game.files.use_seed(seed)
         game.start()
     except BaseException:
-        for problem in game.files.put_back(copies, autosaves_touched=False):
+        running = bool(game_processes())
+        for problem in game.files.put_back(copies, autosaves_touched=False, game_running=running):
             game.say(problem)
-        if game.started is not None and game_processes():
+        if game.started is not None and running:
             game.say("close Civilization V by hand")
         raise
-    mods = None
     try:
-        mods = game.mods()
         yield game
     except BaseException:
-        for problem in game.clean_up(mods, copies):
+        for problem in game.clean_up(copies):
             game.say(problem)
         raise
-    problems = game.clean_up(mods, copies)
+    problems = game.clean_up(copies)
     if problems:
         raise CheckError("; ".join(problems))

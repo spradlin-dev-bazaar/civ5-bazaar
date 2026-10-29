@@ -28,6 +28,7 @@ ONE_OF_EACH = {
     "log": {"log": "Bazaar.log", "has": "x"},
     "plugin": {"plugin": "A.dll"},
     "description_of": {"description_of": "id", "version": 1, "is": "x"},
+    "mark": {"mark": "a"},
 }
 
 
@@ -48,8 +49,11 @@ class FakeGame:
         self.steps = []
 
     def wait(self, what, ready, timeout):
-        if not ready():
-            raise CheckError("%s did not happen" % what)
+        """Asks up to timeout times, with no real waiting."""
+        for _ in range(timeout):
+            if ready():
+                return
+        raise CheckError("%s did not happen" % what)
 
     def mods(self, enabled_only=True):
         return [(m, v, name) for m, v, name in self.installed if not enabled_only or (m, v) in self.enabled]
@@ -77,11 +81,19 @@ class FakeGame:
         self.steps.append(("to_main_menu",))
 
     def lua(self, state, code, timeout=30):
+        """Code "--log NAME: LINE" writes LINE to the log NAME, as a plugin would."""
         self.steps.append(("lua", state, code))
+        if code.startswith("--log "):
+            name, line = code[len("--log ") :].split(": ", 1)
+            self.logs.setdefault(name, []).append(line)
         return []
 
     def text(self, state, expression, timeout=30):
-        return self.answers.get(expression, "true")
+        """A list of answers gives one per question, then repeats the last."""
+        answer = self.answers.get(expression, "true")
+        if isinstance(answer, str):
+            return answer
+        return answer.pop(0) if len(answer) > 1 else answer[0]
 
     def plugins(self):
         return self.plugin_rows
@@ -132,9 +144,17 @@ class ReadChecksTest(FolderTest):
     def test_settings_it_does_not_know_or_of_the_wrong_kind_are_named(self):
         self.refused('mods = ["a"]\nplugin_ordre = []\n', "a setting the checks do not know: plugin_ordre")
         self.refused('mods = "a"\n', "mods needs a list")
-        self.refused('mods = ["a"]\ncrash_expected = "yes"\n', "crash_expected needs true or false")
+        self.refused('mods = ["a"]\ncrash_expected = "yes"\n', "crash_expected needs true or false or a list")
+        self.refused('mods = ["a"]\ncrash_expected = [1]\n', "crash_expected needs true, false, or a list of plugin")
+        self.assertEqual(self.read('mods = ["a"]\ncrash_expected = ["Toy Crash"]\n').crash_expected, ["Toy Crash"])
+        self.refused('mods = ["a"]\nseed = -1\n', "seed needs a whole number from 0 to 2147483647")
+        self.refused('mods = ["a"]\nseed = 2147483648\n', "seed needs a whole number from 0 to 2147483647")
+        self.refused('mods = ["a"]\nseed = "random"\n', "seed needs a whole number")
+        self.assertEqual(self.read('mods = ["a"]\nseed = 0\n').seed, 0)
+        self.assertEqual(self.read('mods = ["a"]\n').seed, runner.DEFAULT_SEED)
         self.refused("mods = [1]\n", "mods needs a list of folders and packages")
         self.refused("mods = []\n", "checks.toml: the checks name no mods")
+        self.refused('[[steps]]\nstart_game = "duel"\n', "checks.toml: the checks name no mods")
         self.refused("mods = [\n", "could not be read")
         self.refused(
             'mods = ["a"]\nplugin_order = ["A.dll", {file = "B.dll", use_both_with = "C.dll"}]\n',
@@ -156,6 +176,15 @@ class ReadChecksTest(FolderTest):
             ('[[steps]]\nstart_game = "huge"\n', 'can only start a "duel" game'),
             ("[[steps]]\nend_turns = 0\n", "needs 1 or more"),
             ("[[steps]]\nmain_menu = false\n", "main_menu\\) needs true"),
+            ('[[steps]]\nlog = "Bazaar.log"\nlacks = "a"\ncount = 1\n', "takes count only with has"),
+            ('[[steps]]\nlog = "Bazaar.log"\nhas = "a"\ncount = 0\n', "and needs 1 or more"),
+            (
+                '[[steps]]\nlog = "Bazaar.log"\nhas = "a"\nsince = "load"\n',
+                'step 1 \\(log\\): no step before it marks "load"',
+            ),
+            ('[[steps]]\nlua = "x"\nhas = "("\n', "has pattern Python cannot read"),
+            ('[[steps]]\nlua = "x"\nwithin = 0\n', "within needs 1 or more seconds"),
+            ('[[steps]]\nlog = "Bazaar.log"\nlacks = "x"\nwithin = 5\n', "within waits for a line to appear"),
         ]
         for steps, why in cases:
             with self.subTest(steps=steps):
@@ -186,7 +215,7 @@ class DependenciesTest(FolderTest):
             self.path("build", "Pinned"), "pinned", name="Pinned", dependencies=[("bazaar", "Bazaar", 7)]
         )
         with self.assertRaisesRegex(
-            CheckError, "^Pinned needs Bazaar, version 7, but the checks file lists version 999$"
+            CheckError, "^Pinned needs Bazaar, version 7, but the checks file lists version 900$"
         ):
             runner.dependencies([bazaar, pinned], installed, self.path("MODS"))
 
@@ -194,10 +223,13 @@ class DependenciesTest(FolderTest):
         plugin = write_mod(
             self.path("build", "Plugin"), "plugin", name="My Plugin", dependencies=[("bazaar", "Bazaar")]
         )
-        installed = [("bazaar", 5, "B"), ("bazaar", files.TEST_VERSION, "B"), ("plugin", 1, "P")]
+        installed = [("bazaar", 5, "B"), ("bazaar", files.TEST_VERSION, "B"), ("bazaar", 999, "B"), ("plugin", 1, "P")]
         self.assertEqual(runner.dependencies([plugin], installed, self.path("MODS")), [("plugin", 1), ("bazaar", 5)])
-        with self.assertRaisesRegex(CheckError, "which is not installed \\(only a test build is: list it in mods"):
-            runner.dependencies([plugin], installed[1:], self.path("MODS"))
+        with self.assertRaisesRegex(
+            CheckError,
+            "which is not installed \\(only a version of 900 or above is, which counts as a test build: list",
+        ):
+            runner.dependencies([plugin], installed[1:3], self.path("MODS"))
 
     def test_a_need_nothing_installed_meets_is_named(self):
         plugin = write_mod(self.path("build", "Plugin"), "plugin", name="My Plugin", dependencies=[("vmc", "VMC", 97)])
@@ -219,7 +251,7 @@ class DependenciesTest(FolderTest):
     def test_two_versions_of_one_mod_are_refused(self):
         old = write_mod(self.path("build", "Old"), "bazaar", 6, name="Bazaar")
         new = write_mod(self.path("build", "New"), "bazaar", files.TEST_VERSION, name="Bazaar")
-        with self.assertRaisesRegex(CheckError, "mods lists two versions of Bazaar \\(6 and 999\\): keep one"):
+        with self.assertRaisesRegex(CheckError, "mods lists two versions of Bazaar \\(6 and 900\\): keep one"):
             runner.dependencies([old, new], [], self.path("MODS"))
 
 
@@ -252,7 +284,7 @@ class PlayTest(FolderTest):
         for kind, step in ONE_OF_EACH.items():
             with self.subTest(kind=kind):
                 runner.validate(runner.Checks(["a"], steps=[step]))
-                runner.do_step(FakeGame(self.root, self.installed), step, [])
+                runner.do_step(FakeGame(self.root, self.installed), step, [], runner.Marks([step]))
 
     def test_the_mods_and_what_they_need_are_chosen_then_the_steps_run_in_order(self):
         steps = [{"start_game": "duel"}, {"end_turns": 2}, {"save": "a"}, {"main_menu": True}, {"load": "a"}]
@@ -311,6 +343,68 @@ class PlayTest(FolderTest):
         self.assertEqual(results[1].found, "Bazaar.log has no such line")
         self.assertEqual(results[2].found, "it has: [Plugin] turn 1")
 
+    def test_a_log_check_since_a_mark_sees_only_the_lines_after_it(self):
+        steps = [
+            {"run": "--log Bazaar.log: loaded: 3 turns"},
+            {"mark": "before load"},
+            {"log": "Bazaar.log", "has": "loaded: 3 turns", "since": "before load"},
+            {"run": "--log Bazaar.log: loaded: 3 turns"},
+            {"log": "Bazaar.log", "has": "loaded: 3 turns", "since": "before load"},
+            {"log": "Bazaar.log", "has": "loaded: 3 turns", "count": 2},
+            {"log": "Bazaar.log", "has": "loaded", "count": 1},
+        ]
+        _, results = self.play(steps)
+        self.assertEqual([r.passed for r in results[:4]], [False, True, True, False])
+        self.assertEqual(results[3].found, "it has it 2 times")
+
+    def test_a_lua_check_can_look_for_text_in_its_value(self):
+        steps = [{"lua": "a", "has": "stopped working"}, {"lua": "b", "has": "stopped working"}]
+        answers = {"a": "false\tToy Crash stopped working in a Lua function", "b": "true"}
+        _, results = self.play(steps, answers=answers)
+        self.assertEqual([r.passed for r in results[:2]], [True, False])
+        self.assertEqual(results[1].found, "it gave true")
+
+    def test_a_log_check_within_some_seconds_reads_the_log_until_it_passes(self):
+        g = FakeGame(self.root, self.installed)
+        reads = []
+
+        def log(name="Bazaar.log"):
+            reads.append(name)
+            return ["Plugin Plugin unloaded."] if len(reads) >= 3 else []
+
+        g.log = log
+        step = {"log": "Bazaar.log", "has": "unloaded", "within": 30}
+        self.assertTrue(runner.log_step(g, step, runner.Marks([step])).passed)
+        reads.clear()
+        late = runner.log_step(g, dict(step, within=2), runner.Marks([step]))
+        self.assertEqual((late.passed, late.found), (False, "Bazaar.log has no such line"))
+
+    def test_a_game_that_closes_during_a_wait_ends_the_run(self):
+        g = FakeGame(self.root, self.installed)
+        g.wait = mock.Mock(side_effect=game.GameClosed("Civilization V closed while waiting"))
+        for step in ({"lua": "shown", "within": 30}, {"log": "Bazaar.log", "has": "x", "within": 30}):
+            with self.subTest(step=step), self.assertRaises(game.GameClosed):
+                runner.do_step(g, step, [], runner.Marks([step]))
+
+    def test_a_game_that_never_answers_within_the_time_names_the_wait(self):
+        g = FakeGame(self.root, self.installed)
+        g.wait = mock.Mock(side_effect=CheckError("Bazaar's pop-up did not happen within 30 seconds"))
+        result = runner.lua_check(g, {"lua": "shown", "within": 30, "what": "Bazaar's pop-up"})
+        self.assertEqual(
+            result, runner.Result("Bazaar's pop-up", False, "Bazaar's pop-up did not happen within 30 seconds")
+        )
+
+    def test_a_lua_check_within_some_seconds_asks_until_it_passes(self):
+        steps = [
+            {"lua": "shown", "within": 30},
+            {"lua": "late", "within": 2},
+            {"lua": "now"},
+        ]
+        answers = {"shown": ["false", "false", "true"], "late": ["false", "false", "true"], "now": ["false", "true"]}
+        _, results = self.play(steps, answers=answers)
+        self.assertEqual([r.passed for r in results[:3]], [True, False, False])
+        self.assertEqual(results[1].found, "it gave false")
+
     def test_plugin_checks_compare_the_status_and_the_problems(self):
         rows = [("Plugin.dll", "Loaded", ""), ("Other.dll", "Not loaded", "It needs API 0.7.")]
         steps = [
@@ -342,6 +436,15 @@ class PlayTest(FolderTest):
         _, results = self.play(logs=logs, crash_expected=True, lua_errors_expected=True)
         self.assertEqual(results, [])
 
+    def test_only_the_plugins_a_file_expects_to_crash_may(self):
+        crashes = ["Plugin Toy Crash: Faulted (code 0xC0000005) in CvPlayer::doTurn."]
+        logs = {"Bazaar.log": crashes + ["Plugin Toy Gold: It stopped working while loading (code 0xC0000005)."]}
+        _, results = self.play(logs={"Bazaar.log": crashes}, crash_expected=["Toy Crash"])
+        self.assertEqual((results[0].what, results[0].passed), ("no plugin other than Toy Crash stopped working", True))
+        _, results = self.play(logs=logs, crash_expected=["Toy Crash"])
+        self.assertFalse(results[0].passed)
+        self.assertIn("Toy Gold", results[0].found)
+
     def test_a_plugin_s_own_words_are_not_a_crash(self):
         _, results = self.play(logs={"Bazaar.log": ["[Timer Plugin] the watchdog stopped working, so it restarted"]})
         self.assertTrue(results[0].passed)
@@ -361,8 +464,8 @@ class RunChecksTest(FolderTest):
             return ["expected"]
 
         @contextlib.contextmanager
-        def session(game):
-            done.append("session")
+        def session(game, seed):
+            done.append("session with seed %d" % seed)
             yield game
 
         g.files.install.side_effect = install
@@ -370,12 +473,20 @@ class RunChecksTest(FolderTest):
             try:
                 runner.run_checks(runner.Checks(["a"]), g, [])
             finally:
-                self.done, self.staging = done, staging[0]
+                self.done, self.staging = done, staging[0] if staging else None
 
     def test_the_mods_go_in_only_once_the_game_is_closed_and_before_it_starts(self):
         self.run_checks(lambda checks, g, expected, results: None)
-        self.assertEqual(self.done, ["preflight", "install", "session"])
+        self.assertEqual(self.done, ["preflight", "install", "session with seed %d" % runner.DEFAULT_SEED])
         self.assertFalse(os.path.exists(self.staging))
+
+    def test_copies_an_earlier_check_left_stop_the_run_before_any_mod_is_installed(self):
+        with mock.patch.object(files, "leftover_copies", return_value=["Bazaar check copies abc"]):
+            with self.assertRaisesRegex(
+                CheckError, "copies an earlier check made are still in Bazaar check copies abc"
+            ):
+                self.run_checks(lambda checks, g, expected, results: None)
+        self.assertEqual(self.done, ["preflight"])
 
     def test_the_staging_folder_goes_even_when_a_check_fails(self):
         with self.assertRaises(CheckError):
@@ -430,11 +541,18 @@ class RunTest(unittest.TestCase):
         for bad, why in (
             (runner.Checks(["a"], steps=[{"log": "Bazaar.log", "hass": "x"}]), "step 1 (log) does not take hass"),
             (runner.Checks([]), "the checks name no mods"),
+            (runner.Checks("a"), "mods needs a list"),
+            (runner.Checks(["a"], seed="1"), "seed needs a whole number"),
+            (runner.Checks(["a"], lua_errors_expected=None), "lua_errors_expected needs true or false"),
         ):
             with self.subTest(why=why):
                 failed, _ = self.run_checks(mock.Mock(), checks=bad)
                 self.assertEqual(failed, "could not start: " + why)
                 self.assertFalse(self.ran)
+
+    def test_every_setting_is_one_the_checks_have(self):
+        self.assertEqual(set(runner.SETTINGS), set(runner.Checks._fields))
+        runner.validate(runner.Checks(("a",), steps=({"start_game": "duel"},), crash_expected=("Toy Crash",)))
 
     def test_main_names_a_file_it_cannot_use_without_starting_the_game(self):
         printed = io.StringIO()

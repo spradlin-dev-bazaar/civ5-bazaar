@@ -9,7 +9,7 @@
     python tools/release.py workshop               once the GitHub release is published: Bazaar's mod to the Workshop
 
 --major starts a new major version, such as 1.0.0. build --trial runs on any branch, leaves the release marks out of the
-docs, gives Bazaar's mod the test version 999, and writes to dist/trial, which publish never uses; check --trial checks
+docs, gives Bazaar's mod the test version 900, and writes to dist/trial, which publish never uses; check --trial checks
 those files. publish needs the files to have passed check since they were built, unless --no-check, for a release that
 only changes the SDK or the docs.
 """

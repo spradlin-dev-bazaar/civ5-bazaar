@@ -8,7 +8,9 @@ import unittest
 from unittest import mock
 from xml.etree import ElementTree
 
-from fakes import PLAYER_AUTOSAVES, files, mods, read_files, rotate_autosaves, write_files, write_mod
+from fakes import PLAYER_AUTOSAVES, files, mods, read_files, rotate_autosaves, use_own_temp, write_files, write_mod
+
+import version
 
 
 class ModInfoTest(unittest.TestCase):
@@ -26,11 +28,13 @@ class ModInfoTest(unittest.TestCase):
         )
         info = files.read_modinfo(folder)
         self.assertEqual(info.name, "A Mod")
-        self.assertEqual(info.dependencies, [("bazaar", "Bazaar", 0, 999), ("vmc", "VMC", 97, 97)])
+        self.assertEqual(info.dependencies, [("bazaar", "Bazaar", 0, files.ANY_VERSION), ("vmc", "VMC", 97, 97)])
 
     def test_test_builds_are_above_every_release_and_inside_any_version(self):
         any_version = ElementTree.fromstring(mods.mod_line("bazaar", "Bazaar"))
-        self.assertEqual(files.TEST_VERSION, int(any_version.get("maxversion")))
+        self.assertLess(version.read().mod, files.TEST_VERSION)
+        self.assertEqual(files.ANY_VERSION, int(any_version.get("maxversion")))
+        self.assertLess(files.TEST_VERSION, files.ANY_VERSION)
         self.assertEqual(files.TAR, mods.TAR)
 
     def test_no_or_several_descriptions_give_none(self):
@@ -101,13 +105,13 @@ class InstallTest(PlayerFolderTest):
 
     @unittest.skipUnless(os.path.isfile(files.TAR), "needs Windows' tar.exe")
     def test_a_package_is_unpacked_and_installed_under_the_name_the_game_gives_it(self):
-        built = write_mod(self.path("build"), "bazaar", 999, "Bazaar", [("Bazaar.dll", "new")])
+        built = write_mod(self.path("build"), "bazaar", files.TEST_VERSION, "Bazaar", [("Bazaar.dll", "new")])
         package = self.path("Bazaar-0.6.0.civ5mod")
         self.assertIsNone(mods.pack(built, package))
         (expected,) = self.install(package)
-        self.assertEqual(files.mod_key(expected), ("bazaar", 999))
+        self.assertEqual(files.mod_key(expected), ("bazaar", files.TEST_VERSION))
         self.assertEqual(self.files.installed_problems([expected]), [])
-        self.assertTrue(os.path.isfile(self.path("MODS", "Bazaar (v 999)", "Bazaar.dll")))
+        self.assertTrue(os.path.isfile(self.path("MODS", "Bazaar (v %d)" % files.TEST_VERSION, "Bazaar.dll")))
 
     @unittest.skipUnless(os.path.isfile(files.TAR), "needs Windows' tar.exe")
     def test_a_package_that_will_not_unpack_is_named(self):
@@ -184,6 +188,10 @@ class InstalledProblemsTest(PlayerFolderTest):
 
 
 class CopiesTest(PlayerFolderTest):
+    def setUp(self):
+        super().setUp()
+        self.temp = use_own_temp(self)
+
     def write(self, name, content):
         write_files(self.user, {name: content})
 
@@ -212,12 +220,33 @@ class CopiesTest(PlayerFolderTest):
             self.said, ["copies of your plugin order and autosaves are kept in %s until the check ends" % copies.folder]
         )
 
+    def test_config_ini_gets_the_seeds_and_comes_back_as_it_was(self):
+        config = b"[CONFIG]\r\nSyncRandSeed = 0\r\n; maps\r\nMapRandSeed=0\r\nEnableTuner = 1\r\n"
+        self.write(files.CONFIG, config)
+        self.write(files.ORDER_FILE, b"")
+        write_files(self.path(files.AUTOSAVES), PLAYER_AUTOSAVES)
+        copies = self.copy_aside()
+        self.assertIn("copies of your plugin order, config.ini and autosaves are kept in", self.said[0])
+        self.files.use_seed(42)
+        seeded = b"[CONFIG]\r\nSyncRandSeed = 42\r\n; maps\r\nMapRandSeed = 42\r\nEnableTuner = 1\r\n"
+        self.assertEqual(self.read(files.CONFIG), seeded)
+        self.assertEqual(self.files.put_back(copies), [])
+        self.assertEqual(self.read(files.CONFIG), config)
+
+    def test_a_config_ini_without_a_seed_line_is_named(self):
+        self.write(files.CONFIG, b"[CONFIG]\r\nSyncRandSeed = 0\r\n")
+        with self.assertRaisesRegex(files.CheckError, "config.ini has no MapRandSeed line"):
+            self.files.use_seed(1)
+
     def test_the_plugin_order_is_copied_to_disk_before_the_check_changes_it(self):
         self.write(files.ORDER_FILE, b"load\tMCPServer.dll\t\t\r\n")
         copies = self.copy_aside()
         self.files.use_plugin_order(["TemplatePlugin.dll"])
         self.assertEqual(self.read(files.ORDER_FILE), b"load\tTemplatePlugin.dll\t\t\r\n")
-        self.assertEqual(read_files(copies.folder), {"Bazaar plugin order.txt": b"load\tMCPServer.dll\t\t\r\n"})
+        self.assertEqual(
+            read_files(copies.folder),
+            {"Bazaar plugin order.txt": b"load\tMCPServer.dll\t\t\r\n", files.WHERE_THEY_GO: mock.ANY},
+        )
 
     def test_with_no_autosaves_before_the_checks_own_are_removed(self):
         copies = self.copy_aside()
@@ -238,7 +267,7 @@ class CopiesTest(PlayerFolderTest):
         rotate_autosaves(self.user)
         running, kept = self.files.put_back(copies, game_running=True)
         self.assertIn("still running", running)
-        self.assertEqual(kept, "the copies stay in %s" % copies.folder)
+        self.assertTrue(kept.startswith("the copies stay in %s, " % copies.folder))
         self.assertEqual(read_files(copies.autosaves), PLAYER_AUTOSAVES)
 
     def test_with_nothing_copied_no_copies_are_named_or_left(self):
@@ -257,7 +286,7 @@ class CopiesTest(PlayerFolderTest):
         os.makedirs(self.path(files.ORDER_FILE))
         problem, kept = self.files.put_back(copies)
         self.assertIn("your plugin order could not be put back", problem)
-        self.assertEqual(kept, "the copies stay in %s" % copies.folder)
+        self.assertTrue(kept.startswith("the copies stay in %s, " % copies.folder))
         self.assertTrue(os.path.isfile(os.path.join(copies.folder, "Bazaar plugin order.txt")))
 
     def test_autosaves_that_cannot_be_put_back_keep_their_copy_and_name_it(self):
@@ -292,6 +321,112 @@ class CopiesTest(PlayerFolderTest):
         self.files.use_plugin_order([])
         self.assertEqual(self.files.put_back(copies), [])
         self.assertEqual(self.read(files.ORDER_FILE), b"skip\tTemplatePlugin.dll\t\t\r\n")
+
+    def test_copies_an_earlier_check_left_behind_stop_the_next_one(self):
+        stopped_while_copying = os.path.join(self.temp, files.COPIES_PREFIX + "copying")
+        write_files(stopped_while_copying, {"config.ini": b"the player's"})
+        self.assertEqual(self.files.put_back(self.copy_aside()), [])
+        left = os.path.join(self.temp, files.COPIES_PREFIX + "abc")
+        write_files(left, {"config.ini": b"the player's", files.WHERE_THEY_GO: b"copy config.ini"})
+        with self.assertRaisesRegex(files.CheckError, "copies an earlier check made are still in .+abc: if that check"):
+            self.files.copy_aside()
+        self.assertEqual(
+            sorted(os.listdir(self.temp)), [os.path.basename(left), os.path.basename(stopped_while_copying)]
+        )
+
+    def test_a_copies_folder_that_cannot_be_deleted_is_named(self):
+        copies = self.copy_aside()
+        with mock.patch.object(files.shutil, "rmtree"):
+            (problem,) = self.files.put_back(copies, autosaves_touched=False)
+        self.assertEqual(
+            problem, "your files are back, but %s could not be deleted: delete it yourself" % copies.folder
+        )
+
+    def note(self, copies):
+        with open(os.path.join(copies.folder, files.WHERE_THEY_GO), encoding="utf-8", newline="") as f:
+            return f.read().split("\r\n")
+
+    def test_the_copies_folder_says_where_each_copy_goes(self):
+        self.write(files.MODS_DATABASE, b"the player's mods")
+        self.write(files.ORDER_FILE, b"")
+        self.write(files.CONFIG, b"")
+        write_files(self.path(files.AUTOSAVES), PLAYER_AUTOSAVES)
+        lines = self.note(self.copy_aside())
+        self.assertEqual(
+            lines[2:],
+            [
+                "- copy Civ5ModsDatabase.db, your Mods menu choices, into %s" % self.path("cache"),
+                "- copy Bazaar plugin order.txt, your plugin order, into %s" % self.path("ModUserData"),
+                "- copy config.ini, your game settings, into %s" % self.user,
+                "- put the auto folder, your autosaves, in place of %s" % self.path(files.AUTOSAVES),
+                "Then delete this folder.",
+                "",
+            ],
+        )
+
+    def test_the_note_says_to_delete_what_the_player_did_not_have(self):
+        lines = self.note(self.copy_aside())
+        self.assertIn(
+            "- delete %s if it is there: you had no Bazaar plugin order.txt before the check"
+            % (self.path(files.ORDER_FILE)),
+            lines,
+        )
+        self.assertIn(
+            "- delete the folder %s if it is there: you had no autosaves before" % self.path(files.AUTOSAVES), lines
+        )
+
+    def test_what_the_game_holds_waits_for_it_to_close_but_the_plugin_order_goes_back(self):
+        self.write(files.MODS_DATABASE, b"the player's mods")
+        self.write(files.CONFIG, b"SyncRandSeed = 0\r\nMapRandSeed = 0\r\n")
+        self.write(files.ORDER_FILE, b"skip\tA.dll\t\t\r\n")
+        copies = self.copy_aside()
+        self.write(files.MODS_DATABASE, b"the check's mods")
+        self.files.use_seed(1)
+        self.files.use_plugin_order([])
+        running, kept = self.files.put_back(copies, autosaves_touched=False, game_running=True)
+        self.assertEqual(
+            running, "Civilization V is still running, so your Mods menu choices and config.ini were not put back"
+        )
+        self.assertIn(copies.folder, kept)
+        self.assertEqual(self.read(files.ORDER_FILE), b"skip\tA.dll\t\t\r\n")
+        self.assertEqual(self.read(files.MODS_DATABASE), b"the check's mods")
+        self.assertEqual(self.read(files.CONFIG), b"SyncRandSeed = 1\r\nMapRandSeed = 1\r\n")
+
+    def test_the_mods_database_comes_back_without_the_game_s_journal(self):
+        self.write(files.MODS_DATABASE, b"the player's mods")
+        copies = self.copy_aside()
+        self.write(files.MODS_DATABASE, b"the check's mods")
+        self.write(files.MODS_DATABASE + "-journal", b"half a write")
+        self.write(files.MODS_DATABASE + "-wal", b"half a write")
+        self.assertEqual(self.files.put_back(copies, autosaves_touched=False), [])
+        self.assertEqual(os.listdir(self.path("cache")), ["Civ5ModsDatabase.db"])
+        self.assertEqual(self.read(files.MODS_DATABASE), b"the player's mods")
+
+    def test_a_mods_database_the_game_made_is_removed(self):
+        copies = self.copy_aside()
+        self.write(files.MODS_DATABASE, b"the check's mods")
+        self.assertEqual(self.files.put_back(copies, autosaves_touched=False), [])
+        self.assertFalse(os.path.exists(self.path(files.MODS_DATABASE)))
+
+    def test_a_mods_database_that_cannot_be_put_back_keeps_its_copy(self):
+        self.write(files.MODS_DATABASE, b"the player's mods")
+        copies = self.copy_aside()
+        with mock.patch.object(files.os, "replace", side_effect=PermissionError("in use")):
+            problem, kept = self.files.put_back(copies, autosaves_touched=False)
+        self.assertEqual(problem, "your Mods menu choices could not be put back (in use)")
+        self.assertIn(copies.folder, kept)
+        self.assertEqual(read_files(copies.folder)["Civ5ModsDatabase.db"], b"the player's mods")
+        self.assertEqual(os.listdir(self.path("cache")), ["Civ5ModsDatabase.db"])
+
+    def test_a_journal_that_cannot_be_removed_leaves_the_game_s_database_with_it(self):
+        self.write(files.MODS_DATABASE, b"the player's mods")
+        copies = self.copy_aside()
+        self.write(files.MODS_DATABASE, b"the check's mods")
+        self.write(files.MODS_DATABASE + "-journal", b"half a write")
+        with mock.patch.object(files.os, "remove", side_effect=PermissionError("in use")):
+            problem, _ = self.files.put_back(copies, autosaves_touched=False)
+        self.assertIn("your Mods menu choices could not be put back", problem)
+        self.assertEqual(self.read(files.MODS_DATABASE), b"the check's mods")
 
     def test_only_a_log_written_since_then_counts(self):
         self.write(os.path.join("Logs", "Bazaar.log"), b"Plugin Template Plugin 1 loaded\r\n")

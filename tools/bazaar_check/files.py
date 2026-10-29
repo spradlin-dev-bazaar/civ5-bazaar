@@ -2,10 +2,12 @@
 closed."""
 
 import collections
+import contextlib
 import ctypes
 import filecmp
 import glob
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -16,16 +18,23 @@ from . import CheckError
 ORDER_FILE = os.path.join("ModUserData", "Bazaar plugin order.txt")
 SAVES = os.path.join("ModdedSaves", "single")
 AUTOSAVES = os.path.join(SAVES, "auto")
+CONFIG = "config.ini"
+# Where the game keeps which mods are switched on, in its Mods table.
+MODS_DATABASE = os.path.join("cache", "Civ5ModsDatabase.db")
+SEED_KEYS = ("SyncRandSeed", "MapRandSeed")
 CSIDL_PERSONAL = 5
 TAR = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar.exe")
-# Bazaar's test builds: above any release's mod version, and still inside the 0 to 999 a dependency on any version
-# allows.
-TEST_VERSION = 999
+# The top of the range a mod's dependency on any version of another allows.
+ANY_VERSION = 999
+# Bazaar's test builds, and any mod at this version or above: above every release, and below ANY_VERSION.
+TEST_VERSION = 900
+COPIES_PREFIX = "Bazaar check copies "
+WHERE_THEY_GO = "where these go.txt"
 ORDER_KEYS = {"file", "skip", "use_both_with"}
 
 ModInfo = collections.namedtuple("ModInfo", "id version name dependencies")
 Dependency = collections.namedtuple("Dependency", "id title low high")
-Copies = collections.namedtuple("Copies", "folder order autosaves")
+Copies = collections.namedtuple("Copies", "folder mods_database order config autosaves")
 
 
 def user_folder():
@@ -45,7 +54,10 @@ def read_modinfo(folder):
         root = ElementTree.parse(modinfos[0]).getroot()
         dependencies = [
             Dependency(
-                m.get("id"), m.get("title") or m.get("id"), int(m.get("minversion", 0)), int(m.get("maxversion", 999))
+                m.get("id"),
+                m.get("title") or m.get("id"),
+                int(m.get("minversion", 0)),
+                int(m.get("maxversion", ANY_VERSION)),
             )
             for m in root.findall("Dependencies/Mod")
         ]
@@ -115,11 +127,35 @@ def order_line(entry):
     return "\t".join(fields) + "\r\n"
 
 
+def and_list(names):
+    return ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 1 else "".join(names)
+
+
 def copied(copies):
-    what = [
-        name for name, kept in (("plugin order", copies.order), ("autosaves", copies.autosaves)) if kept is not None
-    ]
-    return " and ".join(what)
+    kept = (
+        ("Mods menu choices", copies.mods_database),
+        ("plugin order", copies.order),
+        ("config.ini", copies.config),
+        ("autosaves", copies.autosaves),
+    )
+    return and_list([name for name, copy in kept if copy is not None])
+
+
+def leftover_copies():
+    """Copies folders an earlier check did not put back and delete. A folder without its note was left by a check
+    stopped while copying, before it changed anything."""
+    pattern = os.path.join(glob.escape(tempfile.gettempdir()), glob.escape(COPIES_PREFIX) + "*")
+    return [folder for folder in sorted(glob.glob(pattern)) if os.path.isfile(os.path.join(folder, WHERE_THEY_GO))]
+
+
+def refuse_leftover_copies():
+    """Copying the files an earlier check's copies replaced would keep that check's changes for good."""
+    leftover = leftover_copies()
+    if leftover:
+        raise CheckError(
+            "copies an earlier check made are still in %s: if that check did not put your files back, put them back as"
+            ' "%s" there says; then delete the folder' % (leftover[0], WHERE_THEY_GO)
+        )
 
 
 class PlayerFiles:
@@ -184,56 +220,142 @@ class PlayerFiles:
                 )
         return problems
 
-    def copy_aside(self):
-        """Copies, on disk so they survive the script being killed, of what a check changes outside MODS: the plugin
-        order, and the autosaves, which the game rotates whenever a new game starts, whatever its settings."""
-        folder = tempfile.mkdtemp(prefix="Bazaar check ")
+    def copy_file(self, rel, folder):
+        """The file's bytes, after copying it into folder; None when there is no such file."""
+        if not os.path.isfile(self.path(rel)):
+            return None
+        shutil.copyfile(self.path(rel), os.path.join(folder, os.path.basename(rel)))
+        with open(self.path(rel), "rb") as f:
+            return f.read()
+
+    def put_file(self, rel, content):
+        """The file as it was: None removes it. Written beside it first, so a failed write leaves the file whole."""
+        path = self.path(rel)
+        if content is None:
+            if os.path.exists(path):
+                os.remove(path)
+            return
         try:
-            order = None
-            if os.path.isfile(self.path(ORDER_FILE)):
-                shutil.copyfile(self.path(ORDER_FILE), os.path.join(folder, os.path.basename(ORDER_FILE)))
-                with open(self.path(ORDER_FILE), "rb") as f:
-                    order = f.read()
+            with open(path + ".bazaar-check", "wb") as f:
+                f.write(content)
+            os.replace(path + ".bazaar-check", path)
+        except OSError:
+            with contextlib.suppress(OSError):
+                os.remove(path + ".bazaar-check")
+            raise
+
+    def put_back_file(self, what, rel, content):
+        """Why the file could not be put back, or None."""
+        try:
+            if rel == MODS_DATABASE:
+                # A journal left by a game that died mid-write would be replayed into the restored database.
+                for journal in (rel + "-journal", rel + "-wal", rel + "-shm"):
+                    self.put_file(journal, None)
+            self.put_file(rel, content)
+        except OSError as e:
+            return "your %s could not be put back (%s)" % (what, e)
+        return None
+
+    def put_back_autosaves(self, copy):
+        autosaves = self.path(AUTOSAVES)
+        try:
+            if os.path.isdir(autosaves):
+                shutil.rmtree(autosaves)
+            if copy:
+                shutil.copytree(copy, autosaves)
+        except OSError as e:
+            return "your autosaves could not be put back (%s)" % e
+        return None
+
+    def where_they_go(self, copies):
+        lines = [
+            "These are copies a Bazaar check made before it changed your files. If it could not put them back, close",
+            "Civilization V, then:",
+        ]
+        for what, rel, copy in (
+            ("Mods menu choices", MODS_DATABASE, copies.mods_database),
+            ("plugin order", ORDER_FILE, copies.order),
+            ("game settings", CONFIG, copies.config),
+        ):
+            name = os.path.basename(rel)
+            if copy is None:
+                lines.append("- delete %s if it is there: you had no %s before the check" % (self.path(rel), name))
+            else:
+                lines.append("- copy %s, your %s, into %s" % (name, what, os.path.dirname(self.path(rel))))
+        if copies.autosaves is None:
+            lines.append("- delete the folder %s if it is there: you had no autosaves before" % self.path(AUTOSAVES))
+        else:
+            lines.append("- put the auto folder, your autosaves, in place of %s" % self.path(AUTOSAVES))
+        lines.append("Then delete this folder.")
+        return "\r\n".join(lines) + "\r\n"
+
+    def copy_aside(self):
+        """Copies, on disk so they survive the script being killed, of what a check changes outside MODS: the Mods
+        menu's choices, the plugin order, config.ini, and the autosaves, which the game rotates whenever a new game
+        starts, whatever its settings."""
+        refuse_leftover_copies()
+        folder = tempfile.mkdtemp(prefix=COPIES_PREFIX)
+        try:
             autosaves = None
             if os.path.isdir(self.path(AUTOSAVES)):
                 autosaves = os.path.join(folder, "auto")
                 shutil.copytree(self.path(AUTOSAVES), autosaves)
+            copies = Copies(
+                folder=folder,
+                mods_database=self.copy_file(MODS_DATABASE, folder),
+                order=self.copy_file(ORDER_FILE, folder),
+                config=self.copy_file(CONFIG, folder),
+                autosaves=autosaves,
+            )
+            with open(os.path.join(folder, WHERE_THEY_GO), "w", encoding="utf-8", newline="") as f:
+                f.write(self.where_they_go(copies))
         except BaseException:
             shutil.rmtree(folder, ignore_errors=True)
             raise
-        copies = Copies(folder, order, autosaves)
         if copied(copies):
             self.say("copies of your %s are kept in %s until the check ends" % (copied(copies), folder))
         return copies
 
     def put_back(self, copies, autosaves_touched=True, game_running=False):
-        """Returns what could not be put back. The copies are deleted unless something was not."""
-        problems = []
-        order = self.path(ORDER_FILE)
-        try:
-            if copies.order is not None:
-                with open(order, "wb") as f:
-                    f.write(copies.order)
-            elif os.path.exists(order):
-                os.remove(order)
-        except OSError as e:
-            problems.append("your plugin order could not be put back (%s)" % e)
-        if autosaves_touched and game_running:
-            left = "your autosaves were not put back" if copies.autosaves else "the autosaves its game made stay"
-            problems.append("Civilization V is still running, so %s" % left)
-        elif autosaves_touched:
-            autosaves = self.path(AUTOSAVES)
-            try:
-                if os.path.isdir(autosaves):
-                    shutil.rmtree(autosaves)
-                if copies.autosaves:
-                    shutil.copytree(copies.autosaves, autosaves)
-            except OSError as e:
-                problems.append("your autosaves could not be put back (%s)" % e)
+        """Returns what could not be put back; the copies are deleted unless something was not. The game holds its
+        mods database, config.ini and autosaves while it runs, so those go back only once it has closed."""
+        problems = [self.put_back_file("plugin order", ORDER_FILE, copies.order)]
+        held = [("Mods menu choices", MODS_DATABASE, copies.mods_database), ("config.ini", CONFIG, copies.config)]
+        if game_running:
+            left = [what for what, _, content in held if content is not None]
+            left += ["autosaves"] if autosaves_touched and copies.autosaves else []
+            if left:
+                problems.append("Civilization V is still running, so your %s were not put back" % and_list(left))
+            if autosaves_touched and not copies.autosaves:
+                problems.append("Civilization V is still running, so the autosaves its game made stay")
+        else:
+            problems += [self.put_back_file(*entry) for entry in held]
+            if autosaves_touched:
+                problems.append(self.put_back_autosaves(copies.autosaves))
+        problems = [problem for problem in problems if problem]
         if problems and copied(copies):
-            return problems + ["the copies stay in %s" % copies.folder]
+            return problems + [
+                'the copies stay in %s, and "%s" there says where each goes' % (copies.folder, WHERE_THEY_GO)
+            ]
         shutil.rmtree(copies.folder, ignore_errors=True)
+        if os.path.exists(copies.folder):
+            back = "" if problems else "your files are back, but "
+            problems.append("%s%s could not be deleted: delete it yourself" % (back, copies.folder))
         return problems
+
+    def use_seed(self, seed):
+        """The game reads both its seeds from config.ini as it starts; 0 has it take them from the clock."""
+        path = self.path(CONFIG)
+        with open(path, "rb") as f:
+            text = f.read().decode("latin-1")
+        for key in SEED_KEYS:
+            text, found = re.subn(r"(?im)^[ \t]*%s[ \t]*=[^\r\n]*" % key, "%s = %d" % (key, seed), text)
+            if not found:
+                raise CheckError(
+                    "%s has no %s line: start Civilization V once, so it writes the file in full" % (path, key)
+                )
+        with open(path, "wb") as f:
+            f.write(text.encode("latin-1"))
 
     def use_plugin_order(self, entries):
         """Bazaar loads every listed plugin, in its own order, when the order file is empty."""

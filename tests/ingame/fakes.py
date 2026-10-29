@@ -1,8 +1,11 @@
-"""What the in-game check tests share: a clock that never waits, mod folders, and the player's autosaves."""
+"""What the in-game check tests share: a clock that never waits, mod folders, the player's autosaves, and a temp
+folder of each test's own."""
 
 import os
 import shutil
 import sys
+import tempfile
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
@@ -30,6 +33,16 @@ class FakeClock:
 
     def sleep(self, seconds):
         self.now += seconds
+
+
+def use_own_temp(test):
+    """A check refuses to start while an earlier one's copies are in the temp folder, so each test gets its own."""
+    folder = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, folder, True)
+    patcher = mock.patch.object(tempfile, "tempdir", folder)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    return folder
 
 
 def write_mod(folder, mod_id, version=1, name="A Mod", content=(), dependencies=()):

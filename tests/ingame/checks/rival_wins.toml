@@ -1,0 +1,28 @@
+# Above Toy Gold, Toy Rival's replacement of the score wins.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Gold Plugin (v 1)",
+    "../out/MODS/Toy Rival Plugin (v 1)",
+]
+plugin_order = ["ToyRival.dll", "ToyGold.dll"]
+
+[[steps]]
+plugin = "ToyRival.dll"
+status = "Loaded"
+
+[[steps]]
+plugin = "ToyGold.dll"
+status = "Not loaded"
+problems = "Toy Rival, higher in the list, already replaces CvPlayer::GetScore"
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+end_turns = 1
+
+[[steps]]
+lua = "Players[Game.GetActivePlayer()]:GetScore()"
+has = "^1$"
+what = "Toy Rival's score replaces the human player's"

@@ -1,0 +1,113 @@
+# The test plugins that load, and the ones Bazaar turns away, in one game.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Gold Plugin (v 1)",
+    "../out/MODS/Toy Rival Plugin (v 1)",
+    "../out/MODS/Toy Newer Plugin (v 1)",
+    "../out/MODS/Toy Hand Plugin (v 1)",
+    "../out/MODS/Toy Hand Replace Plugin (v 1)",
+    "../out/MODS/Toy VMC Check (v 1)",
+]
+plugin_order = ["ToyGold.dll", "ToyRival.dll", "ToyHand.dll", "ToyHandReplace.dll", "ToyNewer.dll"]
+
+[[steps]]
+plugin = "ToyGold.dll"
+status = "Loaded"
+
+[[steps]]
+plugin = "ToyRival.dll"
+status = "Not loaded"
+problems = "Toy Gold, higher in the list, already replaces CvPlayer::GetScore"
+what = "Toy Rival, below Toy Gold, is turned away"
+
+[[steps]]
+plugin = "ToyNewer.dll"
+status = "Not loaded"
+problems = "Built for a newer Bazaar"
+
+[[steps]]
+plugin = "ToyHand.dll"
+status = "Loaded"
+
+[[steps]]
+plugin = "ToyHandReplace.dll"
+status = "Not loaded"
+problems = "held back.+Use both anyway"
+what = "Toy Hand Replace, below Toy Hand, is held back"
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+end_turns = 2
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Gold\] turn starting for .+ with \d+ gold'
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Gold\] turn finished for .+ with \d+ gold'
+
+[[steps]]
+lua = "Players[Game.GetActivePlayer()]:GetScore()"
+has = "^4242$"
+what = "Toy Gold's score replaces the human player's"
+
+[[steps]]
+log = "Bazaar.log"
+has = "^Plugin Toy Gold: its replacement of .+ returned without running the original"
+count = 1
+what = "Bazaar notes once that Toy Gold's replacement skipped the original"
+
+[[steps]]
+log = "Bazaar.log"
+lacks = "TurnsPlayed says"
+what = "without Toy Saves, Toy Gold finds no TurnsPlayed"
+
+[[steps]]
+log = "Bazaar.log"
+lacks = "this ran, so Bazaar did not refuse it"
+what = "Toy Newer never ran"
+
+[[steps]]
+log = "Bazaar.log"
+lacks = '^\[Toy Hand\] registered .+: refused'
+what = "Toy Hand's hooks were all accepted"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Hand\] notification for player 0: '
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Hand\] popup \d+ for player \d+: '
+
+[[steps]]
+log = "Lua.log"
+has = "EVENTS_PLAYER_TURN on: true"
+
+[[steps]]
+log = "Lua.log"
+has = "PlayerDoneTurn for player 0"
+
+[[steps]]
+log = "Lua.log"
+has = "Game.ToyHandPing: Toy Hand added this to the Game table"
+
+[[steps]]
+log = "Lua.log"
+has = "Game.ToyHandRaise: .*Toy Hand raised this Lua error on purpose"
+
+[[steps]]
+main_menu = true
+
+[[steps]]
+log = "Bazaar.log"
+has = '^Plugin Toy Gold unloaded\.$'
+within = 30
+
+[[steps]]
+log = "Bazaar.log"
+lacks = "Plugins were not unloaded because one of them was still running"

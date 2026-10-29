@@ -1,0 +1,31 @@
+# Toy Hand Replace replaces a function whose hook Toy Hand uses; with Use both anyway, both load and both work.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Hand Plugin (v 1)",
+    "../out/MODS/Toy Hand Replace Plugin (v 1)",
+]
+plugin_order = ["ToyHand.dll", { file = "ToyHandReplace.dll", use_both_with = ["ToyHand.dll"] }]
+
+[[steps]]
+plugin = "ToyHand.dll"
+status = "Loaded"
+
+[[steps]]
+plugin = "ToyHandReplace.dll"
+status = "Loaded"
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+end_turns = 3
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Hand Replace\] replaced CvNotifications::Add and ran the original'
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Hand\] notification for player 0: '
+what = "Toy Hand still hears notifications"
