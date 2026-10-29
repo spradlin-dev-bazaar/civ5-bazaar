@@ -3,11 +3,14 @@
     python tools/release.py number [--major]       after build-hooked.cmd: the next release's number, and what changed
     python tools/release.py prepare [--major]      on main: a release branch with the new numbers and saved lists
     python tools/release.py build [--trial]        on main, once the release branch has merged: the release's files
-    python tools/release.py publish --notes FILE   tag the commit the files were built from and draft its GitHub release
+    python tools/release.py check [--trial]        the release's files in the game, which this starts and plays
+    python tools/release.py publish --notes FILE [--no-check]
+                                                   tag the commit the files were built from and draft its GitHub release
     python tools/release.py workshop               once the GitHub release is published: Bazaar's mod to the Workshop
 
 --major starts a new major version, such as 1.0.0. build --trial runs on any branch, leaves the release marks out of the
-docs, and writes to dist/trial, which publish never uses.
+docs, and writes to dist/trial, which publish never uses; check --trial checks those files. publish needs the files to
+have passed check since they were built, unless --no-check, for a release that only changes the SDK or the docs.
 """
 
 import argparse
@@ -20,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,10 +31,12 @@ sys.path.insert(0, os.path.join(HERE, "generator"))
 sys.path.insert(0, os.path.join(HERE, "docs"))
 sys.path.insert(0, os.path.join(HERE, "..", "sdk"))
 sys.path.insert(0, os.path.join(HERE, "workshop"))
+sys.path.insert(0, os.path.join(HERE, "ingame"))
 
 import build_docs  # noqa: E402
 import build_sdk  # noqa: E402
 import common  # noqa: E402
+import game  # noqa: E402
 import generate  # noqa: E402
 import layouts  # noqa: E402
 import mods  # noqa: E402
@@ -51,6 +57,11 @@ PART_WAY = (
     " any it added, which git status lists"
 )
 
+CHECK_FOLDER = os.path.join(tempfile.gettempdir(), "Bazaar release check")
+CHECKED = "checked.txt"
+TEMPLATE_LOADED = re.compile(r"^Plugin Template Plugin \S+ loaded \(built for API (\d+)\.(\d+)\)")
+TEMPLATE_TURN = re.compile(r"^\[Template Plugin\] .+ starts turn (\d+) ")
+
 EXPORT_LINE = re.compile(r"^ +\d+ +[0-9A-F]+ +[0-9A-F]{8} (\S+)", re.M)
 EXPORT_COUNT = re.compile(r"^ +(\d+) number of names$", re.M)
 API_VERSION_LINE = re.compile(layouts.API_NUMBER % "(?:MAJOR|MINOR)")
@@ -58,6 +69,7 @@ MAX_LISTED = 20
 
 Difference = collections.namedtuple("Difference", "what added removed")
 ReleaseFiles = collections.namedtuple("ReleaseFiles", "host bootstrap sdk docs")
+Result = collections.namedtuple("Result", "what passed found")
 
 
 def stop(message):
@@ -504,6 +516,148 @@ def build(trial):
     return 0
 
 
+def build_template(sdk_zip):
+    """Built outside the repository from the SDK zip alone, so the check fails on anything the SDK left out. The
+    template's build uses BAZAAR_SDK when it is set, so it is pointed at the unzipped SDK."""
+    if os.path.isdir(CHECK_FOLDER):
+        shutil.rmtree(CHECK_FOLDER)
+    with zipfile.ZipFile(sdk_zip) as z:
+        z.extractall(CHECK_FOLDER)
+    sdk = os.path.join(CHECK_FOLDER, os.path.basename(build_sdk.SDK))
+    template = os.path.join(sdk, "plugin-template")
+    env = dict(os.environ, BAZAAR_SDK=sdk)
+    if subprocess.run(["cmd", "/c", os.path.join(template, "build.cmd")], cwd=template, env=env).returncode != 0:
+        stop("the template plugin did not build from %s" % sdk_zip)
+    out = os.path.join(template, "Build")
+    built = [os.path.join(out, name) for name in sorted(os.listdir(out))] if os.path.isdir(out) else []
+    built = [folder for folder in built if os.path.isdir(folder) and game.mod_key(folder)]
+    if len(built) != 1:
+        stop("the template plugin's build made %d mod folders in %s, not one" % (len(built), out))
+    return built[0]
+
+
+def unpack(package):
+    folder = os.path.join(CHECK_FOLDER, "packages", os.path.basename(package))
+    os.makedirs(folder)
+    if subprocess.run([mods.TAR, "-x", "-f", package, "-C", folder], capture_output=True).returncode != 0:
+        raise game.GameError("%s could not be unpacked" % package)
+    return folder
+
+
+def different_files(expected, folder):
+    different = []
+    for dirpath, _, filenames in os.walk(expected):
+        for name in filenames:
+            rel = os.path.relpath(os.path.join(dirpath, name), expected)
+            there = os.path.join(folder, rel)
+            if not os.path.isfile(there) or mods.md5(there) != mods.md5(os.path.join(expected, rel)):
+                different.append(rel)
+    return sorted(different)
+
+
+def installed_problems(mods_folder, expected_folders):
+    """Why the game might not load exactly these mods: another copy of the same mod and version in MODS, such as a
+    test build or a Workshop download, or an unpacked copy that differs from its package."""
+    problems = []
+    for expected in expected_folders:
+        key = game.mod_key(expected)
+        folders = game.mod_folders(mods_folder, key)
+        if not folders:
+            problems.append("MODS holds no copy of %s v%d" % key)
+        elif len(folders) > 1:
+            problems.append(
+                "MODS holds %d copies of %s v%d (%s): move the others out of MODS"
+                % (len(folders), key[0], key[1], ", ".join(folders))
+            )
+        elif different_files(expected, folders[0]):
+            problems.append(
+                "%s is not the build in %s (%s differ); it may be left from an earlier check: move it out of MODS"
+                % (folders[0], os.path.basename(expected), ", ".join(different_files(expected, folders[0])[:5]))
+            )
+    return problems
+
+
+def play_check(g, current, unpacked, template, trial, results):
+    """The in-game half of check, given the release's packages unpacked; it adds a Result to results as each check
+    is made."""
+    wanted = [game.mod_key(folder) for folder in unpacked + [template]]
+
+    def installed():
+        return set(wanted) <= {(m, v) for m, v, _ in g.mods(enabled_only=False)}
+
+    g.wait("the game installing the release's mods", installed, 120)
+    problems = installed_problems(g.path("MODS"), unpacked + [template])
+    if problems:
+        raise game.GameError("; ".join(problems))
+    if not trial:
+        description = g.mod_description(mods.HOST_ID, current.mod)
+        found = "it reads: ...%s" % description[-70:] if description else "the game gave no description"
+        passed = (description or "").strip() == mods.host_description(current.release)
+        results.append(Result("Bazaar's description in the Mods menu names %s" % current.release, passed, found))
+    g.use_default_plugin_order()
+    g.set_mods(wanted)
+    g.activate()
+    api = version.numbers(current.release)[:2]
+    loaded = [m for m in map(TEMPLATE_LOADED.match, g.log()) if m]
+    found = "Bazaar.log has: " + loaded[0].group(0) if loaded else "Bazaar.log has no such line"
+    passed = any(tuple(int(n) for n in m.groups()) == api for m in loaded)
+    results.append(Result("Bazaar.log says the template plugin loaded, built for API %d.%d" % api, passed, found))
+    g.start_game()
+    turn = g.end_turn()
+    lines = [line for line in g.log() if TEMPLATE_TURN.match(line)]
+    found = "Bazaar.log has: " + lines[0] if lines else "Bazaar.log has no such line"
+    passed = any(int(TEMPLATE_TURN.match(line).group(1)) == turn for line in lines)
+    results.append(Result("the template plugin logged the start of turn %d" % turn, passed, found))
+
+
+def print_results(results):
+    for result in results:
+        print("  %s  %s" % ("PASS" if result.passed else "FAIL", result.what), flush=True)
+        if not result.passed:
+            print("        " + result.found, flush=True)
+
+
+def log_tail(g):
+    lines = g.log()[-15:] if g is not None else []
+    return "The end of Bazaar.log:\n" + "\n".join(lines) if lines else "Bazaar.log was not written in this run."
+
+
+def check(trial):
+    current = version.read()
+    out = TRIAL_FOLDER if trial else release_folder(current.release)
+    names = release_files(current.release)
+    packages = [os.path.join(out, names.host), os.path.join(out, names.bootstrap)]
+    sdk_zip = os.path.join(out, names.sdk)
+    command = "build --trial" if trial else "build"
+    missing = [path for path in packages + [sdk_zip] if not os.path.isfile(path)]
+    if missing:
+        stop("these release files are missing: %s; run release.py %s first" % (", ".join(missing), command))
+    built_from = os.path.join(out, BUILT_FROM)
+    if not trial and not os.path.exists(built_from):
+        stop("%s holds no release build: run release.py build first" % out)
+    results = []
+    g = None
+    try:
+        g = game.Game(say)
+        g.preflight()
+        say("building the template plugin from %s" % names.sdk)
+        template = build_template(sdk_zip)
+        unpacked = [unpack(package) for package in packages]
+        g.install(packages + [template])
+        with game.session(g):
+            play_check(g, current, unpacked, template, trial, results)
+    except game.ERRORS + (OSError,) as e:
+        print_results(results)
+        stop("the in-game check could not finish: %s\n%s" % (e, log_tail(g)))
+    print_results(results)
+    if not all(result.passed for result in results):
+        stop("the in-game check failed.\n" + log_tail(g))
+    if not trial:
+        shutil.copyfile(built_from, os.path.join(out, CHECKED))
+    say("the in-game check of %s passed" % current.release)
+    return 0
+
+
 def require_gh():
     gh = shutil.which("gh")
     if gh is None:
@@ -513,7 +667,7 @@ def require_gh():
     return gh
 
 
-def publish(notes):
+def publish(notes, no_check=False):
     current = version.read()
     tag = tag_of(current.release)
     out = release_folder(current.release)
@@ -524,6 +678,12 @@ def publish(notes):
     head = git("rev-parse", "HEAD")
     if read_text(built_from).strip() != head:
         stop("the files in %s were not built from main as it is now: run release.py build again" % out)
+    checked = os.path.join(out, CHECKED)
+    if not no_check and (not os.path.exists(checked) or read_text(checked).strip() != head):
+        stop(
+            "the files in %s have not passed release.py check since they were built: run it, or publish with"
+            " --no-check for a release that only changes the SDK or the docs" % out
+        )
     paths = [os.path.join(out, name) for name in release_files(current.release)]
     missing = [path for path in paths if not os.path.isfile(path)]
     if missing:
@@ -583,7 +743,10 @@ def main():
     commands.add_parser("number").add_argument("--major", action="store_true")
     commands.add_parser("prepare").add_argument("--major", action="store_true")
     commands.add_parser("build").add_argument("--trial", action="store_true")
-    commands.add_parser("publish").add_argument("--notes", required=True)
+    commands.add_parser("check").add_argument("--trial", action="store_true")
+    publishing = commands.add_parser("publish")
+    publishing.add_argument("--notes", required=True)
+    publishing.add_argument("--no-check", action="store_true")
     commands.add_parser("workshop")
     args = parser.parse_args()
     if args.command == "number":
@@ -592,9 +755,11 @@ def main():
         return prepare(args.major)
     if args.command == "build":
         return build(args.trial)
+    if args.command == "check":
+        return check(args.trial)
     if args.command == "workshop":
         return workshop()
-    return publish(os.path.abspath(args.notes))
+    return publish(os.path.abspath(args.notes), args.no_check)
 
 
 if __name__ == "__main__":
