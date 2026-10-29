@@ -109,13 +109,24 @@ class DisagreementTest(unittest.TestCase):
     def test_a_mod_versions_list_whose_newest_row_is_another_release_is_named(self):
         for listed, words in (
             (version.Version("0.5.1", 5), "is mod version 5, Bazaar 0.5.1, not mod version 6, Bazaar 0.5.2"),
-            (version.Version("0.5.1", 6), "is mod version 6, Bazaar 0.5.1, not mod version 6, Bazaar 0.5.2"),
+            (version.Version("0.5.3", 6), "is mod version 6, Bazaar 0.5.3, not mod version 6, Bazaar 0.5.2"),
         ):
             with self.subTest(listed=listed):
                 found = version.listed_disagreements(version.Version("0.5.2", 6), [listed])
                 self.assertEqual(len(found), 1)
                 self.assertIn(words, found[0])
         self.assertIn("lists no mod versions", version.listed_disagreements(version.Version("0.5.2", 6), [])[0])
+
+    def test_the_kept_bazaar_is_an_earlier_release_with_the_same_mod_version(self):
+        listed = [version.Version("0.5.1", 5)]
+        self.assertEqual(version.kept_bazaar(version.Version("0.5.2", 5), listed), "0.5.1")
+        for current in (version.Version("0.5.1", 5), version.Version("0.5.0", 5), version.Version("0.5.2", 6)):
+            with self.subTest(current=current):
+                self.assertIsNone(version.kept_bazaar(current, listed))
+        self.assertIsNone(version.kept_bazaar(version.Version("0.5.2", 5), []))
+
+    def test_a_release_that_keeps_bazaar_leaves_the_newest_row_at_the_release_that_made_it(self):
+        self.assertEqual(version.listed_disagreements(version.Version("0.5.2", 5), [version.Version("0.5.1", 5)]), [])
 
     def test_the_check_covers_the_mod_versions_list(self):
         with mock.patch.object(version, "listed_versions", return_value=[version.Version("0.1.0", 1)]):

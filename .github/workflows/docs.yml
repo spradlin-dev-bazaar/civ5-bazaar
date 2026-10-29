@@ -20,7 +20,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  find:
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.find.outputs.docs }}
+    steps:
+      # A release that keeps an earlier Bazaar ships a docs zip only if the docs changed; without one the site stays.
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          if grep -qxF "Bazaar-docs-${TAG#v}.zip" <<<"$assets"; then
+            echo "docs=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "$TAG has no docs zip, so the docs site stays as it is."
+          fi
+
   publish:
+    needs: find
+    if: needs.find.outputs.docs == 'yes'
     runs-on: ubuntu-latest
     # A release runs this from its tag, so the github-pages environment must let tags v* deploy as well as main.
     environment:

@@ -18,7 +18,7 @@ You need Brave New World, on Windows.
 2. Subscribe to the plugins you want.
 3. In the game's Mods menu, turn on Bazaar Multi-DLL Mod Loader, Bazaar - VMC Bootstrap (required) and your plugins.
 
-To install by hand instead, download both packages from the newest release on the [Releases page](https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases) and put them in your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
+To install by hand instead, download both packages from the newest release on the [Releases page](https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases) that has them, and put them in your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`. A release that only updates the tools for mod makers has no packages of its own.
 
 ## What it does
 
@@ -49,7 +49,7 @@ Ask on [Bazaar's Discord](https://discord.gg/zuRynuzNxr), or report a bug in [Gi
 If VMC's Lua events, or the game's own, do what you need, make a plain Lua mod: it works with Bazaar just as it would with VMC on its own. Write a plugin when you need C++. A plugin can run its own code before, after or instead of almost any function in the game's DLL, or at a few extra spots placed by hand inside some of them. It can add Lua functions of its own, and keep data in saved games: values on players, cities, units and plots, which it can let other plugins and Lua mods read, and data of its own.
 
 - **The SDK** comes with each release on the Releases page, as `Bazaar-SDK-<version>.zip`: the game's headers, the libraries to link against, Bazaar's compiler settings and a template plugin to start from. Its guide, [sdk/README.md](sdk/README.md), goes from what to install to publishing on the Steam Workshop.
-- **The developer docs** have a page for each game function plugins can hook. The newest release's docs are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/, and each release has them as `Bazaar-docs-<version>.zip`.
+- **The developer docs** have a page for each game function plugins can hook. The newest docs are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/, and each release that changed them has them as `Bazaar-docs-<version>.zip`.
 - **With Claude Code**, add this repository's skills with `/plugin marketplace add spradlin-dev-bazaar/civ5-bazaar`, then `/plugin install civ5-bazaar@civ5-bazaar`. One skill makes DLL plugins, including from an existing DLL mod; the other makes Lua mods from its own template.
 
 A plugin runs only on Bazaar releases with the same major version as the one it was built for (the first number, such as the 1 in 1.2), from that release on: a plugin built for 1.2 runs on 1.5, but not on 1.1 or 2.0. Releases before 0.5 could also change what plugins use, so Bazaar 0.5 and later refuse a plugin built for one of them until it is rebuilt with a newer SDK.
@@ -73,7 +73,7 @@ Other jobs:
 
 ## Making a release
 
-A release is made on the developer's machine with `tools\release.py`, in six steps: `number`, `prepare`, `build`, `check`, `publish` and `workshop`. `check` plays the release's files in the game with nobody at the keyboard. The script picks the number from what changed for plugins: the last number goes up when nothing they use changed, and the middle one when something was added. Removing or changing anything needs a new major version, the first number, which the script makes only when run with `--major`, and every plugin must then be rebuilt. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: approving the release notes and the Workshop change note, and publishing the release on GitHub. The last step, which uploads Bazaar's mod to the Steam Workshop, needs Steam running and the Civilization V SDK installed.
+A release is made on the developer's machine with `tools\release.py`, in six steps: `number`, `prepare`, `build`, `check`, `publish` and `workshop`. `check` plays the release's files in the game with nobody at the keyboard. The script picks the number from what changed for plugins: the last number goes up when nothing they use changed, and the middle one when something was added. A release that changes only the SDK or the docs can keep the last release's Bazaar with `--same-bazaar`: it keeps Bazaar's mod version, ships only the SDK and any changed docs, and is not uploaded to the Workshop, and the script refuses it if Bazaar's code or package changed. Removing or changing anything needs a new major version, the first number, which the script makes only when run with `--major`, and every plugin must then be rebuilt. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: approving the release notes and the Workshop change note, and publishing the release on GitHub. The last step, which uploads Bazaar's mod to the Steam Workshop, needs Steam running and the Civilization V SDK installed.
 
 ## Credits and licence
 

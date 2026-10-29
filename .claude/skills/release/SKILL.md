@@ -14,21 +14,22 @@ Ask the developer before each step that publishes something or changes git: comm
 1. On main, up to date with GitHub and with nothing uncommitted, run `.\build-hooked.cmd`, then `.venv\Scripts\python.exe tools\release.py number`.
 2. Tell the developer the number it gives and why, in a few plain sentences: what was added, removed or changed since the last release. If it says every plugin must be rebuilt, say so. The first release has nothing to compare with and keeps the numbers in `VERSION`.
 3. Ask whether that is the release they want. From 0.5 on, removing or changing anything plugins use needs a new major version; if the developer wants one, add `--major` in the next step.
+4. When the release changes only the SDK or the docs, it can keep the last release's Bazaar, so that players get no update with nothing in it. Ask whether the developer wants that; if so, run `number` again with `--same-bazaar`. It checks that Bazaar's code changed in nothing but comments since the release that made the current Bazaar, and that today's files would package that Bazaar the same way. If either fails, it names what changed, and the release needs a new Bazaar after all. If both pass, add `--same-bazaar` in the next step.
 
 ## 2. Prepare
 
-1. Run `.venv\Scripts\python.exe tools\release.py prepare`, with `--major` if chosen. It builds the host, runs the tests and the lint, raises the numbers, saves the lists and the docs' function history, and leaves the changes on a new branch, `release-<number>`. It takes a while.
+1. Run `.venv\Scripts\python.exe tools\release.py prepare`, with `--major` or `--same-bazaar` if chosen. It builds the host, runs the tests and the lint, raises the numbers, saves the lists and the docs' function history, and leaves the changes on a new branch, `release-<number>`. It takes a while. A release that keeps Bazaar keeps its mod version and adds no row to `VERSIONS.md`.
 2. Draft the commit message, titled "Prepare release <number>" with a few plain lines on what the release holds, and the pull request description. Once they are approved, commit, push the branch and open the pull request to main.
 3. Wait for the developer to merge it. Then pull main and delete the local branch with `git branch -d release-<number>`: the next `prepare` refuses while it is there.
 
 ## 3. Build
 
-1. On main, run `.venv\Scripts\python.exe tools\release.py build`. It builds everything again and writes the four release files into `dist\v<number>\`: Bazaar's mod and the VMC Bootstrap as `.civ5mod` packages, the SDK zip and the docs zip.
+1. On main, run `.venv\Scripts\python.exe tools\release.py build`. It builds everything again and writes the four release files into `dist\v<number>\`: Bazaar's mod and the VMC Bootstrap as `.civ5mod` packages, the SDK zip and the docs zip. A release that keeps Bazaar gets only the SDK zip, and the docs zip only when the docs differ from the last release's; `build` checks again that Bazaar is the same.
 2. If it stops because building changed some files, usually the docs' function history after a function moved within its file, those changes go to main through a pull request of their own. Then run `build` again.
 
 ## 4. Check in the game
 
-Run `.venv\Scripts\python.exe tools\release.py check`. With nobody at the keyboard, it builds the template plugin from the release's SDK zip, puts the release's two packages and the template into MODS, and starts Civilization V through Steam. It checks that Bazaar's description in the Mods menu names the release and that the template loaded for the release's API, then plays the template's own `checks.toml`, the file plugin authors start from: a turn, the template's log line and its Lua function. It also checks that no plugin crashed and `Lua.log` has no Lua errors. Then it closes the game and puts back everything it changed in the developer's Civilization V folder, MODS included. It takes a few minutes and needs Civilization V closed, `EnableTuner = 1` and `LoggingEnabled = 1` in its `config.ini`, and DirectX 11 chosen the last time the game was started from Steam.
+Run `.venv\Scripts\python.exe tools\release.py check`. With nobody at the keyboard, it builds the template plugin from the release's SDK zip, puts the release's two packages and the template into MODS, and starts Civilization V through Steam. A release that keeps Bazaar uses the packages of the release that made it, from `dist` or downloaded from GitHub. It checks that Bazaar's description in the Mods menu names the release, except for a release that keeps Bazaar, and that the template loaded for the release's API, then plays the template's own `checks.toml`, the file plugin authors start from: a turn, the template's log line and its Lua function. It also checks that no plugin crashed and `Lua.log` has no Lua errors. Then it closes the game and puts back everything it changed in the developer's Civilization V folder, MODS included. It takes a few minutes and needs Civilization V closed, `EnableTuner = 1` and `LoggingEnabled = 1` in its `config.ini`, and DirectX 11 chosen the last time the game was started from Steam.
 
 When it passes, it marks the build as checked, and `publish` refuses a build without the mark; a later check that fails takes the mark away. It stops at once if the SDK's copy of the checker differs from `tools\bazaar_check`. Skip it only for a release that changes nothing but the docs; `publish` then needs `--no-check`. A release that changes the SDK runs it, since the SDK holds the checker, which only this check runs in the game.
 
@@ -45,14 +46,16 @@ Draft the notes in Markdown, in two parts:
 
 Work from what `number` listed, `git log v<last release>..HEAD`, and the pull requests and issues closed since the last release. Once the notes are approved, save them as `dist\notes-v<number>.md`: git ignores `dist\`, `publish` needs a clean tree, and `build` empties `dist\v<number>\` each time it runs.
 
+For a release that keeps Bazaar, say at the top that Bazaar itself is unchanged, name the release whose Bazaar players keep, and point to it for Bazaar's packages and, when this release has no docs zip, for the docs. `publish` refuses notes that do not name that release.
+
 ## 6. Publish
 
-1. With the developer's go-ahead, run `.venv\Scripts\python.exe tools\release.py publish --notes dist\notes-v<number>.md`. It tags the commit the files were built from, pushes the tag, and creates the GitHub release as a draft with the four files attached, marked as a pre-release when it is older than 0.5. If it stops part way, follow its message: running it again is safe.
-2. The developer checks the draft on GitHub and publishes it. Publishing starts the GitHub Action that puts the docs site on GitHub Pages; check that the Action's run succeeded and that the site opens.
+1. With the developer's go-ahead, run `.venv\Scripts\python.exe tools\release.py publish --notes dist\notes-v<number>.md`. It tags the commit the files were built from, pushes the tag, and creates the GitHub release as a draft with the release's files attached, marked as a pre-release when it is older than 0.5. If it stops part way, follow its message: running it again is safe.
+2. The developer checks the draft on GitHub and publishes it. Publishing starts the GitHub Action that puts the docs site on GitHub Pages; check that the Action's run succeeded and that the site opens. A release without a docs zip leaves the site as it is, and the Action then skips its publishing job.
 
 ## 7. Steam Workshop
 
-Every release that changes Bazaar's mod, pre-releases included, updates Bazaar's item on the Steam Workshop. A release that only updates the SDK or the docs is not uploaded and gets no change note, since the Workshop page points to GitHub for both.
+Every release that changes Bazaar's mod, pre-releases included, updates Bazaar's item on the Steam Workshop. A release that keeps Bazaar is not uploaded and gets no change note, since the Workshop page points to GitHub for the SDK and the docs; `workshop` refuses it.
 
 1. Add the release's notes to the top of `workshop\changes.txt` in BBCode, under a `[b]<number>[/b]` line and without the install paragraph or the file names, and get them approved. They go to main through a small pull request.
 2. Once it has merged, pull main. With the developer's go-ahead, run `.venv\Scripts\python.exe tools\release.py workshop`. It needs Steam running and signed in to the account that owns the item, and the Sid Meier's Civilization V SDK installed from Steam; ModBuddy itself need not be open. It uploads Bazaar's package with the release's own section of `workshop\changes.txt` as the change note and `workshop\bazaar.txt` as the item's description, then checks that Steam shows the new file.

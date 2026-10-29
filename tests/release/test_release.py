@@ -5,6 +5,7 @@ python -m unittest discover -s tests/release
 """
 
 import contextlib
+import fnmatch
 import io
 import os
 import re
@@ -226,6 +227,43 @@ class NumberTest(unittest.TestCase):
                 release.plan(None, False)
         self.assertIn("run it with --major", str(stop.exception))
 
+    def test_the_same_bazaar_keeps_the_mod_version(self):
+        self.assertEqual(release.next_version(version.Version("0.5.1", 5), changes(), same_bazaar=True), ("0.5.2", 5))
+
+    def test_the_same_bazaar_needs_a_release_before_it_and_no_new_major_version(self):
+        for tag, major, why in ((None, False, "first release makes the first Bazaar"), ("v0.5.1", True, "do not go")):
+            with self.subTest(tag=tag, major=major), self.assertRaisesRegex(SystemExit, why):
+                release.require_options_allowed(tag, major, same_bazaar=True)
+
+    def plan_same_bazaar(self, diffs, changed=(), base=version.Version("0.5.1", 5), listed=None):
+        """plan with --same-bazaar after base; self.compared is the tag the code was compared with."""
+        with (
+            mock.patch.object(release, "choose", return_value=("v" + base.release, base, diffs)),
+            mock.patch.object(release.version, "listed_versions", return_value=listed or [base]),
+            mock.patch.object(release, "bazaar_packages", return_value=["host", "bootstrap"]),
+            mock.patch.object(release, "code_changes", return_value=list(changed)) as code,
+            mock.patch.object(release.bazaar_compare, "package_changes", return_value=[]),
+            mock.patch.object(release, "build_settings_changes", return_value=[]),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            new = release.plan(None, False, same_bazaar=True)
+        self.compared = code.call_args[0][0]
+        return new
+
+    def test_the_same_bazaar_is_checked_against_the_release_that_made_it(self):
+        self.assertEqual(self.plan_same_bazaar(changes()), ("0.5.2", 5))
+        self.assertEqual(self.compared, "v0.5.1")
+        after_one = self.plan_same_bazaar(
+            changes(), base=version.Version("0.5.2", 5), listed=[version.Version("0.5.1", 5)]
+        )
+        self.assertEqual((after_one, self.compared), (("0.5.3", 5), "v0.5.1"))
+
+    def test_the_same_bazaar_stops_when_its_code_or_what_plugins_use_changed(self):
+        with self.assertRaisesRegex(SystemExit, "code: host/CivHostEngine.cpp"):
+            self.plan_same_bazaar(changes(), changed=["host/CivHostEngine.cpp"])
+        with self.assertRaisesRegex(SystemExit, "changes what plugins use, so it needs a new Bazaar: run it without"):
+            self.plan_same_bazaar(changes(added=["x"]))
+
     def test_major_starts_the_next_major_version(self):
         self.assertEqual(release.next_version(version.Version("0.3.2", 4), changes(), major=True), ("1.0.0", 5))
         major = release.next_version(version.Version("1.2.3", 9), changes(["x"], ["y"]), major=True)
@@ -291,6 +329,45 @@ class ChooseTest(unittest.TestCase):
                 with self.assertRaises(SystemExit) as stop:
                     release.require_build_as_prepared(version.Version("0.3.1", 2))
                 self.assertIn("calls for release 0.4.0", str(stop.exception))
+
+    def test_a_build_that_keeps_bazaar_must_not_change_what_plugins_use(self):
+        same = (["0\tCvCity_init"], ["DllGetGameContext"])
+        grown = (same[0] + ["1\tCvUnit_kill"], same[1])
+        with tempfile.TemporaryDirectory() as folder:
+            hooks, exports = os.path.join(folder, "hooks.txt"), os.path.join(folder, "exports.txt")
+            with (
+                mock.patch.object(release, "HOOKS_LIST", hooks),
+                mock.patch.object(release, "EXPORTS_LIST", exports),
+                mock.patch.object(release, "last_release", return_value="v0.3.0"),
+                mock.patch.object(release, "at_tag", self.at_tag),
+                mock.patch.object(release.version, "listed_versions", return_value=[version.Version("0.3.0", 1)]),
+            ):
+                for lists, current, stops in ((same, ("0.3.1", 1), False), (grown, ("0.4.0", 1), True)):
+                    release.write_list(hooks, current[0], lists[0])
+                    release.write_list(exports, current[0], lists[1])
+                    with self.subTest(current=current), mock.patch.object(release, "current_lists", return_value=lists):
+                        if not stops:
+                            release.require_build_as_prepared(version.Version(*current))
+                            continue
+                        with self.assertRaisesRegex(SystemExit, "prepare the release again without --same-bazaar"):
+                            release.require_build_as_prepared(version.Version(*current))
+
+    def test_a_build_that_keeps_bazaar_cannot_be_a_new_major_version(self):
+        lists = (["0\tCvCity_init"], ["DllGetGameContext"])
+        kept = version.Version("0.5.1", 5)
+        with tempfile.TemporaryDirectory() as folder:
+            hooks, exports = os.path.join(folder, "hooks.txt"), os.path.join(folder, "exports.txt")
+            release.write_list(hooks, "1.0.0", lists[0])
+            release.write_list(exports, "1.0.0", lists[1])
+            with (
+                mock.patch.object(release, "HOOKS_LIST", hooks),
+                mock.patch.object(release, "EXPORTS_LIST", exports),
+                mock.patch.object(release, "current_lists", return_value=lists),
+                mock.patch.object(release, "choose", return_value=("v0.5.1", kept, changes())),
+                mock.patch.object(release.version, "listed_versions", return_value=[kept]),
+            ):
+                with self.assertRaisesRegex(SystemExit, "1.0.0 is a new major version, which needs a new Bazaar"):
+                    release.require_build_as_prepared(version.Version("1.0.0", 5))
 
     def test_a_build_prepared_with_major_passes(self):
         lists = (["0\tCvCity_init"], ["DllGetGameContext"])
@@ -364,10 +441,12 @@ class PublishTest(unittest.TestCase):
         current=CURRENT,
         checked=HEAD,
         no_check=False,
+        bazaar=None,
     ):
         """What publish stops with, or None, and the git commands it ran, with HEAD at self.HEAD and VERSION at current.
         gh_exit_codes are what gh auth status and gh release create return; self.gh_commands holds the gh commands it
-        ran. checked is the commit release.py check last passed, or None."""
+        ran. checked is the commit release.py check last passed, or None. bazaar is the release whose Bazaar this one
+        keeps, or None for a release with a new Bazaar."""
         names = release.release_files(current.release) if files is None else files
         calls = []
         self.gh_commands = []
@@ -400,6 +479,7 @@ class PublishTest(unittest.TestCase):
                 mock.patch.object(release, "DIST", folder),
                 mock.patch.object(release.version, "read", return_value=current),
                 mock.patch.object(release, "require_main"),
+                mock.patch.object(release, "kept_release", return_value=bazaar),
                 mock.patch.object(release, "git", git),
                 mock.patch.object(release, "tagged_commit", return_value=tagged),
                 mock.patch.object(release.shutil, "which", return_value=gh),
@@ -481,6 +561,23 @@ class PublishTest(unittest.TestCase):
         self.assertIn("git tag -d", message)
         self.assertNotIn("push", calls)
 
+    def test_a_release_that_keeps_bazaar_publishes_only_what_it_built(self):
+        names = release.release_files(self.CURRENT.release)
+        for built in ([names.sdk], [names.sdk, names.docs]):
+            with self.subTest(built=built):
+                message, _ = self.publish(files=built, notes="Bazaar 0.3.0 stays.", bazaar="0.3.0")
+                self.assertIsNone(message)
+                self.assertEqual([os.path.basename(path) for path in self.gh_commands[-1][-len(built) :]], built)
+                self.assertNotIn(names.host, " ".join(self.gh_commands[-1]))
+
+    def test_a_release_that_keeps_bazaar_must_say_so_in_its_notes(self):
+        names = release.release_files(self.CURRENT.release)
+        for notes in ("Notes.", "Bazaar 0.3.01 stays."):
+            with self.subTest(notes=notes):
+                message, calls = self.publish(files=[names.sdk], notes=notes, bazaar="0.3.0")
+                self.assertIn("the release notes must say so, naming 0.3.0", message)
+                self.assertNotIn("tag", calls)
+
 
 class HistoryTest(unittest.TestCase):
     def test_the_history_is_put_back_as_the_last_release_left_it(self):
@@ -541,7 +638,7 @@ class StepRecorder:
 class PrepareTest(unittest.TestCase):
     LISTS = (["0\tCvCity_init"], ["DllGetGameContext"])
 
-    def prepare(self, failing=None, planned=version.Version("0.4.0", 2)):
+    def prepare(self, failing=None, planned=version.Version("0.4.0", 2), same_bazaar=False):
         steps = StepRecorder(failing)
         replaced = [
             (release, "require_main", steps.step("require_main")),
@@ -561,7 +658,7 @@ class PrepareTest(unittest.TestCase):
             (release, "write_list", steps.step("write list")),
             (release, "git", steps.step("git")),
         ]
-        return steps, steps.run(lambda: release.prepare(False), replaced)
+        return steps, steps.run(lambda: release.prepare(False, same_bazaar), replaced)
 
     def test_the_checks_come_first_the_history_before_the_docs_and_the_branch_last(self):
         steps, message = self.prepare()
@@ -589,6 +686,14 @@ class PrepareTest(unittest.TestCase):
         expected = [(release.HOOKS_LIST, "0.4.0", self.LISTS[0]), (release.EXPORTS_LIST, "0.4.0", self.LISTS[1])]
         self.assertEqual(written, expected)
 
+    def test_a_release_that_keeps_bazaar_adds_no_mod_version_to_the_list(self):
+        steps, message = self.prepare(planned=version.Version("0.4.1", 2), same_bazaar=True)
+        self.assertIsNone(message)
+        self.assertNotIn("mod versions", steps.names())
+        self.assertEqual(steps.arguments("VERSION"), [((version.Version("0.4.1", 2),), {})])
+        ((args, _),) = steps.arguments("plan")
+        self.assertEqual(args[1:], (False, True))
+
     def test_a_patch_release_leaves_the_plugin_template_at_the_first_release_of_its_api(self):
         steps, _ = self.prepare(planned=version.Version("0.4.1", 3))
         self.assertEqual(steps.arguments("template bazaar"), [(("0.4.0",), {})])
@@ -604,13 +709,14 @@ class BuildTest(unittest.TestCase):
     CURRENT = version.Version("0.4.0", 2)
     HEAD = "abc123"
 
-    def build(self, trial):
-        """The steps build took, whether it wrote trial files, and the commit built-from.txt names."""
+    def build(self, trial, keep_bazaar=False):
+        """The steps build took, whether it wrote trial files, and the commit built-from.txt names; self.kept is whether
+        the files were written without Bazaar's packages."""
         steps = StepRecorder()
-        names = release.release_files(self.CURRENT.release)
+        names = list(release.release_files(self.CURRENT.release))
 
-        def write_files(current, out, trial):
-            steps.calls.append(("files", (current, out), {"trial": trial}))
+        def write_files(current, out, trial, same_bazaar=False):
+            steps.calls.append(("files", (current, out), {"trial": trial, "same_bazaar": same_bazaar}))
             os.makedirs(out)
             return names
 
@@ -622,6 +728,8 @@ class BuildTest(unittest.TestCase):
                 (release, "require_numbers_agree", steps.step("numbers agree")),
                 (release, "run", steps.step("run")),
                 (release, "require_build_as_prepared", steps.step("as prepared")),
+                (release, "kept_release", lambda current: "0.3.0" if keep_bazaar else None),
+                (release, "require_same_bazaar", steps.step("same bazaar")),
                 (release.build_sdk, "main", steps.step("SDK", 0)),
                 (release, "write_release_files", write_files),
                 (release, "require_unchanged_by_build", steps.step("unchanged")),
@@ -634,6 +742,8 @@ class BuildTest(unittest.TestCase):
             head = release.read_text(built_from).strip() if os.path.exists(built_from) else None
         self.assertIsNone(message)
         ((_, marks),) = steps.arguments("files")
+        self.kept = marks["same_bazaar"]
+        self.compared = steps.arguments("same bazaar")
         return steps.names(), marks["trial"], head
 
     def test_a_release_build_checks_before_and_after_and_records_its_commit(self):
@@ -642,6 +752,19 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(names, expected)
         self.assertFalse(trial)
         self.assertEqual(head, self.HEAD)
+
+    def test_a_build_that_keeps_bazaar_checks_bazaar_is_the_same_before_writing_files(self):
+        names, _, head = self.build(trial=False, keep_bazaar=True)
+        expected = ["releasable", "numbers agree", "run", "as prepared", "same bazaar", "SDK", "files", "unchanged"]
+        self.assertEqual(names, expected + ["git"])
+        self.assertTrue(self.kept)
+        self.assertEqual(self.compared, [(("0.3.0", release.PREPARE_AGAIN), {})])
+        self.assertEqual(head, self.HEAD)
+
+    def test_a_trial_build_makes_every_file_even_on_a_release_that_keeps_bazaar(self):
+        names, trial, _ = self.build(trial=True, keep_bazaar=True)
+        self.assertEqual(names, ["numbers agree", "run", "SDK", "files"])
+        self.assertFalse(self.kept)
 
     def test_a_trial_build_skips_the_release_checks_and_records_no_commit(self):
         names, trial, head = self.build(trial=True)
@@ -670,9 +793,9 @@ class BuildTest(unittest.TestCase):
 
 
 class WriteFilesTest(unittest.TestCase):
-    def write(self, trial):
-        """The four files written for 0.4.0, with the docs, SDK and mods made small; returns what they hold and what the
-        docs build and the mods were given."""
+    def write(self, trial, keep_bazaar=False, docs_changed=True):
+        """The files written for 0.4.0, with the docs, SDK and mods made small; returns the names returned, what the
+        files hold and what the docs build and the mods were given."""
         given = {}
 
         def docs_build(project, out, release=None):
@@ -707,18 +830,23 @@ class WriteFilesTest(unittest.TestCase):
                 mock.patch.object(release.mods, "write_dll_mod", write_dll_mod),
                 mock.patch.object(release.mods, "pack", pack),
                 mock.patch.object(release.build_sdk, "SDK", sdk),
+                mock.patch.object(release, "docs_changed", return_value=docs_changed),
             ):
-                names = release.write_release_files(version.Version("0.4.0", 2), out, trial)
+                written = release.write_release_files(version.Version("0.4.0", 2), out, trial, keep_bazaar)
+            names = release.release_files("0.4.0")
             held = {"files": sorted(os.listdir(out))}
             for kind in ("host", "bootstrap"):
-                held[kind] = release.read_text(os.path.join(out, getattr(names, kind)))
+                if os.path.exists(os.path.join(out, getattr(names, kind))):
+                    held[kind] = release.read_text(os.path.join(out, getattr(names, kind)))
             for kind in ("sdk", "docs"):
-                with zipfile.ZipFile(os.path.join(out, getattr(names, kind))) as z:
-                    held[kind] = sorted(z.namelist())
-        return names, held, given
+                if os.path.exists(os.path.join(out, getattr(names, kind))):
+                    with zipfile.ZipFile(os.path.join(out, getattr(names, kind))) as z:
+                        held[kind] = sorted(z.namelist())
+        return written, held, given
 
     def test_the_four_files_hold_what_a_release_ships(self):
         names, held, given = self.write(trial=False)
+        self.assertEqual(names, list(release.release_files("0.4.0")))
         self.assertEqual(held["files"], sorted(names))
         self.assertEqual((held["host"], held["bootstrap"]), ("host", "bootstrap"))
         self.assertEqual(held["docs"], ["LICENSE.txt", "NOTICE.txt", "index.html"])
@@ -727,6 +855,38 @@ class WriteFilesTest(unittest.TestCase):
         expected_mod = (release.mods.HOST_NAME, release.mods.HOST_ID, release.mods.HOST_TEASER, release.common.HOST_DLL)
         self.assertEqual(given["mod"], expected_mod + (True, 2))
         self.assertEqual(given["description"], release.mods.host_description("0.4.0"))
+
+    def test_a_release_that_keeps_bazaar_writes_the_sdk_and_only_docs_that_changed(self):
+        names = release.release_files("0.4.0")
+        for docs_changed, expected in ((False, [names.sdk]), (True, [names.sdk, names.docs])):
+            with self.subTest(docs_changed=docs_changed):
+                written, held, given = self.write(trial=False, keep_bazaar=True, docs_changed=docs_changed)
+                self.assertEqual(written, expected)
+                self.assertEqual(held["files"], sorted(expected))
+                self.assertNotIn("mod", given)
+
+    def test_a_release_with_a_new_bazaar_ships_its_docs_even_when_they_did_not_change(self):
+        written, _, _ = self.write(trial=False, docs_changed=False)
+        self.assertEqual(written, list(release.release_files("0.4.0")))
+
+    def test_docs_the_same_as_the_last_released_are_no_change(self):
+        with tempfile.TemporaryDirectory() as folder:
+            docs = os.path.join(folder, "docs")
+            os.makedirs(docs)
+            with open(os.path.join(docs, "index.html"), "w") as f:
+                f.write("the docs")
+            last = os.path.join(folder, "Bazaar-docs-0.3.0.zip")
+            release.write_zip(last, docs)
+            with (
+                mock.patch.object(release, "last_docs_zip", return_value=last),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertFalse(release.docs_changed(docs, "0.4.0"))
+                with open(os.path.join(docs, "index.html"), "w") as f:
+                    f.write("new docs")
+                self.assertTrue(release.docs_changed(docs, "0.4.0"))
+            with mock.patch.object(release, "last_docs_zip", return_value=None):
+                self.assertTrue(release.docs_changed(docs, "0.4.0"))
 
     def test_a_trial_leaves_the_release_out_of_the_docs_and_the_mod_and_gives_it_the_test_version(self):
         _, _, given = self.write(trial=True)
@@ -745,9 +905,11 @@ class FileTest(unittest.TestCase):
     def test_the_docs_action_downloads_the_docs_zip_this_script_writes(self):
         workflow = release.read_text(os.path.join(release.common.REPO, ".github", "workflows", "docs.yml"))
         (pattern,) = re.findall(r'--pattern "([^"]+)"', workflow)
+        (looked_for,) = re.findall(r'grep -qxF "([^"]+)"', workflow)
         tag = release.tag_of("0.4.0")
         self.assertTrue(tag.startswith("v"))
-        self.assertEqual(pattern.replace("${TAG#v}", tag[1:]), release.release_files("0.4.0").docs)
+        for name in (pattern, looked_for):
+            self.assertEqual(name.replace("${TAG#v}", tag[1:]), release.release_files("0.4.0").docs)
 
     def test_a_zip_holds_the_folder_under_its_top(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -798,10 +960,13 @@ class ReleaseChecksTest(unittest.TestCase):
         self.assertRegex(self.LOADED, loaded)
         self.assertNotRegex(self.LOADED.replace("0.6", "0.5"), loaded)
 
-    def test_a_trial_build_is_not_asked_to_name_its_release(self):
-        steps = self.checks(trial=True).steps
-        self.assertNotIn("description_of", [key for step in steps for key in step])
-        self.assertEqual(len(steps), 1 + len(self.TEMPLATE.steps))
+    def test_a_trial_build_or_a_release_that_keeps_bazaar_is_not_asked_to_name_its_release(self):
+        for trial, keep_bazaar in ((True, False), (False, True)):
+            with self.subTest(trial=trial, keep_bazaar=keep_bazaar):
+                packages = ["host.civ5mod", "vmc.civ5mod"]
+                steps = release.release_checks(self.CURRENT, packages, self.TEMPLATE, trial, keep_bazaar).steps
+                self.assertNotIn("description_of", [key for step in steps for key in step])
+                self.assertEqual(len(steps), 1 + len(self.TEMPLATE.steps))
 
     def test_the_template_s_checks_must_check_the_mod_its_build_made(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -818,11 +983,18 @@ class CheckTest(unittest.TestCase):
 
     CURRENT = version.Version("0.6.0", 6)
 
-    def run_check(self, failed=None, trial=False, built_from=True, files=3, preflight=None, checked=False):
+    def run_check(
+        self, failed=None, trial=False, built_from=True, files=3, preflight=None, checked=False, keep_bazaar=False
+    ):
+        """keep_bazaar makes it a release that keeps 0.5.1's Bazaar, whose packages are kept_packages, and builds only
+        the SDK zip."""
+        kept_packages = ["Bazaar-0.5.1.civ5mod", "Bazaar-VMC-Bootstrap-97.civ5mod"]
+        kept_now = keep_bazaar and not trial
+        made = release.release_files(self.CURRENT.release)[2:3] if kept_now else None
         with tempfile.TemporaryDirectory() as folder:
             out = os.path.join(folder, "v0.6.0")
             os.makedirs(out)
-            for name in release.release_files(self.CURRENT.release)[:files]:
+            for name in made or release.release_files(self.CURRENT.release)[:files]:
                 with open(os.path.join(out, name), "w") as f:
                     f.write("x")
             if built_from:
@@ -839,6 +1011,8 @@ class CheckTest(unittest.TestCase):
             with (
                 mock.patch.object(release, "CHECK_FOLDER", unzipped),
                 mock.patch.object(release.version, "read", return_value=self.CURRENT),
+                mock.patch.object(release, "kept_release", return_value="0.5.1" if keep_bazaar else None),
+                mock.patch.object(release, "bazaar_packages", return_value=kept_packages) as kept,
                 mock.patch.object(release, "release_folder", return_value=out),
                 mock.patch.object(release, "TRIAL_FOLDER", out),
                 mock.patch.object(release.game, "Game", return_value=g) as Game,
@@ -856,7 +1030,10 @@ class CheckTest(unittest.TestCase):
             self.reached = [name for name, step in (("game", Game), ("template", build), ("run", run)) if step.called]
             if run.called:
                 packages = [os.path.join(out, name) for name in release.release_files(self.CURRENT.release)[:2]]
-                expected = release.release_checks(self.CURRENT, packages, template, trial)
+                if kept_now:
+                    kept.assert_called_once_with("0.5.1")
+                    packages = kept_packages
+                expected = release.release_checks(self.CURRENT, packages, template, trial, kept_now)
                 self.assertEqual(run.call_args, mock.call(expected, g))
             return stopped, mark
 
@@ -897,9 +1074,243 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(stopped, "release: the in-game check failed.")
         self.assertIsNone(mark)
 
+    def test_a_release_that_keeps_bazaar_checks_its_sdk_with_the_kept_bazaar(self):
+        self.assertEqual(self.run_check(keep_bazaar=True), (None, "abc123\n"))
+        names = release.release_files(self.CURRENT.release)
+        self.assertIn("missing: ", self.run_check(files=0)[0])
+        self.assertIn(names.sdk, self.run_check(files=0)[0])
+
+    def test_a_trial_checks_its_own_packages_even_on_a_release_that_keeps_bazaar(self):
+        self.assertEqual(self.run_check(trial=True, built_from=False, keep_bazaar=True), (None, None))
+        self.assertIn("run", self.reached)
+
     def test_a_passed_check_marks_the_build_it_checked_and_a_trial_marks_nothing(self):
         self.assertEqual(self.run_check(), (None, "abc123\n"))
         self.assertEqual(self.run_check(trial=True, built_from=False), (None, None))
+
+
+class SameBazaarTest(unittest.TestCase):
+    """How release.py tells that Bazaar is the same as an earlier release's."""
+
+    def same(self, path, then, now):
+        return release.bazaar_compare.comparable(path, then) == release.bazaar_compare.comparable(path, now)
+
+    def test_comments_blank_lines_and_spacing_in_code_are_no_change(self):
+        cpp = b"int a = 1; // one\n/* two\n   lines */\nconst char* url = \"http://x\"; char q = '/';\n"
+        same = b"int a = 1;\n\nconst char* url =  \"http://x\";   char q = '/'; // q\n"
+        self.assertTrue(self.same("host/A.cpp", cpp, same))
+        for changed in (
+            cpp.replace(b"http://x", b"http://y"),
+            cpp.replace(b"http://x", b"http:// x"),
+            cpp.replace(b"1;", b"2;"),
+            cpp.replace(b"'/'", b"'*'"),
+        ):
+            with self.subTest(changed=changed):
+                self.assertFalse(self.same("host/A.cpp", cpp, changed))
+
+    def test_a_line_joined_to_a_preprocessor_line_or_to_a_comment_is_a_change(self):
+        self.assertFalse(self.same("host/A.h", b"#define A 1\nint y;\n", b"#define A 1 int y;\n"))
+        self.assertFalse(self.same("host/A.h", b"// note \\\nint y;\n", b"// note\nint y;\n"))
+
+    def test_python_compares_without_its_comments_and_other_files_as_they_are(self):
+        py = b"x = 1  # one\n# two\n"
+        self.assertTrue(self.same("a.py", py, b"x = 1\n"))
+        self.assertFalse(self.same("a.py", py, b"x = 2\n"))
+        self.assertTrue(self.same("b.cmd", b"set A=1\r\n", b"set A=1\n"))
+        self.assertFalse(self.same("b.cmd", b"rem why ^\r\nset A=1\r\n", b"set A=1\r\n"))
+        self.assertFalse(self.same("ids.txt", b"1\tA\n", b"1 A\n"))
+
+    def test_the_code_compared_covers_every_tools_folder_the_dll_build_reads(self):
+        script = release.read_text(release.BUILD_HOOKED)
+        read = {"/".join(path.split("\\")[:2]) for path in re.findall(r"%~dp0(tools\\[^\\\"%;\s]+)", script)}
+        self.assertEqual(read, {"tools/shims", "tools/generator"})
+        self.assertLessEqual(read, set(release.bazaar_compare.CODE))
+
+    def test_only_code_that_changed_in_more_than_comments_is_named(self):
+        then = {
+            "host/A.cpp": b"int a; // old\n",
+            "host/B.cpp": b"int b;\n",
+            "host/Gone.cpp": b"int g;\n",
+            "host/README.md": b"old",
+            "tools/generator/function-history.txt": b"release\t0.5.1\n",
+        }
+        now = {
+            "host/A.cpp": b"int a; // new words\n",
+            "host/B.cpp": b"int b2;\n",
+            "host/New.cpp": b"int n;\n",
+            "tools/generator/function-history.txt": b"release\t0.5.2\n",
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            for rel, data in now.items():
+                os.makedirs(os.path.dirname(os.path.join(folder, rel)), exist_ok=True)
+                with open(os.path.join(folder, rel), "wb") as f:
+                    f.write(data)
+            history = os.path.join(folder, "tools", "generator", "function-history.txt")
+            with (
+                mock.patch.object(release.common, "REPO", folder),
+                mock.patch.object(release.build_docs, "HISTORY", history),
+                mock.patch.object(release, "git", return_value="\n".join(sorted(set(then) | set(now)))) as git,
+                mock.patch.object(release.bazaar_compare, "file_at", lambda tag, rel: then.get(rel)),
+            ):
+                self.assertEqual(release.code_changes("v0.5.1"), ["host/B.cpp", "host/Gone.cpp", "host/New.cpp"])
+        git.assert_called_once_with("diff", "--name-only", "v0.5.1", "--", *release.bazaar_compare.CODE)
+
+    def test_files_added_or_removed_on_either_side_are_differences(self):
+        with tempfile.TemporaryDirectory() as folder:
+            then, now = os.path.join(folder, "then"), os.path.join(folder, "now")
+            for side, names in ((then, ("kept", "gone")), (now, ("kept", "new"))):
+                os.makedirs(side)
+                for name in names:
+                    with open(os.path.join(side, name), "w") as f:
+                        f.write("x")
+            self.assertEqual(release.bazaar_compare.folder_differences(then, now), ["gone", "new"])
+
+    def released(self, returncode=0, stderr=""):
+        """released_file for 0.5.1's docs zip, which dist does not hold; self.downloads counts the gh downloads, and
+        self.left_folder is whether dist then holds a folder for 0.5.1."""
+        self.downloads = 0
+
+        def run(cmd, **kwargs):
+            self.downloads += 1
+            self.assertEqual(cmd[:4], ["gh", "release", "download", "v0.5.1"])
+            if returncode == 0:
+                with open(os.path.join(cmd[cmd.index("--dir") + 1], "Bazaar-docs-0.5.1.zip"), "w") as f:
+                    f.write("x")
+            return types.SimpleNamespace(returncode=returncode, stdout="", stderr=stderr)
+
+        with tempfile.TemporaryDirectory() as folder:
+            with (
+                mock.patch.object(release, "DIST", folder),
+                mock.patch.object(release, "require_gh", return_value="gh"),
+                mock.patch.object(release.subprocess, "run", run),
+            ):
+                found = release.released_file("0.5.1", release.DOCS_PATTERN)
+                again = release.released_file("0.5.1", release.DOCS_PATTERN) if found else None
+                self.left_folder = os.path.exists(os.path.join(folder, "v0.5.1"))
+                return found and os.path.relpath(found, folder), again and os.path.relpath(again, folder)
+
+    def test_a_released_file_is_downloaded_into_dist_once(self):
+        expected = os.path.join("v0.5.1", "Bazaar-docs-0.5.1.zip")
+        self.assertEqual(self.released(), (expected, expected))
+        self.assertEqual(self.downloads, 1)
+
+    def test_a_release_without_the_file_gives_none_and_leaves_no_folder_and_a_failed_download_stops(self):
+        self.assertEqual(self.released(1, "no assets match the file pattern"), (None, None))
+        self.assertFalse(self.left_folder)
+        with self.assertRaisesRegex(SystemExit, "could not be downloaded from the GitHub release 0.5.1: HTTP 502"):
+            self.released(1, "HTTP 502")
+
+    def test_two_files_of_one_kind_or_a_missing_package_stop(self):
+        with tempfile.TemporaryDirectory() as folder:
+            os.makedirs(os.path.join(folder, "v0.5.1"))
+            for name in ("Bazaar-VMC-Bootstrap-96.civ5mod", "Bazaar-VMC-Bootstrap-97.civ5mod"):
+                open(os.path.join(folder, "v0.5.1", name), "w").close()
+            with mock.patch.object(release, "DIST", folder), self.assertRaisesRegex(SystemExit, "holds 2 files named"):
+                release.released_file("0.5.1", release.BOOTSTRAP_PATTERN)
+        with mock.patch.object(release, "released_file", side_effect=["Bazaar-0.5.1.civ5mod", None]):
+            with self.assertRaisesRegex(SystemExit, "has no Bazaar package or no VMC Bootstrap package"):
+                release.bazaar_packages("0.5.1")
+
+    def test_the_patterns_find_the_files_a_release_writes(self):
+        names = release.release_files("0.4.0")
+        self.assertTrue(fnmatch.fnmatch(names.bootstrap, release.BOOTSTRAP_PATTERN))
+        self.assertTrue(fnmatch.fnmatch(names.docs, release.DOCS_PATTERN))
+
+    def test_the_last_docs_zip_is_the_newest_earlier_release_s_that_has_one(self):
+        asked = []
+
+        def released_file(number, pattern):
+            asked.append(number)
+            return None if number == "0.10.0" else "docs of " + number
+
+        tags = "v0.4.0\nv0.10.0\nv0.9.0\nv0.6.0-rc1\nv1.0.0"
+        with (
+            mock.patch.object(release, "git", return_value=tags),
+            mock.patch.object(release, "released_file", released_file),
+        ):
+            self.assertEqual(release.last_docs_zip("1.0.0"), "docs of 0.9.0")
+        self.assertEqual(asked, ["0.10.0", "0.9.0"])
+
+    @unittest.skipUnless(os.path.isfile(release.mods.TAR), "needs Windows' tar.exe")
+    def test_today_s_files_packaging_the_last_release_s_dll_the_same_way_are_no_change(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dll = os.path.join(folder, "CvGameCore_Expansion2.dll")
+            with open(dll, "wb") as f:
+                f.write(b"the 0.5.1 DLL")
+            mods = release.mods
+            made = mods.write_dll_mod(
+                os.path.join(folder, "MODS"), mods.HOST_NAME, mods.HOST_ID, mods.HOST_TEASER, dll, True, 5
+            )
+            packages = [os.path.join(folder, "host.civ5mod"), os.path.join(folder, "bootstrap.civ5mod")]
+            for source, package in zip(made, packages):
+                self.assertIsNone(mods.pack(source, package))
+            self.assertEqual(release.bazaar_compare.package_changes(*packages), [])
+            with mock.patch.object(mods, "HOST_TEASER", "A new teaser."):
+                (changed,) = release.bazaar_compare.package_changes(*packages)
+        self.assertEqual(changed, "Bazaar's mod: %s (v 5).modinfo" % mods.HOST_NAME)
+
+    def require_same(self, changed=(), error=None):
+        with (
+            mock.patch.object(release, "bazaar_packages", return_value=["host", "bootstrap"]),
+            mock.patch.object(release, "code_changes", return_value=list(changed)),
+            mock.patch.object(release.bazaar_compare, "package_changes", return_value=[], side_effect=error),
+            mock.patch.object(release, "build_settings_changes", return_value=[]),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            release.require_same_bazaar("0.5.1", release.PREPARE_AGAIN)
+
+    def test_what_changed_is_listed_up_to_a_limit_with_what_to_do(self):
+        self.require_same()
+        with self.assertRaises(SystemExit) as stop:
+            self.require_same(["host/F%d.cpp" % n for n in range(release.MAX_LISTED + 5)])
+        message = str(stop.exception)
+        self.assertIn("since 0.5.1, so this release needs a new Bazaar: prepare the release again", message)
+        self.assertIn("code: host/F0.cpp", message)
+        self.assertIn("and 5 more", message)
+        self.assertNotIn("host/F%d.cpp" % release.MAX_LISTED, message)
+
+    def test_a_package_that_cannot_be_read_says_to_delete_it(self):
+        error = release.files.CheckError("Bazaar-0.5.1.civ5mod could not be unpacked")
+        with self.assertRaisesRegex(SystemExit, "could not be unpacked; if it is in dist, delete it"):
+            self.require_same(error=error)
+
+    def test_the_sdk_must_build_plugins_with_the_kept_bazaar_s_settings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            sdk = os.path.join(folder, "Bazaar SDK")
+            os.makedirs(sdk)
+            kept_zip = os.path.join(folder, "Bazaar-SDK-0.5.0.zip")
+            release.write_zip(kept_zip, sdk, top="Bazaar SDK")
+            found = {}
+            with open(os.path.join(sdk, release.BUILD_SETTINGS), "wb") as f:
+                f.write(b"RuntimeLibrary=2")
+            settings_zip = os.path.join(folder, "Bazaar-SDK-0.5.1.zip")
+            release.write_zip(settings_zip, sdk, top="Bazaar SDK")
+            for zipped, now in (
+                (settings_zip, b"RuntimeLibrary=2"),
+                (settings_zip, b"RuntimeLibrary=0"),
+                (kept_zip, b""),
+            ):
+                with (
+                    mock.patch.object(release.build_sdk, "SDK", sdk),
+                    mock.patch.object(release, "released_file", return_value=zipped),
+                    mock.patch.object(release.build_sdk, "vsprops_bytes", return_value=now),
+                ):
+                    found[(os.path.basename(zipped), now)] = release.build_settings_changes("0.5.1")
+        self.assertEqual(
+            found,
+            {
+                ("Bazaar-SDK-0.5.1.zip", b"RuntimeLibrary=2"): [],
+                ("Bazaar-SDK-0.5.1.zip", b"RuntimeLibrary=0"): ["the SDK's build settings, in CivPlugin.vsprops"],
+                ("Bazaar-SDK-0.5.0.zip", b""): ["the SDK's build settings: the SDK of 0.5.1 has no CivPlugin.vsprops"],
+            },
+        )
+
+    def test_a_release_keeps_bazaar_when_versions_md_s_newest_row_is_an_earlier_release_with_its_mod_version(self):
+        listed = [version.Version("0.5.1", 5), version.Version("0.5.0", 4)]
+        with mock.patch.object(release.version, "listed_versions", return_value=listed):
+            self.assertEqual(release.kept_release(version.Version("0.5.2", 5)), "0.5.1")
+            self.assertIsNone(release.kept_release(version.Version("0.5.1", 5)))
+            self.assertIsNone(release.kept_release(version.Version("0.6.0", 6)))
 
 
 class BuildTemplateTest(unittest.TestCase):
