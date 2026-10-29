@@ -61,18 +61,19 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 1. Set up the Python tools once: `python -m venv .venv`, then `.venv\Scripts\pip install -r tools\generator\requirements.txt`.
 2. `build-hooked.cmd` makes the hook wrappers, checks that the game classes plugins rely on still have the same layout in memory, and builds Bazaar's DLL.
 3. `tests\runtime\run.cmd` runs the automated tests, outside the game. `.venv\Scripts\python.exe -m ruff check .` and `.venv\Scripts\python.exe -m ruff format --check .` check the Python code.
-4. `tests\ingame\package.py` lays out Bazaar, the VMC Bootstrap and the test plugins as mod folders in `tests\ingame\out\MODS`, to copy into the game's MODS folder. [tests/ingame/README.md](tests/ingame/README.md) says what each test plugin should show in the game.
+4. `tests\ingame\run.py` builds the test plugins and checks them in the game with nobody at the keyboard, in about ten minutes; `run.py --play NAME` starts the game with one checks file's mods for you to try by hand. [tests/ingame/README.md](tests/ingame/README.md) says what it needs and what each test plugin checks.
 
 Other jobs:
 
 - `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then checks it by making a plugin from its template and releasing it, using only that folder. That check builds a plugin, so it also needs what a plugin author needs (see [What you need](sdk/README.md#what-you-need)).
 - `build-docs.cmd` writes the developer docs into `CvGameCoreSource\BuildTemp\docs`; open its `index.html` in a browser. `tests\docs\check_docs.py` checks the docs build against a small test engine. [tools/docs/README.md](tools/docs/README.md) explains how to write the docs' own pages.
+- `tools\sync_checker.py` copies the in-game checker, `tools\bazaar_check`, into the plugin template and the Lua mod template after a change to it; the tests and `release.py check` refuse copies that differ.
 - `tests\ingame\pack.py` packs one folder from `tests\ingame\out\MODS` into a package, for a test upload to the Steam Workshop.
 - To measure how much Bazaar slows down the computer players, build with the `bench` option (`build-dll.cmd bench`, `build-hooked.cmd bench`) and lay out with `package.py bench plain` or `package.py bench host`. `build-dll.cmd` builds the game DLL without Bazaar (Firaxis's source with VMC's changes); only this measurement needs it. [Issue #3](https://github.com/spradlin-dev-bazaar/civ5-bazaar/issues/3) has the results.
 
 ## Making a release
 
-A release is made on the developer's machine with `tools\release.py`, in five steps: `number`, `prepare`, `build`, `publish` and `workshop`. The script picks the number from what changed for plugins: the last number goes up when nothing they use changed, and the middle one when something was added. Removing or changing anything needs a new major version, the first number, which the script makes only when run with `--major`, and every plugin must then be rebuilt. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: checking the release in the game, approving the release notes and the Workshop change note, and publishing the release on GitHub. The last step, which uploads Bazaar's mod to the Steam Workshop, needs Steam running and the Civilization V SDK installed.
+A release is made on the developer's machine with `tools\release.py`, in six steps: `number`, `prepare`, `build`, `check`, `publish` and `workshop`. `check` plays the release's files in the game with nobody at the keyboard. The script picks the number from what changed for plugins: the last number goes up when nothing they use changed, and the middle one when something was added. Removing or changing anything needs a new major version, the first number, which the script makes only when run with `--major`, and every plugin must then be rebuilt. In Claude Code, the release skill in `.claude\skills\release` walks through them, together with what a person does in between: approving the release notes and the Workshop change note, and publishing the release on GitHub. The last step, which uploads Bazaar's mod to the Steam Workshop, needs Steam running and the Civilization V SDK installed.
 
 ## Credits and licence
 

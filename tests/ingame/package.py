@@ -3,10 +3,11 @@ VMC's events.
 
 With "bench plain" or "bench host", lay out the benchmark mod instead, holding the build made by
 build-dll.cmd bench or build-hooked.cmd bench. Both share one mod id, so a save made with either
-loads with either. Output goes to tests/ingame/out/MODS. Nothing is installed: copy the folders into
-the game's MODS folder by hand.
+loads with either. Output goes to tests/ingame/out/MODS. run.py puts the test mods into the game's
+MODS folder for its checks; copy the benchmark mod there by hand.
 """
 
+import collections
 import os
 import shutil
 import subprocess
@@ -18,7 +19,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
 
 import common  # noqa: E402
 import mods  # noqa: E402
-import version as bazaar_version  # noqa: E402
+from bazaar_check import files  # noqa: E402
 
 PROJECT = common.engine_project()
 HOST_OUT = common.HOST_OUTPUT
@@ -33,14 +34,15 @@ BENCH_DLLS = {
     "plain": os.path.join(PLAIN_OUT, "CvGameCoreDLL_Expansion2Win32Mod.dll"),
     "host": common.HOST_DLL,
 }
+Toy = collections.namedtuple("Toy", "define dll_name mod_name mod_id")
 TOYS = [
-    ("GOLD", "ToyGold", "Toy Gold Plugin", "c411a905-2f0d-471c-848b-357ccf98ab4b"),
-    ("RIVAL", "ToyRival", "Toy Rival Plugin", "bd4f6967-e129-4de5-9ac5-58627909ed43"),
-    ("CRASH", "ToyCrash", "Toy Crash Plugin", "6172647d-3bcb-41fa-9cde-870a7723518f"),
-    ("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
-    ("HAND", "ToyHand", "Toy Hand Plugin", "d6d32c6a-5f13-49b5-ab37-505f39e88adc"),
-    ("HAND_REPLACE", "ToyHandReplace", "Toy Hand Replace Plugin", "2df335dd-943f-40dd-86a9-241903d92043"),
-    ("SAVES", "ToySaves", "Toy Saves Plugin", "b012c631-4178-4d68-99af-7c2fcf5d3701"),
+    Toy("GOLD", "ToyGold", "Toy Gold Plugin", "c411a905-2f0d-471c-848b-357ccf98ab4b"),
+    Toy("RIVAL", "ToyRival", "Toy Rival Plugin", "bd4f6967-e129-4de5-9ac5-58627909ed43"),
+    Toy("CRASH", "ToyCrash", "Toy Crash Plugin", "6172647d-3bcb-41fa-9cde-870a7723518f"),
+    Toy("NEWER", "ToyNewer", "Toy Newer Plugin", "1e11469a-724f-42b1-9d52-2ca0ca704665"),
+    Toy("HAND", "ToyHand", "Toy Hand Plugin", "d6d32c6a-5f13-49b5-ab37-505f39e88adc"),
+    Toy("HAND_REPLACE", "ToyHandReplace", "Toy Hand Replace Plugin", "2df335dd-943f-40dd-86a9-241903d92043"),
+    Toy("SAVES", "ToySaves", "Toy Saves Plugin", "b012c631-4178-4d68-99af-7c2fcf5d3701"),
 ]
 VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
 # Runs after VMC's CustomModOptions.xml has added the row only if the game orders it after VMC's files, because like
@@ -90,8 +92,8 @@ def write_toy_mod(dll_name, mod_name, mod_id):
 def write_vmc_check_mod():
     name = "Toy VMC Check"
     folder = mods.new_mod_folder(MODS, name)
-    files = [("VmcCheck.sql", VMC_CHECK_SQL, 0), ("VmcCheck.lua", VMC_CHECK_LUA, 1), ("VmcCheck.xml", VMC_CHECK_XML, 1)]
-    for file_name, content, _ in files:
+    parts = [("VmcCheck.sql", VMC_CHECK_SQL, 0), ("VmcCheck.lua", VMC_CHECK_LUA, 1), ("VmcCheck.xml", VMC_CHECK_XML, 1)]
+    for file_name, content, _ in parts:
         with open(os.path.join(folder, file_name), "w") as f:
             f.write(content)
     teaser = "Test mod for the %s: switches on one VMC event and writes it to Lua.log." % mods.HOST_NAME
@@ -100,7 +102,7 @@ def write_vmc_check_mod():
         name,
         VMC_CHECK_ID,
         teaser,
-        [(file_name, vfs) for file_name, _, vfs in files],
+        [(file_name, vfs) for file_name, _, vfs in parts],
         ["VmcCheck.sql"],
         [("InGameUIAddin", "VmcCheck.xml", "VMC check", teaser)],
         references=[(mods.VMC_MOD_ID, "DLL - Various Mod Components")],
@@ -124,7 +126,6 @@ def main(args):
     if problem:
         print(problem)
         return 1
-    host_version = bazaar_version.read().mod
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     if bench:
@@ -154,11 +155,11 @@ def main(args):
     flags += ["/I" + os.path.join(common.SOURCE_ROOT, inc) for inc in common.SUPPORT_INCLUDE]
     libs = [os.path.join(HOST_OUT, "CvGameCore_Expansion2.lib")]
     libs += [os.path.join(common.SOURCE_ROOT, lib) for lib in common.SUPPORT_LIBS]
-    for define, dll_name, _, _ in TOYS:
+    for toy in TOYS:
         cmd = flags + [
-            "/DTOY_" + define,
-            "/Fo" + os.path.join(build, dll_name + ".obj"),
-            "/Fe" + os.path.join(build, dll_name + ".dll"),
+            "/DTOY_" + toy.define,
+            "/Fo" + os.path.join(build, toy.dll_name + ".obj"),
+            "/Fe" + os.path.join(build, toy.dll_name + ".dll"),
             os.path.join(HERE, "toy_ingame.cpp"),
         ]
         cmd += libs + ["/link", "/NODEFAULTLIB:libcmt"]
@@ -166,7 +167,7 @@ def main(args):
         if p.returncode != 0:
             print(p.stdout[-4000:], p.stderr[-2000:])
             return 1
-        print("built", dll_name + ".dll")
+        print("built", toy.dll_name + ".dll")
     mods.write_dll_mod(
         MODS,
         mods.HOST_NAME,
@@ -174,10 +175,10 @@ def main(args):
         "Test build of the %s." % mods.HOST_NAME,
         common.HOST_DLL,
         host_screens=True,
-        version=host_version,
+        version=files.TEST_VERSION,
     )
-    for _, dll_name, mod_name, mod_id in TOYS:
-        write_toy_mod(dll_name, mod_name, mod_id)
+    for toy in TOYS:
+        write_toy_mod(toy.dll_name, toy.mod_name, toy.mod_id)
     write_vmc_check_mod()
     print("mod folders in", MODS)
     return 0

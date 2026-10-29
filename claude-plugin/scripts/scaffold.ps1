@@ -3,7 +3,7 @@
 $script:madeTarget = $null
 $script:reservedNames = @('CON', 'PRN', 'AUX', 'NUL') + (1..9 | ForEach-Object { "COM$_"; "LPT$_" })
 $script:buildOutputFolders = @('Build', 'Packages', 'src\out')
-$script:buildOutputExtensions = @('.dll', '.pdb', '.obj', '.idb', '.ilk', '.lib', '.exp', '.res', '.civ5mod', '.modinfo', '.user', '.ncb', '.suo')
+$script:buildOutputExtensions = @('.dll', '.pdb', '.obj', '.idb', '.ilk', '.lib', '.exp', '.res', '.civ5mod', '.modinfo', '.user', '.ncb', '.suo', '.pyc')
 $script:binaryExtensions = @('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.dds', '.tga', '.zip')
 # Latin-1 maps every byte to one character and back, so a round trip changes only the replaced ASCII text.
 $script:latin1 = [Text.Encoding]::GetEncoding(28591)

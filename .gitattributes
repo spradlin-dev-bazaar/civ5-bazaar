@@ -3,6 +3,8 @@ mod/vmc/** -text
 frontend/** -text
 sdk/plugin-template/** -text
 claude-plugin/skills/new-lua-mod/template/** -text
+# Copied byte for byte into the two templates above, whose copies must match it.
+tools/bazaar_check/** -text
 # cmd.exe can miss a batch label in a file with Unix line endings.
 *.cmd text eol=crlf
 # A release compares VERSION as committed at its tag, which must read the same on every machine.

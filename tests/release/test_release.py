@@ -8,6 +8,8 @@ import contextlib
 import io
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -352,11 +354,20 @@ class PublishTest(unittest.TestCase):
     CURRENT = version.Version("0.4.0", 2)
 
     def publish(
-        self, built_from=HEAD, files=None, notes="Notes.", gh="gh", tagged=None, gh_exit_codes=(0, 0), current=CURRENT
+        self,
+        built_from=HEAD,
+        files=None,
+        notes="Notes.",
+        gh="gh",
+        tagged=None,
+        gh_exit_codes=(0, 0),
+        current=CURRENT,
+        checked=HEAD,
+        no_check=False,
     ):
         """What publish stops with, or None, and the git commands it ran, with HEAD at self.HEAD and VERSION at current.
         gh_exit_codes are what gh auth status and gh release create return; self.gh_commands holds the gh commands it
-        ran."""
+        ran. checked is the commit release.py check last passed, or None."""
         names = release.release_files(current.release) if files is None else files
         calls = []
         self.gh_commands = []
@@ -376,6 +387,9 @@ class PublishTest(unittest.TestCase):
             if built_from:
                 with open(os.path.join(out, release.BUILT_FROM), "w") as f:
                     f.write(built_from + "\n")
+            if checked:
+                with open(os.path.join(out, release.CHECKED), "w") as f:
+                    f.write(checked + "\n")
             for name in names:
                 with open(os.path.join(out, name), "w") as f:
                     f.write("x")
@@ -393,13 +407,24 @@ class PublishTest(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 try:
-                    release.publish(notes_path)
+                    release.publish(notes_path, no_check)
                     return None, calls
                 except SystemExit as stop:
                     return str(stop), calls
 
     def test_no_build_stops(self):
         self.assertIn("holds no release build", self.publish(built_from=None)[0])
+
+    def test_files_that_have_not_passed_the_check_since_they_were_built_stop_before_tagging(self):
+        for checked in (None, "def456"):
+            message, calls = self.publish(checked=checked)
+            self.assertIn("have not passed release.py check", message)
+            self.assertNotIn("tag", calls)
+
+    def test_no_check_publishes_a_release_that_only_changes_the_docs(self):
+        message, calls = self.publish(checked=None, no_check=True)
+        self.assertIsNone(message)
+        self.assertIn("push", calls)
 
     def test_a_build_of_another_commit_stops(self):
         self.assertIn("not built from main as it is now", self.publish(built_from="def456")[0])
@@ -580,12 +605,12 @@ class BuildTest(unittest.TestCase):
     HEAD = "abc123"
 
     def build(self, trial):
-        """The steps build took, the release_marks it wrote the files with, and the commit built-from.txt names."""
+        """The steps build took, whether it wrote trial files, and the commit built-from.txt names."""
         steps = StepRecorder()
         names = release.release_files(self.CURRENT.release)
 
-        def write_files(current, out, release_marks):
-            steps.calls.append(("files", (current, out), {"release_marks": release_marks}))
+        def write_files(current, out, trial):
+            steps.calls.append(("files", (current, out), {"trial": trial}))
             os.makedirs(out)
             return names
 
@@ -609,19 +634,19 @@ class BuildTest(unittest.TestCase):
             head = release.read_text(built_from).strip() if os.path.exists(built_from) else None
         self.assertIsNone(message)
         ((_, marks),) = steps.arguments("files")
-        return steps.names(), marks["release_marks"], head
+        return steps.names(), marks["trial"], head
 
     def test_a_release_build_checks_before_and_after_and_records_its_commit(self):
-        names, marks, head = self.build(trial=False)
+        names, trial, head = self.build(trial=False)
         expected = ["releasable", "numbers agree", "run", "as prepared", "SDK", "files", "unchanged", "git"]
         self.assertEqual(names, expected)
-        self.assertTrue(marks)
+        self.assertFalse(trial)
         self.assertEqual(head, self.HEAD)
 
     def test_a_trial_build_skips_the_release_checks_and_records_no_commit(self):
-        names, marks, head = self.build(trial=True)
+        names, trial, head = self.build(trial=True)
         self.assertEqual(names, ["numbers agree", "run", "SDK", "files"])
-        self.assertFalse(marks)
+        self.assertTrue(trial)
         self.assertIsNone(head)
 
     def test_a_release_not_prepared_or_already_out_stops(self):
@@ -645,7 +670,7 @@ class BuildTest(unittest.TestCase):
 
 
 class WriteFilesTest(unittest.TestCase):
-    def write(self, release_marks):
+    def write(self, trial):
         """The four files written for 0.4.0, with the docs, SDK and mods made small; returns what they hold and what the
         docs build and the mods were given."""
         given = {}
@@ -683,7 +708,7 @@ class WriteFilesTest(unittest.TestCase):
                 mock.patch.object(release.mods, "pack", pack),
                 mock.patch.object(release.build_sdk, "SDK", sdk),
             ):
-                names = release.write_release_files(version.Version("0.4.0", 2), out, release_marks)
+                names = release.write_release_files(version.Version("0.4.0", 2), out, trial)
             held = {"files": sorted(os.listdir(out))}
             for kind in ("host", "bootstrap"):
                 held[kind] = release.read_text(os.path.join(out, getattr(names, kind)))
@@ -693,7 +718,7 @@ class WriteFilesTest(unittest.TestCase):
         return names, held, given
 
     def test_the_four_files_hold_what_a_release_ships(self):
-        names, held, given = self.write(release_marks=True)
+        names, held, given = self.write(trial=False)
         self.assertEqual(held["files"], sorted(names))
         self.assertEqual((held["host"], held["bootstrap"]), ("host", "bootstrap"))
         self.assertEqual(held["docs"], ["LICENSE.txt", "NOTICE.txt", "index.html"])
@@ -703,10 +728,11 @@ class WriteFilesTest(unittest.TestCase):
         self.assertEqual(given["mod"], expected_mod + (True, 2))
         self.assertEqual(given["description"], release.mods.host_description("0.4.0"))
 
-    def test_a_trial_leaves_the_release_out_of_the_docs_and_the_mod_s_description(self):
-        _, _, given = self.write(release_marks=False)
+    def test_a_trial_leaves_the_release_out_of_the_docs_and_the_mod_and_gives_it_the_test_version(self):
+        _, _, given = self.write(trial=True)
         self.assertIsNone(given["release"])
         self.assertIsNone(given["description"])
+        self.assertEqual(given["mod"][-1], release.files.TEST_VERSION)
 
 
 class FileTest(unittest.TestCase):
@@ -737,6 +763,210 @@ class FileTest(unittest.TestCase):
                     z.namelist(),
                     ["Bazaar SDK/LICENSE", "Bazaar SDK/README.md", "Bazaar SDK/include/CivPluginApi.h"],
                 )
+
+
+class ReleaseChecksTest(unittest.TestCase):
+    CURRENT = version.Version("0.6.0", 6)
+    LOADED = "Plugin Template Plugin 1 loaded (built for API 0.6)."
+    TEMPLATE = release.runner.read_checks(os.path.join(release.common.REPO, "sdk", "plugin-template", "checks.toml"))
+
+    def checks(self, trial):
+        return release.release_checks(self.CURRENT, ["host.civ5mod", "vmc.civ5mod"], self.TEMPLATE, trial)
+
+    def test_a_release_names_itself_and_loads_the_template_then_plays_the_template_s_own_checks(self):
+        checks = self.checks(trial=False)
+        self.assertEqual(checks.mods, ["host.civ5mod", "vmc.civ5mod"] + list(self.TEMPLATE.mods))
+        release.runner.validate(checks)
+        self.assertEqual([release.runner.kind_of(step) for step in checks.steps[:2]], ["description_of", "log"])
+        self.assertEqual(checks.steps[2:], list(self.TEMPLATE.steps))
+        kinds = [release.runner.kind_of(step) for step in self.TEMPLATE.steps]
+        self.assertLess(kinds.index("start_game"), kinds.index("end_turns"))
+        self.assertLess(kinds.index("end_turns"), kinds.index("log"))
+        description = checks.steps[0]
+        self.assertEqual((description["description_of"], description["version"]), (release.mods.HOST_ID, 6))
+        self.assertEqual(description["is"], release.mods.host_description("0.6.0"))
+        self.assertEqual(
+            [step["what"] for step in checks.steps[:2]],
+            [
+                "Bazaar's description in the Mods menu names 0.6.0",
+                "Bazaar.log says the template plugin loaded, built for API 0.6",
+            ],
+        )
+
+    def test_the_loaded_check_finds_the_template_built_for_this_api_only(self):
+        loaded = self.checks(trial=False).steps[1]["has"]
+        self.assertRegex(self.LOADED, loaded)
+        self.assertNotRegex(self.LOADED.replace("0.6", "0.5"), loaded)
+
+    def test_a_trial_build_is_not_asked_to_name_its_release(self):
+        steps = self.checks(trial=True).steps
+        self.assertNotIn("description_of", [key for step in steps for key in step])
+        self.assertEqual(len(steps), 1 + len(self.TEMPLATE.steps))
+
+    def test_the_template_s_checks_must_check_the_mod_its_build_made(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with open(os.path.join(folder, "checks.toml"), "w") as f:
+                f.write('mods = ["Build/Template Plugin"]\n')
+            built = os.path.join(folder, "Build", "Template Plugin")
+            self.assertEqual(release.read_template_checks(folder, built).mods, [built])
+            with self.assertRaisesRegex(SystemExit, "checks.toml checks .+Template Plugin, not .+Other, the mod"):
+                release.read_template_checks(folder, os.path.join(folder, "Build", "Other"))
+
+
+class CheckTest(unittest.TestCase):
+    """check() itself, with the game, the template's build and the runner replaced."""
+
+    CURRENT = version.Version("0.6.0", 6)
+
+    def run_check(self, failed=None, trial=False, built_from=True, files=3, preflight=None, checked=False):
+        with tempfile.TemporaryDirectory() as folder:
+            out = os.path.join(folder, "v0.6.0")
+            os.makedirs(out)
+            for name in release.release_files(self.CURRENT.release)[:files]:
+                with open(os.path.join(out, name), "w") as f:
+                    f.write("x")
+            if built_from:
+                with open(os.path.join(out, release.BUILT_FROM), "w") as f:
+                    f.write("abc123\n")
+            if checked:
+                with open(os.path.join(out, release.CHECKED), "w") as f:
+                    f.write("abc123\n")
+            g = mock.create_autospec(release.game.Game, instance=True)
+            g.preflight.side_effect = preflight
+            template = release.runner.Checks([os.path.join(folder, "Template Plugin")], steps=[{"end_turns": 1}])
+            unzipped = os.path.join(folder, "unzipped SDK")
+            os.makedirs(unzipped)
+            with (
+                mock.patch.object(release, "CHECK_FOLDER", unzipped),
+                mock.patch.object(release.version, "read", return_value=self.CURRENT),
+                mock.patch.object(release, "release_folder", return_value=out),
+                mock.patch.object(release, "TRIAL_FOLDER", out),
+                mock.patch.object(release.game, "Game", return_value=g) as Game,
+                mock.patch.object(release, "build_template", return_value=template) as build,
+                mock.patch.object(release.runner, "run", autospec=True, return_value=failed) as run,
+            ):
+                try:
+                    release.check(trial)
+                    stopped = None
+                except SystemExit as e:
+                    stopped = str(e)
+            checked = os.path.join(out, release.CHECKED)
+            mark = release.read_text(checked) if os.path.exists(checked) else None
+            self.unzipped_left = os.path.exists(unzipped)
+            self.reached = [name for name, step in (("game", Game), ("template", build), ("run", run)) if step.called]
+            if run.called:
+                packages = [os.path.join(out, name) for name in release.release_files(self.CURRENT.release)[:2]]
+                expected = release.release_checks(self.CURRENT, packages, template, trial)
+                self.assertEqual(run.call_args, mock.call(expected, g))
+            return stopped, mark
+
+    def test_missing_release_files_or_build_mark_stop_before_the_game_is_touched(self):
+        for kwargs, why in (
+            ({"files": 2}, "run release.py build first"),
+            ({"built_from": False}, "holds no release build"),
+        ):
+            with self.subTest(**kwargs):
+                stopped, _ = self.run_check(**kwargs)
+                self.assertIn(why, stopped)
+                self.assertEqual(self.reached, [])
+
+    def test_a_game_that_cannot_be_checked_stops_before_the_template_is_built(self):
+        stopped, mark = self.run_check(preflight=release.game.CheckError("Civilization V is already running"))
+        self.assertEqual(stopped, "release: the in-game check could not start: Civilization V is already running")
+        self.assertEqual(self.reached, ["game"])
+        self.assertIsNone(mark)
+
+    def test_a_failed_check_says_why_and_marks_nothing(self):
+        stopped, mark = self.run_check(failed="failed.\nThe end of Bazaar.log:\nx")
+        self.assertEqual(stopped, "release: the in-game check failed.\nThe end of Bazaar.log:\nx")
+        self.assertIsNone(mark)
+
+    def test_a_check_that_cannot_start_keeps_an_earlier_pass(self):
+        preflight = release.game.CheckError("Civilization V is already running")
+        self.assertEqual(self.run_check(preflight=preflight, checked=True)[1], "abc123\n")
+
+    def test_the_unzipped_sdk_goes_whether_the_check_passes_fails_or_cannot_start(self):
+        preflight = release.game.CheckError("Civilization V is already running")
+        for kwargs in ({}, {"failed": "failed."}, {"preflight": preflight}):
+            with self.subTest(**kwargs):
+                self.run_check(**kwargs)
+                self.assertFalse(self.unzipped_left)
+
+    def test_a_failed_check_withdraws_an_earlier_pass_of_the_same_build(self):
+        stopped, mark = self.run_check(failed="failed.", checked=True)
+        self.assertEqual(stopped, "release: the in-game check failed.")
+        self.assertIsNone(mark)
+
+    def test_a_passed_check_marks_the_build_it_checked_and_a_trial_marks_nothing(self):
+        self.assertEqual(self.run_check(), (None, "abc123\n"))
+        self.assertEqual(self.run_check(trial=True, built_from=False), (None, None))
+
+
+class BuildTemplateTest(unittest.TestCase):
+    """build_template on a small SDK zip, with the template's build.cmd replaced by one that makes the mod folders a
+    test names."""
+
+    def build(self, made=("Template Plugin",), change_checker=False):
+        with tempfile.TemporaryDirectory() as folder:
+            source = os.path.join(folder, "zip")
+            template = os.path.join(source, os.path.basename(release.build_sdk.SDK), "plugin-template")
+            checker = os.path.join(template, "bazaar_check")
+            shutil.copytree(
+                os.path.dirname(release.runner.__file__), checker, ignore=shutil.ignore_patterns("__pycache__")
+            )
+            if change_checker:
+                with open(os.path.join(checker, "runner.py"), "a") as f:
+                    f.write("# changed\n")
+            with open(os.path.join(template, "checks.toml"), "w") as f:
+                f.write('mods = ["Build/Template Plugin"]\n')
+            sdk_zip = os.path.join(folder, "sdk.zip")
+            with zipfile.ZipFile(sdk_zip, "w") as z:
+                for path, _, names in os.walk(source):
+                    for name in names:
+                        z.write(os.path.join(path, name), os.path.relpath(os.path.join(path, name), source))
+
+            def build_cmd(command, cwd, env):
+                for name in made:
+                    os.makedirs(os.path.join(cwd, "Build", name))
+                    release.mods.write_modinfo(os.path.join(cwd, "Build", name), name, "id-" + name, "x", [], [])
+                return subprocess.CompletedProcess(command, 0)
+
+            check_folder = os.path.join(folder, "check")
+            with (
+                mock.patch.object(release, "CHECK_FOLDER", check_folder),
+                mock.patch.object(release.subprocess, "run", side_effect=build_cmd),
+            ):
+                try:
+                    checks = release.build_template(sdk_zip)
+                except SystemExit as e:
+                    return None, str(e)
+            return [os.path.relpath(mod, check_folder) for mod in checks.mods], None
+
+    def test_the_template_s_own_checks_are_read_for_the_one_mod_its_build_made(self):
+        mods, _ = self.build()
+        sdk = os.path.basename(release.build_sdk.SDK)
+        self.assertEqual(mods, [os.path.join(sdk, "plugin-template", "Build", "Template Plugin")])
+
+    def test_a_build_that_makes_two_mods_stops(self):
+        _, stopped = self.build(made=("Template Plugin", "Another"))
+        self.assertIn("the template plugin's build made 2 mod folders", stopped)
+
+    def test_an_sdk_whose_checker_is_not_tools_bazaar_check_stops(self):
+        _, stopped = self.build(change_checker=True)
+        self.assertIn("the SDK's copy of the checker differs from tools\\bazaar_check in runner.py.", stopped)
+
+
+class SourceContractTest(unittest.TestCase):
+    """The check reads lines Bazaar and the template plugin write: these tie it to them."""
+
+    def source(self, *parts):
+        return release.read_text(os.path.join(release.common.REPO, *parts), encoding="latin-1")
+
+    def test_the_loaded_line_is_the_one_bazaar_writes(self):
+        (fmt,) = re.findall(
+            r'Log\("(Plugin %s %s loaded \(built for API %d\.%d\)\.)"', self.source("host", "CivHostRuntime.cpp")
+        )
+        self.assertRegex(fmt % ("Template Plugin", "1", 0, 6), release.TEMPLATE_LOADED % (0, 6))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,59 @@
+# Toy Crash crashes as the human player's first turn starts. Bazaar's pop-up names it, the turn is not autosaved, and a
+# game saved anyway warns when it is loaded.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Crash Plugin (v 1)",
+]
+crash_expected = ["Toy Crash"]
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+end_turns = 1
+
+[[steps]]
+lua = "not ContextPtr:IsHidden() and Controls.Message:GetText()"
+state = "BazaarStopped"
+within = 30
+has = "^Toy Crash stopped working, so you will now be returned to the main menu"
+what = "Bazaar's pop-up names Toy Crash"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^Plugin Toy Crash: Faulted \(code 0x[0-9A-F]{8}\) in '
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\s+#00 ToyCrash\.dll\+'
+what = "Bazaar.log has the crash's call stack, from inside Toy Crash"
+
+[[steps]]
+lua = '''(function()
+    local saves, initial = {}, false
+    UI.SaveFileList(saves, GameTypes.GAME_SINGLE_PLAYER, true, true)
+    for _, path in ipairs(saves) do
+        if path:find("\\AutoSave_0001", 1, true) then return false end
+        if path:find("\\AutoSave_Initial", 1, true) then initial = true end
+    end
+    return initial
+end)()'''
+what = "the game started was autosaved, and the turn the crash came in was not"
+
+[[steps]]
+save = "Bazaar check after crash"
+
+[[steps]]
+load = "Bazaar check after crash"
+
+[[steps]]
+lua = '''(function()
+    local player = Players[Game.GetActivePlayer()]
+    for i = 0, player:GetNumNotifications() - 1 do
+        if player:GetNotificationStr(i):find("saved after a plugin stopped working", 1, true) then return true end
+    end
+    return false
+end)()'''
+within = 10
+what = "the save made after the crash warns it may be damaged"

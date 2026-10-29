@@ -110,7 +110,11 @@ def lay_out():
     for path in [HOST_LIB] + [os.path.join(common.SOURCE_ROOT, p) for p in common.SUPPORT_LIBS]:
         shutil.copy(path, lib)
     write_vsprops(["include", "include\\" + engine] + ["include\\" + inc for inc in common.SUPPORT_INCLUDE])
-    shutil.copytree(os.path.join(HERE, "plugin-template"), os.path.join(SDK, "plugin-template"))
+    shutil.copytree(
+        os.path.join(HERE, "plugin-template"),
+        os.path.join(SDK, "plugin-template"),
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     for name in ("README.md", "hand-placed-hooks.md"):
         shutil.copy(os.path.join(HERE, name), SDK)
     for path in (common.LICENSE, common.NOTICE):

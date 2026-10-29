@@ -1,0 +1,32 @@
+# Toy Crash crashes in a Lua function: Lua gets an error, not a crash, and Bazaar's pop-up says it will return the
+# player to the main menu.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Crash Plugin (v 1)",
+]
+crash_expected = ["Toy Crash"]
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+lua = "select(2, pcall(Game.ToyCrashLua))"
+has = "^Toy Crash stopped working in a Lua function and was turned off"
+what = "Lua gets an error, not a crash"
+
+[[steps]]
+lua = "not ContextPtr:IsHidden() and Controls.Message:GetText()"
+state = "BazaarStopped"
+within = 30
+has = "^Toy Crash stopped working, so you will now be returned to the main menu"
+what = "Bazaar's pop-up names Toy Crash"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^Plugin Toy Crash: Faulted \(code 0x[0-9A-F]{8}\) in '
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\s+#00 ToyCrash\.dll\+'
+what = "Bazaar.log has the crash's call stack, from inside Toy Crash"

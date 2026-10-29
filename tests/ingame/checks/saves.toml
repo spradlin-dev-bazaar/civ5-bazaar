@@ -1,0 +1,128 @@
+# Toy Saves keeps its data in saved games and publishes values and a function. Saving and loading brings its data
+# back, and values carry over when the game replaces a unit or a city.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Saves Plugin (v 1)",
+    "../out/MODS/Toy Gold Plugin (v 1)",
+]
+plugin_order = ["ToyGold.dll", "ToySaves.dll"]
+
+[[steps]]
+plugin = "ToySaves.dll"
+status = "Loaded"
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] no saved data: 0 turns$'
+
+[[steps]]
+run = '''local player = Players[Game.GetActivePlayer()]
+for unit in player:Units() do
+    if unit:IsFound() then
+        player:InitCity(unit:GetX(), unit:GetY())
+        unit:Kill(false, -1)
+        break
+    end
+end'''
+
+[[steps]]
+end_turns = 2
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] saved: 0 turns$'
+what = "the autosave as the game starts saves Toy Saves' data"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] unit Warrior \(ID 16385\): 2 turns alive$'
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] city Washington \(ID 8192\): founded by America$'
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] turn 2 of this game for America; capital tile mark 3\.0, big 9007199254740993$'
+what = "the capital's mark grows by 1.5 a turn, and a 64-bit value keeps every digit"
+
+[[steps]]
+log = "Bazaar.log"
+has = "^\\[Toy Gold\\] Toy Saves' TurnsPlayed says 1$"
+what = "Toy Gold calls the function Toy Saves publishes"
+
+[[steps]]
+mark = "before the save"
+
+[[steps]]
+save = "Bazaar check saves"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] saved: 2 turns$'
+since = "before the save"
+
+[[steps]]
+end_turns = 1
+
+[[steps]]
+mark = "before loading in the game"
+
+[[steps]]
+load = "Bazaar check saves"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] loaded: 2 turns$'
+since = "before loading in the game"
+
+[[steps]]
+end_turns = 1
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] turn 3 of this game for America; capital tile mark 4\.5, big 9007199254740993$'
+count = 2
+what = "the turn after the load matches the one played before it"
+
+[[steps]]
+run = '''id = "b012c631-4178-4d68-99af-7c2fcf5d3701"
+p = Game.GetActivePlayer()
+me = Players[p]
+for unit in me:Units() do old = unit; break end
+oldCount = Game.GetPluginValue(id, "", "TurnsAlive", p, old:GetID())
+newUnit = me:InitUnit(GameInfoTypes.UNIT_SPEARMAN, old:GetX(), old:GetY())
+newUnit:Convert(old, true)
+newCount = Game.GetPluginValue(id, "", "TurnsAlive", p, newUnit:GetID())
+for i = GameDefines.MAX_MAJOR_CIVS, GameDefines.MAX_CIV_PLAYERS - 1 do
+    if Players[i]:IsAlive() and Players[i]:GetCapitalCity() then cityState = i; break end
+end
+local city = Players[cityState]:GetCapitalCity()
+founderBefore = Game.GetPluginValue(id, "", "Founder", cityState, city:GetID())
+local x, y = city:GetX(), city:GetY()
+me:AcquireCity(city, true, false)
+founderAfter = Game.GetPluginValue(id, "", "Founder", p, Map.GetPlot(x, y):GetPlotCity():GetID())'''
+
+[[steps]]
+lua = "oldCount > 0 and newCount == oldCount"
+what = "a unit the game replaces carries over its turns alive"
+
+[[steps]]
+log = "Bazaar.log"
+has = "^\\[Toy Saves\\] unit replaced: player 0's unit \\d+ is now .+, [1-9]\\d* turns alive$"
+
+[[steps]]
+lua = 'type(founderBefore) == "string" and founderBefore ~= "" and founderAfter == founderBefore'
+what = "a city that changes hands keeps its founder"
+
+[[steps]]
+log = "Bazaar.log"
+has = '^\[Toy Saves\] city replaced: .+ founded by .+$'
+
+[[steps]]
+lua = 'Game.GetPluginValue("b012c631-4178-4d68-99af-7c2fcf5d3701", "", "TurnsAlive", Game.GetActivePlayer(), 0) == nil'
+what = "a unit ID no unit has reads as nil"

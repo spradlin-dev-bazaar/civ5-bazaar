@@ -28,14 +28,11 @@ Ask the developer before each step that publishes something or changes git: comm
 
 ## 4. Check in the game
 
-This step is the developer's: explain it, then wait for the result. Skip it when Bazaar's mod is the same as at the last release apart from its version number and the release its description names, as in a release that only updates the SDK or the docs.
+Run `.venv\Scripts\python.exe tools\release.py check`. With nobody at the keyboard, it builds the template plugin from the release's SDK zip, puts the release's two packages and the template into MODS, and starts Civilization V through Steam. It checks that Bazaar's description in the Mods menu names the release and that the template loaded for the release's API, then plays the template's own `checks.toml`, the file plugin authors start from: a turn, the template's log line and its Lua function. It also checks that no plugin crashed and `Lua.log` has no Lua errors. Then it closes the game and puts back everything it changed in the developer's Civilization V folder, MODS included. It takes a few minutes and needs Civilization V closed, `EnableTuner = 1` and `LoggingEnabled = 1` in its `config.ini`, and DirectX 11 chosen the last time the game was started from Steam.
 
-1. Move any other Bazaar folders, such as test builds, out of `Documents\My Games\Sid Meier's Civilization 5\MODS`.
-2. Copy the two `.civ5mod` files from `dist\v<number>\` into MODS. The game unpacks them when it starts.
-3. Unzip the SDK zip into a folder outside the repository, run `Bazaar SDK\plugin-template\build.cmd` there, and copy the folder it makes, `Build\Template Plugin`, into MODS.
-4. In the game's Mods menu, select Bazaar Multi-DLL Mod Loader: its description must end with `This is Bazaar <number>.`
-5. In the game's Mods menu, turn on Bazaar - VMC Bootstrap (required), Bazaar Multi-DLL Mod Loader and Template Plugin, and start a game.
-6. `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log` must show `Plugin Template Plugin 1 loaded`, and a line from the template at the start of each turn.
+When it passes, it marks the build as checked, and `publish` refuses a build without the mark; a later check that fails takes the mark away. It stops at once if the SDK's copy of the checker differs from `tools\bazaar_check`. Skip it only for a release that changes nothing but the docs; `publish` then needs `--no-check`. A release that changes the SDK runs it, since the SDK holds the checker, which only this check runs in the game.
+
+When Bazaar's own code changed since the last release, also run `.venv\Scripts\python.exe tests\ingame\run.py`, which checks the test plugins in the game in about ten minutes; it works on any branch. The release's files can be checked before step 2 too: `release.py build --trial`, then `release.py check --trial`.
 
 If anything fails, stop. The fix goes to main through a pull request, and the release starts again at step 1, since the fix may change the number.
 
