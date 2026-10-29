@@ -1,6 +1,8 @@
 # Checking a mod in Civilization V
 
-`check.cmd` builds your mod, then plays `checks.toml` in Civilization V with nobody at the keyboard: it starts the game, switches your mod on, plays the steps the file lists, and prints a line for each check, PASS or FAIL. Afterwards it closes the game and puts your own setup back. A run of a template's checks takes two or three minutes. Run it from a Command Prompt, so the results stay on screen when it ends.
+`check.cmd` builds your mod, then plays `checks.toml` in Civilization V with nobody at the keyboard: it starts the game, switches your mod on, plays the steps the file lists, and prints a line for each check, PASS or FAIL. Afterwards it closes the game and puts back everything it changed in your Civilization V folder. A run of a template's checks takes two or three minutes. Run it from a Command Prompt, so the results stay on screen when it ends.
+
+`play.cmd` is for trying your mod by hand. It builds the mod, starts Civilization V with it and the mods it needs switched on, and leaves the game to you: set up a game and play, full screen if that is how you play. FireTuner can connect while you play. Leave its window open. When you close the game, your files go back as after a check: your own autosaves come back in place of the ones your game made, and `config.ini` and the Mods menu go back as they were. Saves you make yourself stay, so save by hand to keep a game. Ctrl+C in its window only says how to finish; a second Ctrl+C stops `play.cmd` and leaves the game open, and the next run of `check.cmd` or `play.cmd` puts your files back. You can start `play.cmd` by double-clicking it: if it fails, its window waits for a key, so you can read why.
 
 The checker is the `bazaar_check` folder beside `check.cmd`. It is the same one Bazaar uses to check its own releases.
 
@@ -11,18 +13,20 @@ The checker is the `bazaar_check` folder beside `check.cmd`. It is the same one 
 - **DirectX 11 chosen in Steam.** The checker starts the game through Steam, which starts the version you chose the last time you played. Start Civilization V from Steam once and choose DirectX 11.
 - **Bazaar and Bazaar - VMC Bootstrap (required) installed**, from the Steam Workshop or Bazaar's GitHub release, if your mod needs Bazaar.
 
-Close Civilization V before each run, and FireTuner too: the tuner port takes one program at a time.
+Close Civilization V before each run, and FireTuner too: the tuner port takes one program at a time. Runs go one at a time too: a run started while another is going stops at once.
 
 ## What a run does
 
 1. `check.cmd` builds the mod, as `build.cmd` does.
-2. The checker copies each mod `checks.toml` names into your MODS folder, replacing an older copy of the same mod. A mod folder that is already in MODS is checked where it is. If MODS holds another copy of the same mod and version under a different folder name, such as a package the game unpacked or a Workshop download, the run stops and names it: move it out of MODS.
-3. It copies your Mods menu choices, plugin order, `config.ini` and autosaves to a folder in Windows' temporary folder, and says where. That folder also gets a `where these go.txt` naming where each copy belongs.
-4. It writes the run's seed into `config.ini` and starts Civilization V through Steam.
+2. The checker copies your Mods menu choices, plugin order, `config.ini`, `GraphicsSettingsDX11.ini`, autosaves, the saves of the names `checks.toml` saves under and the folders in MODS it is about to replace to a folder in Windows' temporary folder, and says where. That folder also gets a `where these go.txt` naming where each copy belongs.
+3. It copies each mod `checks.toml` names into your MODS folder, replacing an older copy of the same mod. A mod folder that is already in MODS is checked where it is. If MODS holds another copy of the same mod and version under a different folder name, such as a package the game unpacked or a Workshop download, the run stops and names it: move it out of MODS.
+4. It writes the run's seed into `config.ini`, sets `FullScreen = 0` in `GraphicsSettingsDX11.ini`, since a full-screen game stops answering once another window is in front of it, and starts Civilization V through Steam.
 5. It switches on the mods `checks.toml` names, and the mods they need, and no others. For a mod they need, it takes the newest installed version their dependencies allow, leaving out test builds (mod version 900 or above) unless `checks.toml` names one.
 6. It plays the steps.
-7. It closes the game and puts back everything it copied, even when a check failed or the game crashed. Your mod stays in MODS.
+7. It closes the game and puts back everything it copied, even when a check failed or the game crashed. The mods it added to MODS go, the folders it replaced come back, and the saves it made go.
 8. It checks that no plugin stopped working, even as the game closed, and that `Lua.log` has no Lua errors.
+
+It does not put back the game's logs, which the game starts afresh each time, or what mods keep in `ModUserData` apart from Bazaar's plugin order.
 
 Unless `checks.toml` sets `seed = 0`, every run starts the game with the same seed, and every `start_game` step sets up the same game: America against Rome, Prince difficulty, standard speed, ancient era, on a duel-sized Continents map. Other game options come from the game's own setup screen, as you last left them. So until your mod, Bazaar or those options change, every run of a checks file on your computer plays the same game, and the AI makes the same moves on the same turns.
 
@@ -45,7 +49,7 @@ Each step is a table with one action:
 |---|---|
 | `start_game = "duel"` | Starts a new game on a duel-sized Continents map, the only size it starts. |
 | `end_turns = 3` | Ends that many turns. Before each, it spends every unit's moves and picks a unit to train in idle cities and something to research. A pop-up that holds up the turn is closed. |
-| `save = "name"` | Saves the game under that name, in `ModdedSaves\single`, replacing a save of the same name. The save stays after the run. |
+| `save = "name"` | Saves the game under that name, in `ModdedSaves\single`. After the run the save goes, and a save of the same name you had comes back. |
 | `load = "name"` | Loads that save. |
 | `main_menu = true` | Goes back to the main menu. |
 | `run = "Lua code"` | Runs Lua in the game. `state = "MainMenu"` runs it in another Lua state; the default is `InGame`. |
@@ -87,5 +91,5 @@ lua = "Players[Game.GetActivePlayer()]:GetScore() > 0"
 
 - **A check failed:** the FAIL line says what the check found, and the end of `Bazaar.log` follows. `Bazaar.log` and `Lua.log` keep everything the run wrote until the game next starts.
 - **The run could not finish:** the message says why, such as a step `checks.toml` gets wrong, a mod the game would not switch on, or a turn that would not end. It names what the game was waiting for.
-- **The game crashed or would not close:** the checker still puts your files back. While the game is still running, it leaves the Mods menu choices, `config.ini` and autosaves, which the game holds, and names the folder with the copies. Close the game, then put them back as `where these go.txt` in that folder says, and delete the folder.
-- **A run was stopped before it put your files back,** for example by closing its window: the next run refuses to start until you have put the copies back as `where these go.txt` says and deleted their folder, so it never copies the stopped run's changes as yours.
+- **The game crashed or would not close:** the checker still puts your files back. While the game is still running, it leaves what the game holds, the Mods menu choices, `config.ini`, `GraphicsSettingsDX11.ini`, autosaves and MODS, and names the folder with the copies. Close the game: the next run, or `play.cmd`, puts them back first. To do it by hand instead, follow `where these go.txt` in that folder, then delete the folder.
+- **A run was stopped before it put your files back,** for example by closing its window: the next run, or `play.cmd`, puts the copies back first, once the game is closed, and says so. A file that changed after the run stopped, such as an autosave of a game you played since, stays as it is, and the message names it. Your Mods menu choices go back all the same, undoing any change you made to them since, as do the lines the run set in `config.ini` and `GraphicsSettingsDX11.ini`.

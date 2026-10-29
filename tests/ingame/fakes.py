@@ -36,7 +36,8 @@ class FakeClock:
 
 
 def use_own_temp(test):
-    """A check refuses to start while an earlier one's copies are in the temp folder, so each test gets its own."""
+    """A check puts back, or refuses to start over, the copies an earlier one left in the temp folder, so each test
+    gets its own."""
     folder = tempfile.mkdtemp()
     test.addCleanup(shutil.rmtree, folder, True)
     patcher = mock.patch.object(tempfile, "tempdir", folder)

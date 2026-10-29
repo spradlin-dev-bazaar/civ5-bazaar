@@ -421,7 +421,7 @@ class PublishTest(unittest.TestCase):
             self.assertIn("have not passed release.py check", message)
             self.assertNotIn("tag", calls)
 
-    def test_no_check_publishes_a_release_that_only_changes_the_sdk_or_docs(self):
+    def test_no_check_publishes_a_release_that_only_changes_the_docs(self):
         message, calls = self.publish(checked=None, no_check=True)
         self.assertIsNone(message)
         self.assertIn("push", calls)
@@ -834,7 +834,10 @@ class CheckTest(unittest.TestCase):
             g = mock.create_autospec(release.game.Game, instance=True)
             g.preflight.side_effect = preflight
             template = release.runner.Checks([os.path.join(folder, "Template Plugin")], steps=[{"end_turns": 1}])
+            unzipped = os.path.join(folder, "unzipped SDK")
+            os.makedirs(unzipped)
             with (
+                mock.patch.object(release, "CHECK_FOLDER", unzipped),
                 mock.patch.object(release.version, "read", return_value=self.CURRENT),
                 mock.patch.object(release, "release_folder", return_value=out),
                 mock.patch.object(release, "TRIAL_FOLDER", out),
@@ -849,6 +852,7 @@ class CheckTest(unittest.TestCase):
                     stopped = str(e)
             checked = os.path.join(out, release.CHECKED)
             mark = release.read_text(checked) if os.path.exists(checked) else None
+            self.unzipped_left = os.path.exists(unzipped)
             self.reached = [name for name, step in (("game", Game), ("template", build), ("run", run)) if step.called]
             if run.called:
                 packages = [os.path.join(out, name) for name in release.release_files(self.CURRENT.release)[:2]]
@@ -880,6 +884,13 @@ class CheckTest(unittest.TestCase):
     def test_a_check_that_cannot_start_keeps_an_earlier_pass(self):
         preflight = release.game.CheckError("Civilization V is already running")
         self.assertEqual(self.run_check(preflight=preflight, checked=True)[1], "abc123\n")
+
+    def test_the_unzipped_sdk_goes_whether_the_check_passes_fails_or_cannot_start(self):
+        preflight = release.game.CheckError("Civilization V is already running")
+        for kwargs in ({}, {"failed": "failed."}, {"preflight": preflight}):
+            with self.subTest(**kwargs):
+                self.run_check(**kwargs)
+                self.assertFalse(self.unzipped_left)
 
     def test_a_failed_check_withdraws_an_earlier_pass_of_the_same_build(self):
         stopped, mark = self.run_check(failed="failed.", checked=True)

@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 from fakes import (
+    write_mod,
     PLAYER_AUTOSAVES,
     TASKLIST_DX11,
     TASKLIST_NONE,
@@ -123,7 +124,45 @@ class SessionTest(UserFolderTest):
         self.assertEqual(self.mods(), b"the player's mods")
         self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
         self.assertFalse(os.path.exists(self.copies_folder(g)))
-        self.assertEqual(g.said[-1], "your Mods menu choices, config.ini and autosaves are as they were")
+        self.assertEqual(
+            g.said[-1], "back as before this run: Mods menu choices, plugin order, config.ini and autosaves"
+        )
+
+    def test_a_windowed_run_starts_the_game_in_a_window_and_puts_the_setting_back(self):
+        write_files(self.user, {files.GRAPHICS: b"FullScreen = 1\r\n"})
+        g = self.scripted()
+        with game.session(g, 1, windowed=True):
+            self.assertEqual(read_files(self.user)[files.GRAPHICS], b"FullScreen = 0\r\n")
+        self.assertEqual(read_files(self.user)[files.GRAPHICS], b"FullScreen = 1\r\n")
+        self.assertTrue(g.said[-1].endswith("config.ini, GraphicsSettingsDX11.ini and autosaves"))
+
+    def test_a_game_handed_to_the_player_is_left_for_them_to_close(self):
+        g = self.scripted()
+        with game.session(g, 1):
+            g.handed_over = True
+        self.assertEqual(g.calls, ["start"])
+        self.assertEqual((self.mods(), self.autosaves()), (b"the player's mods", PLAYER_AUTOSAVES))
+
+    def test_the_mods_a_run_installs_go_and_the_ones_it_replaced_come_back(self):
+        g = self.scripted()
+        write_mod(self.path("MODS", "Kept Mod"), "kept", content=[("Kept.lua", "the player's")])
+        checked = write_mod(self.path("build", "Kept Mod"), "kept", content=[("Kept.lua", "the check's")])
+        added = write_mod(self.path("build", "Added Mod"), "added")
+        staged = g.files.stage_all([checked, added], self.user)
+        with game.session(g, 1, staged) as expected:
+            self.assertEqual(expected, [checked, added])
+            self.assertEqual(sorted(os.listdir(self.path("MODS"))), ["Added Mod", "Kept Mod"])
+            self.assertEqual(read_files(self.path("MODS", "Kept Mod"))["Kept.lua"], b"the check's")
+        self.assertEqual(os.listdir(self.path("MODS")), ["Kept Mod"])
+        self.assertEqual(read_files(self.path("MODS", "Kept Mod"))["Kept.lua"], b"the player's")
+
+    def test_the_saves_a_run_makes_go_and_the_ones_it_replaced_come_back(self):
+        g = self.scripted()
+        write_files(self.user, {files.save_rel("Kept"): b"the player's"})
+        with game.session(g, 1, saves=["Kept", "New"]):
+            write_files(self.user, {files.save_rel("Kept"): b"the check's", files.save_rel("New"): b"the check's"})
+        self.assertEqual(read_files(self.user)[files.save_rel("Kept")], b"the player's")
+        self.assertFalse(os.path.exists(self.path(files.save_rel("New"))))
 
     def test_a_failing_check_still_puts_everything_back_and_keeps_its_error(self):
         g = self.scripted()
@@ -143,7 +182,7 @@ class SessionTest(UserFolderTest):
         g = self.scripted(quit=CheckError("Civilization V closing did not happen"))
         with mock.patch.object(game, "game_processes", return_value=["civilizationv_dx11.exe"]):
             with self.assertRaisesRegex(
-                CheckError, "Mods menu choices, config.ini and autosaves were not put back.+the copies"
+                CheckError, "these wait to be put back: Mods menu choices, config.ini and autosaves; the copies stay"
             ):
                 with game.session(g, 1):
                     pass
@@ -260,7 +299,7 @@ class StartedSessionTest(UserFolderTest):
             with game.session(self.game, 1):
                 pass
         startfile.assert_called_once_with(game.GAME_URL)
-        self.assertEqual(files.leftover_copies(), [])
+        self.assertEqual(files.copies_folders(), [])
 
     def test_a_refused_directx_9_game_is_closed_and_every_file_put_back(self):
         config = CONFIG_INI + b"LoggingEnabled = 1\r\n"
@@ -279,7 +318,7 @@ class StartedSessionTest(UserFolderTest):
                     pass
         quit.assert_called_once_with(60)
         self.assertEqual(read_files(self.user)[files.CONFIG], config)
-        self.assertEqual(files.leftover_copies(), [])
+        self.assertEqual(files.copies_folders(), [])
 
 
 class SaveTest(UserFolderTest):
@@ -456,6 +495,60 @@ class WaitTest(UserFolderTest):
         ):
             g.wait("the game loading", ready, 60)
         connect.assert_called_once()
+
+    def test_the_game_is_left_to_the_player_until_two_looks_find_it_closed(self):
+        g = game.Game(say=lambda text: None, user=self.user)
+        with (
+            mock.patch.object(game, "game_processes", side_effect=[DX11, [], DX11, [], []]) as processes,
+            mock.patch.object(g.tuner, "close") as close,
+            mock.patch.object(g.files, "beat") as beat,
+            mock.patch.object(game, "time", FakeClock()),
+        ):
+            g.wait_until_closed()
+        close.assert_called_once()
+        self.assertEqual((processes.call_count, beat.call_count), (5, 5))
+        self.assertTrue(g.handed_over)
+
+    def test_a_first_ctrl_c_says_how_to_finish_and_a_second_leaves_the_game_open(self):
+        said = []
+        g = game.Game(say=said.append, user=self.user)
+        clock = FakeClock()
+        clock.sleep = mock.Mock(side_effect=[KeyboardInterrupt, None, KeyboardInterrupt])
+        with (
+            mock.patch.object(game, "game_processes", return_value=DX11),
+            mock.patch.object(g.tuner, "close"),
+            mock.patch.object(game, "time", clock),
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                g.wait_until_closed()
+        self.assertEqual(len(said), 1)
+        self.assertTrue(said[0].startswith("Close Civilization V to finish"))
+
+    def test_quitting_connects_again_when_the_port_was_let_go(self):
+        g = game.Game(say=lambda text: None, user=self.user)
+        with (
+            mock.patch.object(game, "game_processes", side_effect=[DX11, []]),
+            mock.patch.object(g.tuner, "connect") as connect,
+            mock.patch.object(g, "live_state", return_value=game.FRONT_END),
+            mock.patch.object(g, "lua") as lua,
+            mock.patch.object(game, "time", FakeClock()),
+        ):
+            g.quit()
+        connect.assert_called_once_with(10)
+        lua.assert_called_once_with(game.FRONT_END, "UI.ExitGame()", timeout=10)
+
+    def test_quitting_uses_the_connection_it_has(self):
+        g = game.Game(say=lambda text: None, user=self.user)
+        with (
+            mock.patch.object(type(g.tuner), "connected", new_callable=mock.PropertyMock, return_value=True),
+            mock.patch.object(g.tuner, "connect") as connect,
+            mock.patch.object(g, "live_state", return_value=game.IN_GAME),
+            mock.patch.object(g, "lua") as lua,
+            mock.patch.object(game, "time", FakeClock()),
+        ):
+            g.quit()
+        connect.assert_not_called()
+        lua.assert_called_once_with(game.IN_GAME, "UI.ExitGame()", timeout=10)
 
     def test_a_game_that_closed_ends_the_wait_at_once(self):
         g = game.Game(say=lambda text: None, user=self.user)

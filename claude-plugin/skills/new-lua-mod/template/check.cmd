@@ -8,5 +8,5 @@ for %%p in ("py -3" python) do if not defined PYTHON call %%~p -c "import sys; s
 if not defined PYTHON (echo The checks need Python 3.11 or newer: install it from python.org. & exit /b 1)
 call "%~dp0build.cmd" || exit /b 1
 cd /d "%~dp0"
-call %PYTHON% -m bazaar_check checks.toml
+call %PYTHON% -m bazaar_check %* checks.toml
 endlocal & exit /b %ERRORLEVEL%

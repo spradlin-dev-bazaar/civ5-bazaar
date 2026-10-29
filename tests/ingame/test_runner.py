@@ -192,6 +192,8 @@ class ReadChecksTest(FolderTest):
             ('[[steps]]\nlua = "x"\nwithin = 0\n', "within needs 1 or more seconds"),
             ('[[steps]]\nplugin = "A.dll"\nstatus = "Not Loaded"\n', 'step 1 \\(plugin\\): status is one of "Loaded"'),
             ('[[steps]]\nlog = "Bazaar.log"\nlacks = "x"\nwithin = 5\n', "within waits for a line to appear"),
+            ('[[steps]]\nsave = "a/b"\n', "step 1 \\(save\\) needs a name that can be a file name"),
+            ('[[steps]]\nload = " . "\n', "step 1 \\(load\\) needs a name that can be a file name"),
         ]
         for steps, why in cases:
             with self.subTest(steps=steps):
@@ -274,13 +276,13 @@ class PlayTest(FolderTest):
         g = FakeGame(self.root, self.installed, **fake)
         checks = runner.Checks([self.plugin], [], list(steps), crash_expected, lua_errors_expected)
         results = []
-        runner.play(checks, g, [self.plugin], results)
+        runner.play_steps(checks, g, [self.plugin], results)
         results.extend(runner.final_checks(checks, g))
         return g, results
 
     def test_the_plugin_order_is_written_before_bazaar_loads_the_plugins(self):
         g = FakeGame(self.root, self.installed)
-        runner.play(runner.Checks([self.plugin], ["A.dll"]), g, [self.plugin], [])
+        runner.play_steps(runner.Checks([self.plugin], ["A.dll"]), g, [self.plugin], [])
         self.assertEqual(g.order_at_activate, b"load\tA.dll\t\t\r\n")
 
     def test_every_method_of_the_fake_is_one_the_game_has_called_the_same_way(self):
@@ -496,46 +498,130 @@ class RunChecksTest(FolderTest):
         done, staging = [], []
         g.preflight.side_effect = lambda: done.append("preflight")
 
-        def install(sources, folder):
-            done.append("install")
+        def stage_all(sources, folder):
+            done.append("stage")
             staging.append(folder)
-            return ["expected"]
+            return [("staged", "target")]
 
         @contextlib.contextmanager
-        def session(game, seed):
-            done.append("session with seed %d" % seed)
-            yield game
+        def session(game, seed, staged, saves, windowed):
+            done.append("session with seed %d and saves %s%s" % (seed, saves, ", windowed" if windowed else ""))
+            yield ["expected"]
             done.append("game closed")
 
-        g.files.install.side_effect = install
+        g.files.stage_all.side_effect = stage_all
+
+        def put_back_leftovers():
+            with self.assertRaisesRegex(CheckError, "another check is running"):
+                with files.one_run_at_a_time():
+                    pass
+            done.append("leftovers put back")
+
+        g.files.put_back_leftovers.side_effect = put_back_leftovers
         g.log.side_effect = lambda name="Bazaar.log": done.append("read " + name) or []
-        with mock.patch.object(game, "session", session), mock.patch.object(runner, "play", side_effect=play):
+        with mock.patch.object(game, "session", session), mock.patch.object(runner, "play_steps", side_effect=play):
             try:
-                runner.run_checks(runner.Checks(["a"]), g, [])
+                runner.run_checks(runner.Checks(["a"], steps=[{"save": "Kept"}]), g, [])
             finally:
                 self.done, self.staging = done, staging[0] if staging else None
 
-    def test_the_mods_go_in_only_once_the_game_is_closed_and_before_it_starts(self):
+    def test_an_earlier_check_s_copies_go_back_before_the_mods_are_staged_with_the_game_closed(self):
         self.run_checks(lambda checks, g, expected, results: None)
-        self.assertEqual(self.done[:3], ["preflight", "install", "session with seed %d" % runner.DEFAULT_SEED])
+        self.assertEqual(
+            self.done[:4],
+            [
+                "preflight",
+                "leftovers put back",
+                "stage",
+                "session with seed %d and saves ['Kept'], windowed" % runner.DEFAULT_SEED,
+            ],
+        )
         self.assertFalse(os.path.exists(self.staging))
-
-    def test_copies_an_earlier_check_left_stop_the_run_before_any_mod_is_installed(self):
-        with mock.patch.object(files, "leftover_copies", return_value=["Bazaar check copies abc"]):
-            with self.assertRaisesRegex(
-                CheckError, "copies an earlier check made are still in Bazaar check copies abc"
-            ):
-                self.run_checks(lambda checks, g, expected, results: None)
-        self.assertEqual(self.done, ["preflight"])
 
     def test_crashes_and_lua_errors_are_read_once_the_game_has_closed(self):
         self.run_checks(lambda checks, g, expected, results: None)
-        self.assertEqual(self.done[3:], ["game closed", "read Bazaar.log", "read Lua.log"])
+        self.assertEqual(self.done[4:], ["game closed", "read Bazaar.log", "read Lua.log"])
 
     def test_the_staging_folder_goes_even_when_a_check_fails(self):
         with self.assertRaises(CheckError):
             self.run_checks(mock.Mock(side_effect=CheckError("turn 1 cannot end")))
         self.assertFalse(os.path.exists(self.staging))
+
+
+class PlayByHandTest(FolderTest):
+    def play_by_hand(self, until_closed):
+        """What play_by_hand returned, with wait_until_closed doing until_closed; self.done is the order it went in."""
+        g = mock.create_autospec(game.Game, instance=True)
+        g.files = mock.create_autospec(files.PlayerFiles, instance=True)
+        done = self.done = []
+        g.preflight.side_effect = lambda: done.append("preflight")
+        g.files.put_back_leftovers.side_effect = lambda: done.append("leftovers put back")
+        g.files.stage_all.return_value = [("staged", "target")]
+        g.handed_over = False
+        g.wait_until_closed.side_effect = lambda: until_closed(g)
+        g.say = lambda text: None
+
+        @contextlib.contextmanager
+        def session(game, seed=None, staged=(), saves=(), windowed=False):
+            done.append("session with seed %s, %s, windowed %s" % (seed, staged, windowed))
+            try:
+                yield ["expected"]
+            finally:
+                done.append("everything put back")
+
+        def switch_on(checks, g, expected):
+            done.append("switched on %s" % expected)
+
+        with mock.patch.object(game, "session", session), mock.patch.object(runner, "switch_on", side_effect=switch_on):
+            return runner.play_by_hand(runner.Checks(["a"]), g)
+
+    def test_the_mods_are_switched_on_then_the_game_is_left_to_the_player_until_it_closes(self):
+        self.assertIsNone(self.play_by_hand(lambda g: self.done.append("played until closed")))
+        self.assertEqual(
+            self.done,
+            [
+                "preflight",
+                "leftovers put back",
+                "session with seed None, [('staged', 'target')], windowed False",
+                "switched on ['expected']",
+                "played until closed",
+                "everything put back",
+            ],
+        )
+
+    def test_stopping_with_the_game_open_says_the_next_run_puts_the_files_back(self):
+        def handed_over_then_stopped(g):
+            g.handed_over = True
+            raise KeyboardInterrupt
+
+        stopped = self.play_by_hand(handed_over_then_stopped)
+        self.assertEqual(
+            stopped, "stopped with the game still open: the next run of check.cmd or play.cmd puts your files back"
+        )
+        self.assertEqual(self.done[-1], "everything put back")
+
+    def test_stopping_before_the_game_is_handed_over_says_only_that(self):
+        self.assertEqual(self.play_by_hand(mock.Mock(side_effect=KeyboardInterrupt)), "stopped")
+
+    def test_a_problem_says_why_playing_stopped(self):
+        stopped = self.play_by_hand(mock.Mock(side_effect=CheckError("Civilization V closed while starting")))
+        self.assertEqual(stopped, "stopped: Civilization V closed while starting")
+
+    def test_main_plays_by_hand_and_says_why_playing_stopped(self):
+        path = os.path.join(self.root, "checks.toml")
+        with open(path, "w") as f:
+            f.write('mods = ["a"]\n')
+        for stopped, code, printed_line in ((None, 0, ""), ("stopped", 1, "Playing stopped\n")):
+            with self.subTest(stopped=stopped):
+                printed = io.StringIO()
+                with (
+                    mock.patch.object(game, "Game"),
+                    mock.patch.object(runner, "play_by_hand", return_value=stopped) as play,
+                    contextlib.redirect_stdout(printed),
+                ):
+                    self.assertEqual(runner.main(["--play", path]), code)
+                self.assertEqual(play.call_args[0][0].mods, [os.path.join(self.root, "a")])
+                self.assertEqual(printed.getvalue(), printed_line)
 
 
 class RunTest(unittest.TestCase):
@@ -627,6 +713,7 @@ class RunTest(unittest.TestCase):
         with mock.patch.object(game, "Game") as Game, contextlib.redirect_stdout(printed):
             self.assertEqual(runner.main([os.path.join(HERE, "no such checks.toml")]), 1)
             self.assertEqual(runner.main([]), 2)
+            self.assertEqual(runner.main(["--play"]), 2)
         Game.assert_not_called()
         self.assertIn("no such checks.toml could not be read", printed.getvalue())
 

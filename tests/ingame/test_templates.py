@@ -43,11 +43,13 @@ class TemplatesTest(unittest.TestCase):
             with self.subTest(template=template):
                 self.assertEqual(sync_checker.differences(copy), [], "run tools/sync_checker.py")
 
-    def test_both_templates_have_the_same_check_cmd(self):
-        first, second = (os.path.join(template, "check.cmd") for template in TEMPLATES)
-        self.assertTrue(filecmp.cmp(first, second, shallow=False))
+    def test_both_templates_have_the_same_check_cmd_and_play_cmd(self):
+        for name in ("check.cmd", "play.cmd"):
+            with self.subTest(name=name):
+                first, second = (os.path.join(template, name) for template in TEMPLATES)
+                self.assertTrue(filecmp.cmp(first, second, shallow=False))
 
-    def check_cmd(self, build="echo built", python=True):
+    def check_cmd(self, build="echo built", python=True, script="check.cmd", shim='@"%s" %%*' % sys.executable):
         """check.cmd run from a folder with brackets in its name, with a stub build.cmd and a checks.toml the checker
         refuses at once, finding Python only as a .bat, as pyenv-win's python is."""
         with tempfile.TemporaryDirectory() as folder:
@@ -60,11 +62,15 @@ class TemplatesTest(unittest.TestCase):
             shims = os.path.join(folder, "shims")
             os.makedirs(shims)
             with open(os.path.join(shims, "python.bat"), "w") as f:
-                f.write('@"%s" %%*\n' % sys.executable)
+                f.write(shim + "\n")
             path = [shims] if python else []
             env = dict(os.environ, PATH=os.pathsep.join(path + [os.path.join(os.environ["SystemRoot"], "System32")]))
             done = subprocess.run(
-                ["cmd", "/c", os.path.join(template, "check.cmd")], capture_output=True, text=True, env=env
+                ["cmd", "/c", os.path.join(template, script)],
+                capture_output=True,
+                text=True,
+                env=env,
+                stdin=subprocess.DEVNULL,
             )
             left = os.listdir(os.path.join(template, "bazaar_check"))
         return done.returncode, [line.rstrip() for line in done.stdout.splitlines()], left
@@ -73,6 +79,15 @@ class TemplatesTest(unittest.TestCase):
         code, printed, left = self.check_cmd()
         self.assertEqual((code, printed), (1, ["built", "checks.toml: the checks name no mods"]))
         self.assertNotIn("__pycache__", left)
+
+    def test_play_cmd_builds_then_runs_the_checker_to_play(self):
+        _, printed, _ = self.check_cmd(script="play.cmd", shim="@echo python %*\n@exit /b 0")
+        self.assertEqual(printed, ["built", "python -m bazaar_check --play checks.toml"])
+
+    def test_play_cmd_waits_for_a_key_when_it_fails_so_its_window_stays_open(self):
+        code, printed, _ = self.check_cmd(build="exit /b 3", script="play.cmd")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(printed), 1, "the line pause prints")
 
     def test_check_cmd_stops_before_building_without_python(self):
         code, printed, _ = self.check_cmd(python=False)

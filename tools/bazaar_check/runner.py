@@ -1,14 +1,15 @@
 """Run a checks file: start Civilization V with the mods it names and the mods they depend on, play its steps, check
-what happened, and put back the player's Mods menu choices, plugin order, config.ini and autosaves.
+what happened, and put back everything the run changed in the player's folder. With --play, switch the mods on and
+leave the game to the player instead; closing it puts everything back.
 
     python -m bazaar_check checks.toml
+    python -m bazaar_check --play checks.toml
 """
 
 import collections
 import contextlib
 import os
 import re
-import shutil
 import tempfile
 import tomllib
 
@@ -83,6 +84,8 @@ def check_step(number, step):
         raise CheckError(
             "step %d (plugin): status is one of %s" % (number, ", ".join('"%s"' % status for status in STATUSES))
         )
+    if kind in ("save", "load") and (re.search(r'[\\/:*?"<>|]', step[kind]) or not step[kind].strip(" .")):
+        raise CheckError('step %d (%s) needs a name that can be a file name: no \\ / : * ? " < > |' % (number, kind))
     if kind == "start_game" and step[kind] != "duel":
         raise CheckError('step %d (start_game) can only start a "duel" game' % number)
     if kind == "end_turns" and step[kind] < 1:
@@ -355,8 +358,8 @@ def do_step(g, step, results, marks):
         raise AssertionError("STEPS has %s, which do_step does not do" % kind)
 
 
-def play(checks, g, expected, results):
-    """The part of a run inside the game; it adds a Result to results as each check is made."""
+def switch_on(checks, g, expected):
+    """Switch on the checked mods and the mods they need, and no others, which loads Bazaar and its plugins."""
     keys = [files.mod_key(folder) for folder in expected]
 
     def listed():
@@ -373,6 +376,11 @@ def play(checks, g, expected, results):
     g.say("choosing " + ", ".join("%s (v %d)" % (names[key], key[1]) for key in wanted))
     g.set_mods(wanted)
     g.activate()
+
+
+def play_steps(checks, g, expected, results):
+    """The part of a run inside the game; it adds a Result to results as each check is made."""
+    switch_on(checks, g, expected)
     marks = Marks(checks.steps)
     for step in checks.steps:
         do_step(g, step, results, marks)
@@ -388,19 +396,48 @@ def final_checks(checks, g):
     return results
 
 
+@contextlib.contextmanager
+def checked_mods_in_game(checks, g, seed=None, saves=(), windowed=False):
+    """With no other run going and the game closed, put back what a stopped run left, then start the game with the
+    checked mods installed, and yield the folders it loads them from; everything goes back afterwards."""
+    with files.one_run_at_a_time():
+        g.preflight()
+        g.files.put_back_leftovers()
+        staging = tempfile.mkdtemp(prefix="Bazaar check mods ")
+        try:
+            staged = g.files.stage_all(checks.mods, staging)
+            with game.session(g, seed, staged, saves, windowed) as expected:
+                yield expected
+        finally:
+            with contextlib.suppress(OSError):
+                files.remove_tree(staging)
+
+
 def run_checks(checks, g, results):
-    """The game reads MODS as it starts, so the mods go in before it does, and only once preflight has found it
-    closed."""
-    g.preflight()
-    files.refuse_leftover_copies()
-    staging = tempfile.mkdtemp(prefix="Bazaar check mods ")
+    saves = [step["save"] for step in checks.steps if "save" in step]
+    with checked_mods_in_game(checks, g, checks.seed, saves, windowed=True) as expected:
+        play_steps(checks, g, expected, results)
+    results.extend(final_checks(checks, g))
+
+
+def play_by_hand(checks, g):
+    """Start the game with the checked mods switched on, and leave it to the player until they close it. Returns
+    None, or why it stopped early in words that follow "Playing ", such as "stopped: ..."."""
     try:
-        expected = g.files.install(checks.mods, staging)
-        with game.session(g, checks.seed):
-            play(checks, g, expected, results)
-        results.extend(final_checks(checks, g))
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+        with checked_mods_in_game(checks, g) as expected:
+            switch_on(checks, g, expected)
+            g.say(
+                "Civilization V is yours: play, then close it, and your files go back as they were; saves you make"
+                " by hand stay. Leave this window open until then."
+            )
+            g.wait_until_closed()
+    except KeyboardInterrupt:
+        if g.handed_over:
+            return "stopped with the game still open: the next run of check.cmd or play.cmd puts your files back"
+        return "stopped"
+    except game.ERRORS + (OSError,) as e:
+        return "stopped: %s" % e
+    return None
 
 
 def print_results(results):
@@ -441,15 +478,22 @@ def run(checks, g):
 
 
 def main(argv):
-    if len(argv) != 1:
+    playing = argv[:1] == ["--play"]
+    paths = argv[1:] if playing else argv
+    if len(paths) != 1:
         print(__doc__.strip())
         return 2
     try:
-        checks = read_checks(argv[0])
+        checks = read_checks(paths[0])
         g = game.Game()
     except game.ERRORS as e:
         print(e)
         return 1
+    if playing:
+        stopped = play_by_hand(checks, g)
+        if stopped:
+            print("Playing " + stopped)
+        return 1 if stopped else 0
     failed = run(checks, g)
     print("The checks " + (failed or "passed."))
     return 1 if failed else 0

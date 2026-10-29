@@ -1,16 +1,14 @@
-"""Tests for run.py and the checks files it plays, without the game: each file reads, and names only the mods and
-plugins package.py builds, and the test mods are removed afterwards."""
+"""Tests for run.py and the checks files it plays, without the game: each file reads and names only the mods and
+plugins package.py builds, and --play hands one file's game over."""
 
 import contextlib
 import io
 import os
 import re
-import shutil
-import tempfile
 import unittest
 from unittest import mock
 
-from fakes import files, mods, write_files, write_mod
+from fakes import files, mods
 
 import run
 from bazaar_check import runner
@@ -53,70 +51,47 @@ class ChecksFilesTest(unittest.TestCase):
                 self.assertFalse(step.get("state", "").endswith("Popup"), name)
 
 
-class RemoveTestModsTest(unittest.TestCase):
-    def setUp(self):
-        self.user = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.user)
-        self.test_build = "Bazaar (v %d)" % files.TEST_VERSION
-
-    def remove(self, running=()):
-        printed = io.StringIO()
-        with (
-            mock.patch.object(run.game, "game_processes", return_value=list(running)),
-            contextlib.redirect_stdout(printed),
-        ):
-            run.remove_test_mods(files.PlayerFiles(self.user))
-        return printed.getvalue()
-
-    def write_mods(self):
-        toy = run.package.TOYS[0]
-        write_mod(os.path.join(self.user, "MODS", toy.mod_name + " (v 1)"), toy.mod_id)
-        write_mod(os.path.join(self.user, "MODS", "Toy VMC Check (v 1)"), run.package.VMC_CHECK_ID)
-        write_mod(os.path.join(self.user, "MODS", self.test_build), mods.HOST_ID, files.TEST_VERSION)
-        write_mod(os.path.join(self.user, "MODS", "Player Mod (v 2)"), "player-mod", 2)
-        write_files(os.path.join(self.user, "MODS", "Broken Mod"), {"Broken.modinfo": b"not xml"})
-
-    def test_only_the_test_mods_are_removed(self):
-        self.write_mods()
-        self.assertEqual(self.remove(), "removed the test mods from MODS: Toy Gold Plugin (v 1), Toy VMC Check (v 1)\n")
-        self.assertEqual(
-            sorted(os.listdir(os.path.join(self.user, "MODS"))), [self.test_build, "Broken Mod", "Player Mod (v 2)"]
-        )
-
-    def test_nothing_is_removed_while_the_game_still_runs(self):
-        self.write_mods()
-        printed = self.remove(running=["civilizationv_dx11.exe"])
-        self.assertEqual(printed, "Civilization V is still running, so the test mods stay in MODS\n")
-        self.assertEqual(len(os.listdir(os.path.join(self.user, "MODS"))), 5)
-
-    def test_no_mods_folder_is_named_not_raised(self):
-        self.assertIn("the test mods could not be removed", self.remove())
-
-
 class MainTest(unittest.TestCase):
+    stopped = None
+
     def main(self, argv, outcomes=None, built=0):
         printed = io.StringIO()
         with (
             mock.patch.object(run.package, "main", return_value=built) as build,
             mock.patch.object(run.runner, "run", side_effect=outcomes or []) as play,
+            mock.patch.object(run.runner, "play_by_hand", return_value=self.stopped) as self.play_by_hand,
             mock.patch.object(run.game, "Game"),
-            mock.patch.object(run, "remove_test_mods") as remove,
-            mock.patch.object(run.files, "user_folder", return_value="user"),
             contextlib.redirect_stdout(printed),
         ):
             code = run.main(argv)
-        return code, printed.getvalue(), build.called, play.call_count, remove.called
+        return code, printed.getvalue(), build.called, play.call_count
 
     def test_a_checks_file_that_does_not_read_stops_before_anything_is_built(self):
-        code, printed, built, _, _ = self.main(["no_such_check"])
+        code, printed, built, _ = self.main(["no_such_check"])
         self.assertEqual(code, 1)
         self.assertIn("no_such_check.toml could not be read", printed)
         self.assertFalse(built)
 
-    def test_every_file_is_played_and_the_test_mods_removed_even_after_a_failure(self):
-        code, printed, built, played, removed = self.main(["crash_lua", "use_both"], ["failed.", None])
-        self.assertEqual((code, built, played, removed), (1, True, 2, True))
+    def test_every_file_is_played_even_after_a_failure(self):
+        code, printed, built, played = self.main(["crash_lua", "use_both"], ["failed.", None])
+        self.assertEqual((code, built, played), (1, True, 2))
         self.assertIn("1 of 2 checks files passed: failed crash_lua", printed)
+
+    def test_play_builds_then_hands_the_named_file_s_game_over(self):
+        code, _, built, played = self.main(["--play", "crash_turn"])
+        self.assertEqual((code, built, played), (0, True, 0))
+        self.assertEqual(self.play_by_hand.call_args[0][0], runner.read_checks(run.checks_path("crash_turn")))
+
+    def test_play_that_stopped_says_why(self):
+        self.stopped = "stopped: Civilization V closed while starting"
+        code, printed, _, _ = self.main(["--play", "crash_turn"])
+        self.assertEqual(code, 1)
+        self.assertIn("Playing stopped: Civilization V closed while starting", printed)
+
+    def test_play_takes_one_checks_file(self):
+        for argv in (["--play"], ["--play", "crash_lua", "use_both"]):
+            with self.subTest(argv=argv):
+                self.assertEqual(self.main(argv)[0], 2)
 
     def test_a_game_that_cannot_be_checked_stops_before_anything_is_built(self):
         with mock.patch.object(run.game, "Game") as Game:
@@ -128,7 +103,7 @@ class MainTest(unittest.TestCase):
         self.assertIn("Civilization V is already running", printed.getvalue())
 
     def test_a_failed_build_plays_nothing(self):
-        code, _, _, played, _ = self.main(["use_both"], built=1)
+        code, _, _, played = self.main(["use_both"], built=1)
         self.assertEqual((code, played), (1, 0))
 
 

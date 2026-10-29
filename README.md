@@ -61,7 +61,7 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 1. Set up the Python tools once: `python -m venv .venv`, then `.venv\Scripts\pip install -r tools\generator\requirements.txt`.
 2. `build-hooked.cmd` makes the hook wrappers, checks that the game classes plugins rely on still have the same layout in memory, and builds Bazaar's DLL.
 3. `tests\runtime\run.cmd` runs the automated tests, outside the game. `.venv\Scripts\python.exe -m ruff check .` and `.venv\Scripts\python.exe -m ruff format --check .` check the Python code.
-4. `tests\ingame\run.py` builds the test plugins and checks them in the game with nobody at the keyboard, in about ten minutes. [tests/ingame/README.md](tests/ingame/README.md) says what it needs and what each test plugin checks.
+4. `tests\ingame\run.py` builds the test plugins and checks them in the game with nobody at the keyboard, in about ten minutes; `run.py --play NAME` starts the game with one checks file's mods for you to try by hand. [tests/ingame/README.md](tests/ingame/README.md) says what it needs and what each test plugin checks.
 
 Other jobs:
 

@@ -1,6 +1,6 @@
 """Drive Civilization V for the in-game checks through its tuner port (tuner.py): start it through Steam, choose the
-mods, start a game, end turns, save, load and quit, with nobody at the keyboard. The player's Mods menu choices, plugin
-order, config.ini and autosaves are put back afterwards.
+mods, start a game, end turns, save, load and quit, with nobody at the keyboard. Everything a run changes in the
+player's folder is put back afterwards.
 
 The game must be set up for it once: EnableTuner = 1 and LoggingEnabled = 1 in its config.ini, and DirectX 11 chosen
 the last time it was started from Steam, since starting it through steam://rungameid starts the version chosen last.
@@ -199,6 +199,7 @@ class Game:
         self.tuner = tuner.Tuner(port=port)
         self.files = files.PlayerFiles(user or files.user_folder(), say)
         self.started = None
+        self.handed_over = False
         self.mods_on = False
 
     def path(self, *parts):
@@ -237,6 +238,7 @@ class Game:
             if time.time() > deadline:
                 because = " (last error: %s)" % last if last else ""
                 raise CheckError("%s did not happen within %d seconds%s" % (what, timeout, because))
+            self.files.beat()
             time.sleep(2)
 
     def preflight(self):
@@ -397,7 +399,7 @@ class Game:
 
     def save(self, name, timeout=60):
         self.say("saving %s" % name)
-        path = self.path(files.SAVES, name + ".Civ5Save")
+        path = self.path(files.save_rel(name))
         before = os.path.getmtime(path) if os.path.exists(path) else 0
         self.lua(IN_GAME, "UI.SaveGame(%s)" % tuner.lua_text(name))
 
@@ -421,6 +423,8 @@ class Game:
 
     def quit(self, timeout=120):
         with contextlib.suppress(tuner.TunerError, tuner.LuaError):
+            if not self.tuner.connected and game_processes():
+                self.tuner.connect(10)
             self.lua(self.live_state(), "UI.ExitGame()", timeout=10)
         self.tuner.close()
         self.wait("Civilization V closing", lambda: not game_processes(), timeout)
@@ -430,7 +434,8 @@ class Game:
         Ctrl+C or an error it did not expect, it still puts the files back and says what is left before stopping."""
         problems = []
         try:
-            self.quit()
+            if not self.handed_over:
+                self.quit()
         except ERRORS as e:
             problems.append("%s; close Civilization V by hand" % e)
         except BaseException as e:
@@ -442,7 +447,7 @@ class Game:
             raise
         problems = self.files.put_back(copies, game_running=bool(game_processes())) + problems
         if not problems:
-            self.say("your %s are as they were" % files.copied_text(copies))
+            self.say("back as before this run: %s" % files.and_list([item.label for item in copies.items]))
         return problems
 
     def put_back_now(self, copies, autosaves_touched=True):
@@ -453,24 +458,51 @@ class Game:
         if running and self.started is not None:
             self.say("close Civilization V by hand")
 
+    def wait_until_closed(self):
+        """Hand the game to the player until they close it, however long they play. The tuner port is let go, so
+        FireTuner can use it meanwhile. A first Ctrl+C only says how to finish; a second leaves the game open."""
+        self.handed_over = True
+        self.tuner.close()
+        warned, closed_polls = False, 0
+        # One empty answer from tasklist can be a glitch, and taking it for a closed game ends the player's session.
+        while closed_polls < 2:
+            try:
+                time.sleep(5)
+                self.files.beat()
+                closed_polls = 0 if game_processes() else closed_polls + 1
+            except KeyboardInterrupt:
+                if warned:
+                    raise
+                warned = True
+                self.say(
+                    "Close Civilization V to finish, and your files go back then. Ctrl+C again stops now and leaves"
+                    " the game open: the next run puts your files back."
+                )
+
     def log(self, name="Bazaar.log"):
         return self.files.log(name, self.started)
 
 
 @contextlib.contextmanager
-def session(game, seed):
-    """Start the game with these seeds, and close it afterwards with the player's Mods menu choices, plugin order,
-    config.ini and autosaves as they were. A problem putting things back is reported without hiding the error that
-    ended the run."""
-    copies = game.files.copy_aside()
+def session(game, seed=None, staged=(), saves=(), windowed=False):
+    """Install the staged mods into MODS, start the game, with these seeds unless seed is None and in a window if
+    windowed, and yield the folders the game loads the mods from. Afterwards close the game and put back everything the
+    run changed: MODS, the Mods menu's choices, the plugin order, config.ini, the display settings, the autosaves and
+    the saves of these names. A problem putting things back is reported without hiding the error that ended the run.
+    Preflight must have found the game closed, since installing replaces folders a running game holds."""
+    copies = game.files.copy_aside(saves, game.files.changed_by(staged), windowed)
     try:
-        game.files.use_seed(seed)
+        expected = game.files.install(staged)
+        if seed is not None:
+            game.files.use_seed(seed)
+        if windowed:
+            game.files.use_windowed()
         game.start()
     except BaseException:
         game.put_back_now(copies, autosaves_touched=False)
         raise
     try:
-        yield game
+        yield expected
     except BaseException:
         for problem in game.clean_up(copies):
             game.say(problem)

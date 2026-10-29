@@ -110,6 +110,10 @@ class Tuner:
                     )
                 time.sleep(2)
 
+    @property
+    def connected(self):
+        return self.sock is not None
+
     def close(self):
         if self.sock is not None:
             self.sock.close()

@@ -11,7 +11,7 @@
 --major starts a new major version, such as 1.0.0. build --trial runs on any branch, leaves the release marks out of the
 docs, gives Bazaar's mod the test version 900, and writes to dist/trial, which publish never uses; check --trial checks
 those files. publish needs the files to have passed check since they were built, unless --no-check, for a release that
-only changes the SDK or the docs.
+only changes the docs: the SDK holds the checker, which only release.py check runs in the game.
 """
 
 import argparse
@@ -520,7 +520,7 @@ def build_template(sdk_zip):
     template's build uses BAZAAR_SDK when it is set, so it is pointed at the unzipped SDK. Returns the template's own
     checks, from its checks.toml."""
     if os.path.isdir(CHECK_FOLDER):
-        shutil.rmtree(CHECK_FOLDER)
+        files.remove_tree(CHECK_FOLDER)
     with zipfile.ZipFile(sdk_zip) as z:
         z.extractall(CHECK_FOLDER)
     sdk = os.path.join(CHECK_FOLDER, os.path.basename(build_sdk.SDK))
@@ -585,15 +585,22 @@ def check(trial):
     if not trial and not os.path.exists(built_from):
         stop("%s holds no release build: run release.py build first" % out)
     try:
-        g = game.Game(say)
-        g.preflight()
-        say("building the template plugin from %s" % names.sdk)
-        template_checks = build_template(sdk_zip)
-    except game.ERRORS + (OSError, zipfile.BadZipFile) as e:
-        stop("the in-game check could not start: %s" % e)
-    if os.path.exists(os.path.join(out, CHECKED)):
-        os.remove(os.path.join(out, CHECKED))
-    failed = runner.run(release_checks(current, packages, template_checks, trial), g)
+        try:
+            g = game.Game(say)
+            g.preflight()
+            say("building the template plugin from %s" % names.sdk)
+            template_checks = build_template(sdk_zip)
+        except game.ERRORS + (OSError, zipfile.BadZipFile) as e:
+            stop("the in-game check could not start: %s" % e)
+        if os.path.exists(os.path.join(out, CHECKED)):
+            os.remove(os.path.join(out, CHECKED))
+        failed = runner.run(release_checks(current, packages, template_checks, trial), g)
+    finally:
+        try:
+            if os.path.isdir(CHECK_FOLDER):
+                files.remove_tree(CHECK_FOLDER)
+        except OSError as e:
+            say("the unzipped SDK in %s could not be deleted (%s): delete it yourself" % (CHECK_FOLDER, e))
     if failed:
         stop("the in-game check " + failed)
     if not trial:
@@ -626,7 +633,7 @@ def publish(notes, no_check=False):
     if not no_check and (not os.path.exists(checked) or read_text(checked).strip() != head):
         stop(
             "the files in %s have not passed release.py check since they were built: run it, or publish with"
-            " --no-check for a release that only changes the SDK or the docs" % out
+            " --no-check for a release that only changes the docs" % out
         )
     paths = [os.path.join(out, name) for name in release_files(current.release)]
     missing = [path for path in paths if not os.path.isfile(path)]

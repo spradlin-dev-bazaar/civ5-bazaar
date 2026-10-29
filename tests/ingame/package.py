@@ -45,7 +45,6 @@ TOYS = [
     Toy("SAVES", "ToySaves", "Toy Saves Plugin", "b012c631-4178-4d68-99af-7c2fcf5d3701"),
 ]
 VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
-TEST_MOD_IDS = {toy.mod_id for toy in TOYS} | {VMC_CHECK_ID}
 # Runs after VMC's CustomModOptions.xml has added the row only if the game orders it after VMC's files, because like
 # mods made for VMC it only references VMC's mod id.
 VMC_CHECK_SQL = "UPDATE CustomModOptions SET Value = 1 WHERE Name = 'EVENTS_PLAYER_TURN';\n"

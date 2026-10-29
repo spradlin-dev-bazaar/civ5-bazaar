@@ -37,13 +37,13 @@ For example, to make every player's score count double, you add an after-hook to
 - **The Microsoft Visual Studio 2010 Shell (Isolated) Redistributable**, which ModBuddy runs in. The Civilization V SDK's launcher will not start ModBuddy without it. Microsoft no longer offers it either, but the Internet Archive kept [Microsoft's original installer, `VSIsoShell.exe`](https://web.archive.org/web/20201112013416/http://download.microsoft.com/download/1/9/3/1939AD78-F8E8-4336-83F3-E2470F422C62/VSIsoShell.exe); its digital signature is Microsoft's.
 - **ModBuddy started once**, from the Civilization V SDK, before your first build. Its updater copies the build steps `build.cmd` uses into `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy`.
 - **The Bazaar SDK**, the folder that holds this guide.
-- **Python 3.11 or newer**, from [python.org](https://www.python.org/downloads/windows/), only to check your plugin in the game with `check.cmd` (see [Checking your plugin in the game](#checking-your-plugin-in-the-game)).
+- **Python 3.11 or newer**, from [python.org](https://www.python.org/downloads/windows/), only to try or check your plugin in the game with `play.cmd` and `check.cmd` (see [Checking your plugin in the game](#checking-your-plugin-in-the-game)).
 
 ### What is in the Bazaar SDK
 
 | In the SDK | What it is |
 |---|---|
-| `plugin-template\` | A small working plugin to start from, with the script that makes its releases and `check.cmd`, which plays it in the game. |
+| `plugin-template\` | A small working plugin to start from, with the script that makes its releases, `play.cmd`, which starts it in the game for you to try, and `check.cmd`, which checks it there with nobody at the keyboard. |
 | `include\CivHooks.h` | Every game function you can hook, with its hook ID and the types of its hooks. |
 | `include\CivPluginApi.h` | The interface between Bazaar and a plugin: the structs, function types and constants both sides use. |
 | the rest of `include\` | The game's headers, in the versions Bazaar was built from. |
@@ -65,9 +65,8 @@ For example, to make every player's score count double, you add an after-hook to
    | error MSB4019: The imported project "…\Firaxis\ModBuddy\Civ5Mod.targets" was not found. | ModBuddy's build steps are not installed yet. Start ModBuddy once from the Civilization V SDK, then build again. |
    | error PRJ0020 : Tool 'Linker', Property 'Manifest File' contains invalid file name '…', or project file '…' was not found or not a valid project file. | The plugin folder's path is too long: Visual C++ 2008 fails once a path inside it, such as `src\out\obj\<file name>.dll.intermediate.manifest`, passes 260 characters. Move the plugin folder to a folder with a shorter path and build again. |
 
-2. Copy `Build\Template Plugin` into your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`.
-3. In the game's Mods menu, enable Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and Template Plugin, then start a game.
-4. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line that starts with `Plugin Template Plugin 1 loaded`. From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting, and keeps two counts in your saved games: the turns each player has started, and the notifications it has seen.
+2. Run `play.cmd` in the same folder. It builds the plugin again, starts Civilization V through Steam with Bazaar, its VMC Bootstrap and Template Plugin switched on, and leaves the game to you: start a game. When you close the game, your files go back as they were, MODS included; saves you make yourself stay. It needs Python, two settings in the game's `config.ini` and DirectX 11 chosen in Steam: see [Checking your plugin in the game](#checking-your-plugin-in-the-game). Without Python, copy `Build\Template Plugin` into MODS and switch on Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and Template Plugin in the Mods menu.
+3. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line that starts with `Plugin Template Plugin 1 loaded`. From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting, and keeps two counts in your saved games: the turns each player has started, and the notifications it has seen.
 
 ## Step 2: make it your own
 
@@ -543,18 +542,13 @@ Your plugin can call any function the game's headers declare, use the game's glo
 
 ## Testing a new build
 
-Windows does not let you replace a DLL while the game has it loaded, and Bazaar unloads plugins at the main menu. So each time you try a new build:
-
-1. in the game, go back to the main menu;
-2. run `build.cmd` in your plugin's folder;
-3. copy the new mod folder from `Build` into MODS, over the old one;
-4. start a game.
+Windows does not let you replace a DLL while the game has it loaded. So each time you try a new build, close the game, then run `play.cmd` again: it builds the new version and starts the game with it.
 
 ## Checking your plugin in the game
 
-`check.cmd`, in your plugin's folder, builds the plugin and then plays `checks.toml` in Civilization V with nobody at the keyboard. It starts the game through Steam, switches on your mod and the mods it needs, and plays the steps `checks.toml` lists. The template's steps start a small game, end a turn, and check that the plugin loaded, logged the start of the turn, and answers `Game.TemplateHello()`. Every run also fails if a plugin stops working or `Lua.log` has a Lua error. Afterwards it closes the game and puts back your Mods menu choices, plugin order, `config.ini` and autosaves. Run it from a Command Prompt; for the template, a run takes two or three minutes.
+`check.cmd`, in your plugin's folder, builds the plugin and then plays `checks.toml` in Civilization V with nobody at the keyboard. It starts the game through Steam, switches on your mod and the mods it needs, and plays the steps `checks.toml` lists. The template's steps start a small game, end a turn, and check that the plugin loaded, logged the start of the turn, and answers `Game.TemplateHello()`. Every run also fails if a plugin stops working or `Lua.log` has a Lua error. Afterwards it closes the game and puts back everything it changed, MODS included. Run it from a Command Prompt; for the template, a run takes two or three minutes.
 
-Change `checks.toml` to check what your plugin does. `bazaar_check\README.md`, beside it, lists what a checks file can do and what a run needs: Python 3.11 or newer, the game's tuner port and logging switched on in its `config.ini`, and DirectX 11 chosen in Steam.
+Change `checks.toml` to check what your plugin does. `bazaar_check\README.md`, beside it, lists what a checks file can do and what a run, or `play.cmd`, needs: Python 3.11 or newer, the game's tuner port and logging switched on in its `config.ini`, and DirectX 11 chosen in Steam.
 
 ## When something goes wrong
 
