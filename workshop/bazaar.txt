@@ -24,7 +24,7 @@ Windows only. Single player only.
 [/list]
 
 [h2]For mod makers[/h2]
-Plugins are DLLs written in C++. Each release on GitHub comes with the SDK to build them, with a template plugin and a guide, and with the developer documentation: [url=https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases]Bazaar on GitHub[/url]. Lua mods can use VMC's events just as they would with VMC on its own.
+Plugins are DLLs written in C++. Bazaar's releases on GitHub come with the SDK to build them, with a template plugin and a guide, and with the developer documentation: [url=https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases]Bazaar on GitHub[/url]. Lua mods can use VMC's events just as they would with VMC on its own.
 
 [h2]Credits[/h2]
 Built from Firaxis's Civilization V source code and whoward69's DLL - Various Mod Components, version 97. Many thanks to whoward69 and VMC's translators.

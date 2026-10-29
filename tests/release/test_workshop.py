@@ -271,6 +271,11 @@ class WorkshopTest(unittest.TestCase):
         self.assertIn("v0.5.1 is still a draft: publish it there first", self.workshop(draft=True))
         self.assertEqual(self.sent, [])
 
+    def test_a_release_that_keeps_bazaar_has_nothing_to_upload(self):
+        with mock.patch.object(release, "kept_release", return_value="0.5.0"):
+            self.assertIn("keeps the Bazaar of 0.5.0, so it has nothing new for the Workshop", self.workshop())
+        self.assertEqual(self.sent, [])
+
     def test_gh_failing_stops_with_its_error(self):
         self.assertIn("could not show the GitHub release v0.5.1: HTTP 502: Bad Gateway", self.workshop(view=1))
         self.assertEqual(self.sent, [])

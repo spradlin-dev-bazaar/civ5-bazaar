@@ -88,13 +88,18 @@ def copy_engine_headers(target):
                 f.write(text.encode("cp1252"))
 
 
-def write_vsprops(include_dirs):
-    """The host build's compiler and linker settings, with paths inside the SDK."""
+def vsprops_text():
+    """The host build's compiler and linker settings, with paths inside the SDK, as CivPlugin.vsprops holds them."""
+    engine = os.path.basename(PROJECT.root)
+    include_dirs = ["include", "include\\" + engine] + ["include\\" + inc for inc in common.SUPPORT_INCLUDE]
     includes = ";".join('"$(BAZAAR_SDK)\\%s"' % d for d in include_dirs)
     libs = " ".join([os.path.basename(lib) for lib in [HOST_LIB] + common.SUPPORT_LIBS] + ["winmm.lib"])
     values = dict(includes=includes, defines=";".join(common.PLUGIN_DEFINES), libs=libs)
-    with open(os.path.join(SDK, "CivPlugin.vsprops"), "w", encoding="cp1252", newline="\r\n") as f:
-        f.write(VSPROPS.format(**dict((k, escape(v, {'"': "&quot;"})) for k, v in values.items())))
+    return VSPROPS.format(**dict((k, escape(v, {'"': "&quot;"})) for k, v in values.items()))
+
+
+def vsprops_bytes():
+    return vsprops_text().replace("\n", "\r\n").encode("cp1252")
 
 
 def lay_out():
@@ -109,7 +114,8 @@ def lay_out():
     os.makedirs(lib)
     for path in [HOST_LIB] + [os.path.join(common.SOURCE_ROOT, p) for p in common.SUPPORT_LIBS]:
         shutil.copy(path, lib)
-    write_vsprops(["include", "include\\" + engine] + ["include\\" + inc for inc in common.SUPPORT_INCLUDE])
+    with open(os.path.join(SDK, "CivPlugin.vsprops"), "wb") as f:
+        f.write(vsprops_bytes())
     shutil.copytree(
         os.path.join(HERE, "plugin-template"),
         os.path.join(SDK, "plugin-template"),

@@ -153,11 +153,20 @@ def template_disagreements(release, template):
     return found
 
 
+def kept_bazaar(version, listed):
+    """The earlier release whose Bazaar version keeps, or None. A release that keeps one keeps its mod version and adds
+    no row to VERSIONS.md, so the newest row names an earlier release with the same mod version. listed is what
+    listed_versions returns."""
+    if listed and listed[0].mod == version.mod and numbers(listed[0].release) < numbers(version.release):
+        return listed[0].release
+    return None
+
+
 def listed_disagreements(version, listed):
     """listed is what listed_versions returns."""
     if not listed:
         return ["%s lists no mod versions" % common.shown(VERSIONS_LIST)]
-    if listed[0] != version:
+    if listed[0] != version and kept_bazaar(version, listed) is None:
         return [
             "the newest row of %s is mod version %d, Bazaar %s, not mod version %d, Bazaar %s"
             % (common.shown(VERSIONS_LIST), listed[0].mod, listed[0].release, version.mod, version.release)
