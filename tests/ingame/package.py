@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
 
 import common  # noqa: E402
 import mods  # noqa: E402
-import version as bazaar_version  # noqa: E402
+from bazaar_check import files  # noqa: E402
 
 PROJECT = common.engine_project()
 HOST_OUT = common.HOST_OUTPUT
@@ -124,7 +124,6 @@ def main(args):
     if problem:
         print(problem)
         return 1
-    host_version = bazaar_version.read().mod
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     if bench:
@@ -174,7 +173,7 @@ def main(args):
         "Test build of the %s." % mods.HOST_NAME,
         common.HOST_DLL,
         host_screens=True,
-        version=host_version,
+        version=files.TEST_VERSION,
     )
     for _, dll_name, mod_name, mod_id in TOYS:
         write_toy_mod(dll_name, mod_name, mod_id)

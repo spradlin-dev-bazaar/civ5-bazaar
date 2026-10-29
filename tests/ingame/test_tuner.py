@@ -10,9 +10,9 @@ import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "ingame"))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
 
-import tuner  # noqa: E402
+from bazaar_check import tuner  # noqa: E402
 
 START = re.compile(r"^print\('(__start_[0-9a-f]+__)'\)")
 END = re.compile(r"print\('(__done_[0-9a-f]+__)'\)$")

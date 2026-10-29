@@ -5,11 +5,9 @@ python -m unittest discover -s tests/release
 """
 
 import contextlib
-import inspect
 import io
 import os
 import re
-import shutil
 import sys
 import tempfile
 import types
@@ -605,12 +603,12 @@ class BuildTest(unittest.TestCase):
     HEAD = "abc123"
 
     def build(self, trial):
-        """The steps build took, the release_marks it wrote the files with, and the commit built-from.txt names."""
+        """The steps build took, whether it wrote trial files, and the commit built-from.txt names."""
         steps = StepRecorder()
         names = release.release_files(self.CURRENT.release)
 
-        def write_files(current, out, release_marks):
-            steps.calls.append(("files", (current, out), {"release_marks": release_marks}))
+        def write_files(current, out, trial):
+            steps.calls.append(("files", (current, out), {"trial": trial}))
             os.makedirs(out)
             return names
 
@@ -634,19 +632,19 @@ class BuildTest(unittest.TestCase):
             head = release.read_text(built_from).strip() if os.path.exists(built_from) else None
         self.assertIsNone(message)
         ((_, marks),) = steps.arguments("files")
-        return steps.names(), marks["release_marks"], head
+        return steps.names(), marks["trial"], head
 
     def test_a_release_build_checks_before_and_after_and_records_its_commit(self):
-        names, marks, head = self.build(trial=False)
+        names, trial, head = self.build(trial=False)
         expected = ["releasable", "numbers agree", "run", "as prepared", "SDK", "files", "unchanged", "git"]
         self.assertEqual(names, expected)
-        self.assertTrue(marks)
+        self.assertFalse(trial)
         self.assertEqual(head, self.HEAD)
 
     def test_a_trial_build_skips_the_release_checks_and_records_no_commit(self):
-        names, marks, head = self.build(trial=True)
+        names, trial, head = self.build(trial=True)
         self.assertEqual(names, ["numbers agree", "run", "SDK", "files"])
-        self.assertFalse(marks)
+        self.assertTrue(trial)
         self.assertIsNone(head)
 
     def test_a_release_not_prepared_or_already_out_stops(self):
@@ -670,7 +668,7 @@ class BuildTest(unittest.TestCase):
 
 
 class WriteFilesTest(unittest.TestCase):
-    def write(self, release_marks):
+    def write(self, trial):
         """The four files written for 0.4.0, with the docs, SDK and mods made small; returns what they hold and what the
         docs build and the mods were given."""
         given = {}
@@ -708,7 +706,7 @@ class WriteFilesTest(unittest.TestCase):
                 mock.patch.object(release.mods, "pack", pack),
                 mock.patch.object(release.build_sdk, "SDK", sdk),
             ):
-                names = release.write_release_files(version.Version("0.4.0", 2), out, release_marks)
+                names = release.write_release_files(version.Version("0.4.0", 2), out, trial)
             held = {"files": sorted(os.listdir(out))}
             for kind in ("host", "bootstrap"):
                 held[kind] = release.read_text(os.path.join(out, getattr(names, kind)))
@@ -718,7 +716,7 @@ class WriteFilesTest(unittest.TestCase):
         return names, held, given
 
     def test_the_four_files_hold_what_a_release_ships(self):
-        names, held, given = self.write(release_marks=True)
+        names, held, given = self.write(trial=False)
         self.assertEqual(held["files"], sorted(names))
         self.assertEqual((held["host"], held["bootstrap"]), ("host", "bootstrap"))
         self.assertEqual(held["docs"], ["LICENSE.txt", "NOTICE.txt", "index.html"])
@@ -728,10 +726,11 @@ class WriteFilesTest(unittest.TestCase):
         self.assertEqual(given["mod"], expected_mod + (True, 2))
         self.assertEqual(given["description"], release.mods.host_description("0.4.0"))
 
-    def test_a_trial_leaves_the_release_out_of_the_docs_and_the_mod_s_description(self):
-        _, _, given = self.write(release_marks=False)
+    def test_a_trial_leaves_the_release_out_of_the_docs_and_the_mod_and_gives_it_the_test_version(self):
+        _, _, given = self.write(trial=True)
         self.assertIsNone(given["release"])
         self.assertIsNone(given["description"])
+        self.assertEqual(given["mod"][-1], release.files.TEST_VERSION)
 
 
 class FileTest(unittest.TestCase):
@@ -764,180 +763,72 @@ class FileTest(unittest.TestCase):
                 )
 
 
-def write_mod(folder, mod_id, version=1, files=()):
-    os.makedirs(folder)
-    for name, content in files:
-        with open(os.path.join(folder, name), "w") as f:
-            f.write(content)
-    release.mods.write_modinfo(folder, "A Mod", mod_id, "A test mod.", [], [], version=version)
-    return folder
-
-
-class FakeGame:
-    """Stands in for tools/ingame/game.py's Game as the release check uses it. Each of its methods is one Game has,
-    which a test checks, and the log grows as the plugins would write it."""
-
+class ReleaseChecksTest(unittest.TestCase):
+    CURRENT = version.Version("0.6.0", 6)
     LOADED = "Plugin Template Plugin 1 loaded (built for API 0.6)."
     TURN = "[Template Plugin] Rome starts turn 1 with 0 gold (turns started: 1, notifications seen: 0)"
 
-    def __init__(self, user, installed, description=None, loaded=LOADED, turn=TURN):
-        self.user = user
-        self.installed = installed
-        self.description = description
-        self.loaded, self.turn_line = loaded, turn
-        self.lines = []
-        self.steps = []
+    def checks(self, trial):
+        return release.release_checks(self.CURRENT, ["host.civ5mod", "vmc.civ5mod"], "Template Plugin", trial)
 
-    def wait(self, what, ready, timeout):
-        if not ready():
-            raise release.game.GameError("%s did not happen" % what)
+    def test_a_release_names_itself_loads_the_template_and_logs_its_first_turn(self):
+        checks = self.checks(trial=False)
+        self.assertEqual(checks.mods, ["host.civ5mod", "vmc.civ5mod", "Template Plugin"])
+        self.assertEqual(list(checks.plugin_order), [])
+        release.runner.validate(checks)
+        kinds = [release.runner.kind_of(step) for step in checks.steps]
+        self.assertEqual(kinds, ["description_of", "log", "start_game", "end_turns", "log"])
+        description = checks.steps[0]
+        self.assertEqual((description["description_of"], description["version"]), (release.mods.HOST_ID, 6))
+        self.assertEqual(description["is"], release.mods.host_description("0.6.0"))
+        self.assertEqual(checks.steps[3]["end_turns"], 1)
+        self.assertEqual(
+            [step.get("what") for step in checks.steps if "what" in step],
+            [
+                "Bazaar's description in the Mods menu names 0.6.0",
+                "Bazaar.log says the template plugin loaded, built for API 0.6",
+                "the template plugin logged the start of turn 1",
+            ],
+        )
 
-    def mods(self, enabled_only=True):
-        return [(m, v, "a mod") for m, v in self.installed]
+    def test_the_log_checks_find_the_template_built_for_this_api_and_its_first_turn_only(self):
+        loaded, turn = (step["has"] for step in self.checks(trial=False).steps if "log" in step)
+        self.assertRegex(self.LOADED, loaded)
+        self.assertNotRegex(self.LOADED.replace("0.6", "0.5"), loaded)
+        self.assertRegex(self.TURN, turn)
+        self.assertNotRegex(self.TURN.replace("turn 1 ", "turn 7 "), turn)
 
-    def path(self, *parts):
-        return os.path.join(self.user, *parts)
-
-    def mod_description(self, mod_id, version):
-        self.steps.append(("mod_description", mod_id, version))
-        return self.description
-
-    def use_default_plugin_order(self):
-        self.steps.append(("use_default_plugin_order",))
-
-    def set_mods(self, wanted):
-        self.steps.append(("set_mods", wanted))
-
-    def activate(self):
-        self.steps.append(("activate",))
-        if self.loaded:
-            self.lines.append(self.loaded)
-
-    def log(self):
-        return list(self.lines)
-
-    def start_game(self):
-        self.steps.append(("start_game",))
-
-    def end_turn(self):
-        self.steps.append(("end_turn",))
-        if self.turn_line:
-            self.lines.append(self.turn_line)
-        return 1
+    def test_a_trial_build_is_not_asked_to_name_its_release(self):
+        steps = self.checks(trial=True).steps
+        self.assertNotIn("description_of", [key for step in steps for key in step])
+        self.assertEqual(len(steps), 4)
 
 
 class CheckTest(unittest.TestCase):
-    CURRENT = version.Version("0.6.0", 6)
-
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.root)
-        self.unpacked = {
-            "Bazaar-0.6.0.civ5mod": write_mod(os.path.join(self.root, "host"), release.mods.HOST_ID, 6),
-            "Bazaar-VMC-Bootstrap-97.civ5mod": write_mod(os.path.join(self.root, "vmc"), release.mods.VMC_MOD_ID, 97),
-        }
-        self.template = write_mod(os.path.join(self.root, "Template Plugin"), "template-id")
-        self.wanted = [(release.mods.HOST_ID, 6), (release.mods.VMC_MOD_ID, 97), ("template-id", 1)]
-
-    def play(self, trial=False, installed=None, **fake):
-        g = FakeGame(self.root, self.wanted if installed is None else installed, **fake)
-        results = []
-        with mock.patch.object(release, "installed_problems", return_value=[]):
-            release.play_check(g, self.CURRENT, list(self.unpacked.values()), self.template, trial, results)
-        return g, results
-
-    def test_every_method_of_the_fake_is_one_the_game_has_called_the_same_way(self):
-        methods = [name for name, value in vars(FakeGame).items() if callable(value) and not name.startswith("_")]
-        self.assertIn("end_turn", methods)
-        for name in methods:
-            fake = list(inspect.signature(getattr(FakeGame, name)).parameters.values())
-            real = list(inspect.signature(getattr(release.game.Game, name)).parameters.values())
-            self.assertEqual([p.name for p in real[: len(fake)]], [p.name for p in fake], name)
-            self.assertTrue(all(p.default is not p.empty for p in real[len(fake) :]), name)
-
-    def test_a_release_that_names_itself_loads_the_template_and_logs_its_turn(self):
-        g, results = self.play(description=release.mods.host_description("0.6.0"))
-        self.assertEqual([r.passed for r in results], [True, True, True])
-        self.assertEqual(
-            [s[0] for s in g.steps],
-            ["mod_description", "use_default_plugin_order", "set_mods", "activate", "start_game", "end_turn"],
-        )
-        self.assertEqual(g.steps[2], ("set_mods", self.wanted))
-
-    def test_a_description_without_the_release_fails_and_shows_its_end(self):
-        _, results = self.play(description=release.mods.HOST_TEASER)
-        self.assertFalse(results[0].passed)
-        self.assertIn("0.6.0", results[0].what)
-        self.assertTrue(results[0].found.startswith("it reads: ..."))
-
-    def test_no_description_says_so(self):
-        _, results = self.play(description=None)
-        self.assertEqual(results[0].found, "the game gave no description")
-
-    def test_a_trial_build_is_not_asked_to_name_its_release(self):
-        g, results = self.play(trial=True)
-        self.assertEqual(len(results), 2)
-        self.assertTrue(all(r.passed for r in results))
-        self.assertNotIn("mod_description", [s[0] for s in g.steps])
-
-    def test_a_template_built_for_another_api_fails(self):
-        _, results = self.play(
-            description=release.mods.host_description("0.6.0"), loaded=FakeGame.LOADED.replace("0.6", "0.5")
-        )
-        self.assertFalse(results[1].passed)
-        self.assertIn("built for API 0.5", results[1].found)
-
-    def test_a_turn_line_for_another_turn_or_none_fails(self):
-        for turn, found in ((FakeGame.TURN.replace("turn 1 ", "turn 7 "), "starts turn 7 "), (None, "no such line")):
-            _, results = self.play(trial=True, turn=turn)
-            self.assertFalse(results[1].passed)
-            self.assertIn("turn 1", results[1].what)
-            self.assertIn(found, results[1].found)
-
-    def test_a_release_mod_the_game_never_lists_stops(self):
-        with self.assertRaisesRegex(release.game.GameError, "installing the release's mods"):
-            self.play(installed=self.wanted[:2])
-
-    def test_missing_release_files_stop_before_the_game_starts(self):
-        with tempfile.TemporaryDirectory() as folder:
-            with (
-                mock.patch.object(release.version, "read", return_value=self.CURRENT),
-                mock.patch.object(release, "release_folder", return_value=folder),
-                mock.patch.object(release.game, "Game") as Game,
-            ):
-                with self.assertRaisesRegex(SystemExit, "run release.py build first"):
-                    release.check(trial=False)
-                Game.assert_not_called()
-
-
-class CheckRunTest(unittest.TestCase):
-    """check() itself, with the game and the template's build replaced."""
+    """check() itself, with the game, the template's build and the runner replaced."""
 
     CURRENT = version.Version("0.6.0", 6)
 
-    def run_check(self, play, trial=False, built_from=True):
+    def run_check(self, failed=None, trial=False, built_from=True, files=3, preflight=None):
         with tempfile.TemporaryDirectory() as folder:
             out = os.path.join(folder, "v0.6.0")
             os.makedirs(out)
-            for name in release.release_files(self.CURRENT.release)[:3]:
+            for name in release.release_files(self.CURRENT.release)[:files]:
                 with open(os.path.join(out, name), "w") as f:
                     f.write("x")
             if built_from:
                 with open(os.path.join(out, release.BUILT_FROM), "w") as f:
                     f.write("abc123\n")
-            g = mock.Mock()
-            g.log.return_value = ["Plugin Template Plugin 1 loaded (built for API 0.6)."]
-            printed = io.StringIO()
+            g = mock.create_autospec(release.game.Game, instance=True)
+            g.preflight.side_effect = preflight
+            template = os.path.join(folder, "Template Plugin")
             with (
                 mock.patch.object(release.version, "read", return_value=self.CURRENT),
                 mock.patch.object(release, "release_folder", return_value=out),
                 mock.patch.object(release, "TRIAL_FOLDER", out),
-                mock.patch.object(release.game, "Game", return_value=g),
-                mock.patch.object(release.game, "session", return_value=contextlib.nullcontext(g)),
-                mock.patch.object(release, "build_template", return_value=os.path.join(folder, "Template Plugin")),
-                mock.patch.object(release, "unpack", side_effect=lambda package: package),
-                mock.patch.object(release, "play_check", side_effect=play),
-                contextlib.redirect_stdout(printed),
+                mock.patch.object(release.game, "Game", return_value=g) as Game,
+                mock.patch.object(release, "build_template", return_value=template) as build,
+                mock.patch.object(release.runner, "run", autospec=True, return_value=failed) as run,
             ):
                 try:
                     release.check(trial)
@@ -946,87 +837,37 @@ class CheckRunTest(unittest.TestCase):
                     stopped = str(e)
             checked = os.path.join(out, release.CHECKED)
             mark = release.read_text(checked) if os.path.exists(checked) else None
-            self.started = g.preflight.called
-            return stopped, printed.getvalue(), mark
+            self.reached = [name for name, step in (("game", Game), ("template", build), ("run", run)) if step.called]
+            if run.called:
+                packages = [os.path.join(out, name) for name in release.release_files(self.CURRENT.release)[:2]]
+                expected = release.release_checks(self.CURRENT, packages, template, trial)
+                self.assertEqual(run.call_args, mock.call(expected, g))
+            return stopped, mark
 
-    def test_a_release_without_its_build_mark_stops_before_the_game_starts(self):
-        stopped, _, _ = self.run_check(lambda *args: None, built_from=False)
-        self.assertIn("holds no release build", stopped)
-        self.assertFalse(self.started)
+    def test_missing_release_files_or_build_mark_stop_before_the_game_is_touched(self):
+        for kwargs, why in (
+            ({"files": 2}, "run release.py build first"),
+            ({"built_from": False}, "holds no release build"),
+        ):
+            with self.subTest(**kwargs):
+                stopped, _ = self.run_check(**kwargs)
+                self.assertIn(why, stopped)
+                self.assertEqual(self.reached, [])
 
-    def test_a_file_error_part_way_still_shows_what_passed(self):
-        def play(g, current, unpacked, template, trial, results):
-            results.append(release.Result("the first check", True, ""))
-            raise PermissionError("Bazaar.log is locked")
-
-        stopped, printed, _ = self.run_check(play)
-        self.assertIn("could not finish: Bazaar.log is locked", stopped)
-        self.assertIn("PASS  the first check", printed)
-
-    def test_a_game_that_fails_part_way_shows_what_passed_and_the_log(self):
-        def play(g, current, packages, template, trial, results):
-            results.append(release.Result("the first check", True, ""))
-            raise release.game.GameError("turn 1 cannot end")
-
-        stopped, printed, mark = self.run_check(play)
-        self.assertIn("could not finish: turn 1 cannot end", stopped)
-        self.assertIn("Plugin Template Plugin 1 loaded", stopped)
-        self.assertIn("PASS  the first check", printed)
+    def test_a_game_that_cannot_be_checked_stops_before_the_template_is_built(self):
+        stopped, mark = self.run_check(preflight=release.game.CheckError("Civilization V is already running"))
+        self.assertEqual(stopped, "release: the in-game check could not start: Civilization V is already running")
+        self.assertEqual(self.reached, ["game"])
         self.assertIsNone(mark)
 
-    def test_a_failed_check_shows_why_and_marks_nothing(self):
-        def play(g, current, packages, template, trial, results):
-            results.append(release.Result("the turn line", False, "Bazaar.log has no such line"))
-
-        stopped, printed, mark = self.run_check(play)
-        self.assertIn("the in-game check failed", stopped)
-        self.assertIn("FAIL  the turn line\n        Bazaar.log has no such line", printed)
+    def test_a_failed_check_says_why_and_marks_nothing(self):
+        stopped, mark = self.run_check(failed="failed.\nThe end of Bazaar.log:\nx")
+        self.assertEqual(stopped, "release: the in-game check failed.\nThe end of Bazaar.log:\nx")
         self.assertIsNone(mark)
 
     def test_a_passed_check_marks_the_build_it_checked_and_a_trial_marks_nothing(self):
-        def play(g, current, packages, template, trial, results):
-            results.append(release.Result("all of it", True, ""))
-
-        stopped, printed, mark = self.run_check(play)
-        self.assertIsNone(stopped)
-        self.assertIn("PASS  all of it", printed)
-        self.assertEqual(mark, "abc123\n")
-        self.assertIsNone(self.run_check(play, trial=True)[2])
-
-
-class InstalledProblemsTest(unittest.TestCase):
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.root)
-        self.mods_folder = os.path.join(self.root, "MODS")
-        os.makedirs(self.mods_folder)
-        self.expected = write_mod(os.path.join(self.root, "package"), "bazaar", 6, [("Bazaar.dll", "new")])
-
-    def install(self, name, content="new", mod_id="bazaar", version=6):
-        return write_mod(os.path.join(self.mods_folder, name), mod_id, version, [("Bazaar.dll", content)])
-
-    def test_one_copy_as_packaged_is_fine(self):
-        self.install("Bazaar (v 6)")
-        self.install("Bazaar (v 5)", content="old", version=5)
-        self.assertEqual(release.installed_problems(self.mods_folder, [self.expected]), [])
-
-    def test_a_second_copy_of_the_same_version_is_named(self):
-        self.install("Bazaar (v 6)")
-        test_build = self.install("Bazaar test build")
-        (problem,) = release.installed_problems(self.mods_folder, [self.expected])
-        self.assertIn("2 copies of bazaar v6", problem)
-        self.assertIn(test_build, problem)
-
-    def test_a_copy_that_differs_from_its_package_is_named(self):
-        self.install("Bazaar (v 6)", content="a different build")
-        (problem,) = release.installed_problems(self.mods_folder, [self.expected])
-        self.assertIn("is not the build in package", problem)
-        self.assertIn("Bazaar.dll", problem)
-        self.assertIn("left from an earlier check", problem)
-
-    def test_no_copy_is_named(self):
-        (problem,) = release.installed_problems(self.mods_folder, [self.expected])
-        self.assertEqual(problem, "MODS holds no copy of bazaar v6")
+        self.assertEqual(self.run_check(), (None, "abc123\n"))
+        self.assertEqual(self.run_check(trial=True, built_from=False), (None, None))
 
 
 class SourceContractTest(unittest.TestCase):
@@ -1039,8 +880,7 @@ class SourceContractTest(unittest.TestCase):
         (fmt,) = re.findall(
             r'Log\("(Plugin %s %s loaded \(built for API %d\.%d\)\.)"', self.source("host", "CivHostRuntime.cpp")
         )
-        line = fmt % ("Template Plugin", "1", 0, 6)
-        self.assertEqual(release.TEMPLATE_LOADED.match(line).groups(), ("0", "6"))
+        self.assertRegex(fmt % ("Template Plugin", "1", 0, 6), release.TEMPLATE_LOADED % (0, 6))
 
     def test_the_turn_line_is_the_one_the_template_writes_through_bazaar(self):
         plugin_line = re.search(r'Log\("\[%s\] %s"', self.source("host", "CivHostRuntime.cpp"))
@@ -1048,12 +888,11 @@ class SourceContractTest(unittest.TestCase):
         (fmt,) = re.findall(r'Log\("(%s starts turn %d [^"]*)"', template)
         self.assertIsNotNone(plugin_line)
         self.assertIn('plugin->name = "Template Plugin";', template)
-        line = "[Template Plugin] " + fmt % ("Rome", 4, 0, 1, 0)
-        self.assertEqual(release.TEMPLATE_TURN.match(line).group(1), "4")
+        self.assertRegex("[Template Plugin] " + fmt % ("Rome", 4, 0, 1, 0), release.TEMPLATE_TURN % 4)
 
     def test_the_plugin_order_file_is_the_one_bazaar_reads(self):
         self.assertIn(
-            '"\\\\%s"' % release.game.ORDER_FILE.replace("\\", "\\\\"), self.source("host", "CivHostEngine.cpp")
+            '"\\\\%s"' % release.files.ORDER_FILE.replace("\\", "\\\\"), self.source("host", "CivHostEngine.cpp")
         )
 
 

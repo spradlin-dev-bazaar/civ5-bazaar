@@ -6,52 +6,27 @@ The game must be set up for it once: EnableTuner = 1 and LoggingEnabled = 1 in i
 the last time it was started from Steam, since starting it through steam://rungameid starts the version chosen last.
 """
 
-import collections
 import contextlib
 import csv
-import ctypes
-import glob
 import io
 import os
 import re
-import shutil
 import subprocess
-import tempfile
 import time
-from xml.etree import ElementTree
 
-import tuner
+from . import CheckError, files, tuner
 
 GAME_URL = "steam://rungameid/8930"
 DX11_EXE = "civilizationv_dx11.exe"
-ORDER_FILE = os.path.join("ModUserData", "Bazaar plugin order.txt")
-SAVES = os.path.join("ModdedSaves", "single")
-AUTOSAVES = os.path.join(SAVES, "auto")
 FRONT_END = "MainMenu"
 MODS_BROWSER = "ModsBrowser"
 IN_GAME = "InGame"
 LOAD_SCREEN = "LoadScreen"
 LEGAL_SCREEN = "LegalScreen"
-CSIDL_PERSONAL = 5
 NOT_BLOCKED = -1
 REFUSED = "refused: "
-
-UserFiles = collections.namedtuple("UserFiles", "folder order autosaves")
-
-
-class GameError(Exception):
-    pass
-
-
-ERRORS = (GameError, tuner.TunerError, tuner.LuaError)
-
-
-def user_folder():
-    """The game's folder in Documents, wherever Windows keeps Documents."""
-    path = ctypes.create_unicode_buffer(260)
-    if ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, 0, path) != 0:
-        raise GameError("Windows did not report your Documents folder")
-    return os.path.join(path.value, "My Games", "Sid Meier's Civilization 5")
+STOPPED = "the check was stopped"
+ERRORS = (CheckError, tuner.TunerError, tuner.LuaError)
 
 
 def config_problems(text):
@@ -73,28 +48,6 @@ def game_processes():
     return parse_tasklist(subprocess.run(command, capture_output=True, text=True).stdout)
 
 
-def mod_key(folder):
-    modinfos = glob.glob(os.path.join(glob.escape(folder), "*.modinfo"))
-    if len(modinfos) != 1:
-        return None
-    try:
-        root = ElementTree.parse(modinfos[0]).getroot()
-        return root.get("id"), int(root.get("version"))
-    except (ElementTree.ParseError, TypeError, ValueError):
-        raise GameError("%s is not a mod description the game can read" % modinfos[0])
-
-
-def mod_folders(mods_folder, key):
-    """A broken mod of someone else's must not stop the check."""
-    found = []
-    for name in sorted(os.listdir(mods_folder)):
-        folder = os.path.join(mods_folder, name)
-        with contextlib.suppress(GameError):
-            if os.path.isdir(folder) and mod_key(folder) == key:
-                found.append(folder)
-    return found
-
-
 def mod_problems(wanted, enabled):
     on = {(m, v): name for m, v, name in enabled}
     problems = []
@@ -109,6 +62,11 @@ def mod_problems(wanted, enabled):
 
 def mod_table(mods):
     return "{%s}" % ", ".join("{%s, %d}" % (tuner.lua_text(i), v) for i, v in mods)
+
+
+def menu_not_back(mods, why):
+    names = ", ".join("%s (v %d)" % (name, v) for _, v, name in mods)
+    return "your Mods menu could not be put back (%s); switch these on there again: %s" % (why, names)
 
 
 LIST_MODS = r"""
@@ -130,6 +88,13 @@ for _, m in ipairs(wanted) do Modding.EnableMod(m[1], m[2]) end
 MOD_DESCRIPTION = r"""
 local details = Modding.GetInstalledModDetails(%(id)s, %(version)d)
 if details and details.Description then print(details.Description) end
+"""
+
+PLUGINS = r"""
+for row in DB.Query("SELECT File, Status, Problems FROM BazaarPlugins ORDER BY Position") do
+    local problems = tostring(row.Problems or ""):gsub("[\t\r\n]", " ")
+    print(tostring(row.File) .. "\t" .. tostring(row.Status) .. "\t" .. problems)
+end
 """
 
 # What the game's own setup screen does from the Mods menu, which leaves the player's Play Now settings alone.
@@ -193,11 +158,11 @@ class Game:
     def __init__(self, say=print, port=tuner.PORT, user=None):
         self.say = say
         self.tuner = tuner.Tuner(port=port)
-        self.user = user or user_folder()
+        self.files = files.PlayerFiles(user or files.user_folder(), say)
         self.started = None
 
     def path(self, *parts):
-        return os.path.join(self.user, *parts)
+        return self.files.path(*parts)
 
     def lua(self, state, code, timeout=30):
         return self.tuner.run(state, code, timeout)
@@ -225,93 +190,25 @@ class Game:
             except tuner.TunerError as e:
                 last = e
                 if not game_processes():
-                    raise GameError("Civilization V closed while waiting for %s" % what)
+                    raise CheckError("Civilization V closed while waiting for %s" % what)
                 with contextlib.suppress(tuner.TunerError):
                     self.tuner.connect(min(20, max(deadline - time.time(), 1)))
             if time.time() > deadline:
                 because = " (last error: %s)" % last if last else ""
-                raise GameError("%s did not happen within %d seconds%s" % (what, timeout, because))
+                raise CheckError("%s did not happen within %d seconds%s" % (what, timeout, because))
             time.sleep(2)
 
     def preflight(self):
         """What must hold before a check changes anything."""
         if game_processes():
-            raise GameError("Civilization V is already running: close it, then run this again")
+            raise CheckError("Civilization V is already running: close it, then run this again")
         config = self.path("config.ini")
         if not os.path.isfile(config) or not os.path.isdir(self.path("MODS")):
-            raise GameError("%s has no config.ini or MODS folder: start Civilization V once first" % self.user)
+            raise CheckError("%s has no config.ini or MODS folder: start Civilization V once first" % self.files.user)
         with open(config, encoding="utf-8", errors="replace") as f:
             problems = config_problems(f.read())
         if problems:
-            raise GameError("%s needs %s; set that with the game closed" % (config, " and ".join(problems)))
-
-    def install(self, paths):
-        """Copy mod folders and packages into MODS; the game unpacks a package when it starts. A folder replaces one of
-        the same name only when both hold the same mod."""
-        mods = self.path("MODS")
-        for source in paths:
-            target = os.path.join(mods, os.path.basename(source))
-            if os.path.isfile(source):
-                shutil.copyfile(source, target)
-                continue
-            key = mod_key(source)
-            if key is None:
-                raise GameError("%s holds no mod description" % source)
-            if os.path.exists(target):
-                if (mod_key(target) or (None,))[0] != key[0]:
-                    raise GameError("%s already holds a different mod: move it out of MODS first" % target)
-                shutil.rmtree(target)
-            shutil.copytree(source, target)
-
-    def save_user_files(self):
-        """Copies, on disk so they survive the script being killed, of what a check changes outside MODS: the plugin
-        order, and the autosaves, which the game rotates whenever a new game starts, whatever its settings."""
-        folder = tempfile.mkdtemp(prefix="Bazaar check ")
-        order = None
-        if os.path.isfile(self.path(ORDER_FILE)):
-            shutil.copyfile(self.path(ORDER_FILE), os.path.join(folder, os.path.basename(ORDER_FILE)))
-            with open(self.path(ORDER_FILE), "rb") as f:
-                order = f.read()
-        autosaves = None
-        if os.path.isdir(self.path(AUTOSAVES)):
-            autosaves = os.path.join(folder, "auto")
-            shutil.copytree(self.path(AUTOSAVES), autosaves)
-        return UserFiles(folder, order, autosaves)
-
-    def restore_user_files(self, saved, autosaves_touched=True):
-        """Puts the copies back and returns what could not be; then the copies go, unless something was not put back.
-        Without autosaves_touched, as when no game was started, the autosaves are left as they are."""
-        problems = []
-        order = self.path(ORDER_FILE)
-        try:
-            if saved.order is not None:
-                with open(order, "wb") as f:
-                    f.write(saved.order)
-            elif os.path.exists(order):
-                os.remove(order)
-        except OSError as e:
-            problems.append("your plugin order could not be put back (%s)" % e)
-        if autosaves_touched and game_processes():
-            problems.append("Civilization V is still running, so your autosaves were not put back")
-        elif autosaves_touched:
-            autosaves = self.path(AUTOSAVES)
-            try:
-                if os.path.isdir(autosaves):
-                    shutil.rmtree(autosaves)
-                if saved.autosaves:
-                    shutil.copytree(saved.autosaves, autosaves)
-            except OSError as e:
-                problems.append("your autosaves could not be put back (%s)" % e)
-        if problems:
-            return problems + ["copies of your plugin order and autosaves are kept in %s" % saved.folder]
-        shutil.rmtree(saved.folder, ignore_errors=True)
-        return problems
-
-    def use_default_plugin_order(self):
-        """Bazaar loads every listed plugin when the order file is empty, whatever the player unticked."""
-        path = self.path(ORDER_FILE)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        open(path, "w").close()
+            raise CheckError("%s needs %s; set that with the game closed" % (config, " and ".join(problems)))
 
     def start(self, timeout=300):
         self.preflight()
@@ -321,9 +218,9 @@ class Game:
         self.wait("Civilization V starting", game_processes, 120)
         running = game_processes()
         if not running:
-            raise GameError("Civilization V closed as it started")
+            raise CheckError("Civilization V closed as it started")
         if DX11_EXE not in running:
-            raise GameError(
+            raise CheckError(
                 "Steam started %s, not the DirectX 11 version. Close it, start the game once from Steam choosing"
                 " DirectX 11, then run this again" % ", ".join(running)
             )
@@ -349,7 +246,7 @@ class Game:
         for line in self.lua(FRONT_END, LIST_MODS):
             fields = line.split("\t", 3)
             if len(fields) != 4 or not fields[1].isdigit():
-                raise GameError("the game listed a mod as %r" % line)
+                raise CheckError("the game listed a mod as %r" % line)
             if fields[2] == "true" or not enabled_only:
                 rows.append((fields[0], int(fields[1]), fields[3]))
         return rows
@@ -358,11 +255,16 @@ class Game:
         self.lua(FRONT_END, SET_MODS % {"mods": mod_table(wanted)})
         problems = mod_problems(wanted, self.mods())
         if problems:
-            raise GameError("the Mods menu could not be set; " + "; ".join(problems))
+            raise CheckError("the Mods menu could not be set; " + "; ".join(problems))
 
     def mod_description(self, mod_id, version):
         lines = self.lua(FRONT_END, MOD_DESCRIPTION % {"id": tuner.lua_text(mod_id), "version": version})
         return "\n".join(lines) if lines else None
+
+    def plugins(self):
+        """The Plugins screen's rows as (file, status, problems)."""
+        state = IN_GAME if self.state_ids(IN_GAME) else FRONT_END
+        return [tuple((line.split("\t", 2) + ["", ""])[:3]) for line in self.lua(state, PLUGINS)]
 
     def activate(self):
         """Switch the chosen mods on as the Mods menu's Next button does, which loads Bazaar and its plugins."""
@@ -376,7 +278,7 @@ class Game:
         games = max(self.state_ids(IN_GAME) or [-1])
         for line in self.lua(state, code):
             if line.startswith(REFUSED):
-                raise GameError(line[len(REFUSED) :])
+                raise CheckError(line[len(REFUSED) :])
 
         def loaded():
             ids = self.state_ids(LOAD_SCREEN)
@@ -403,7 +305,7 @@ class Game:
         lines = self.lua(IN_GAME, BLOCKER)
         fields = lines[0].split("\t") if lines else []
         if len(fields) != 2:
-            raise GameError("the game reported what it waits for as %r" % lines)
+            raise CheckError("the game reported what it waits for as %r" % lines)
         return int(fields[0]), fields[1]
 
     def end_turn(self, timeout=180):
@@ -417,19 +319,20 @@ class Game:
                 lambda: self.lua(IN_GAME, END_TURN % {"turn": turn}) == ["true"],
                 timeout,
             )
-        except GameError as e:
+        except CheckError as e:
             waiting = "the check could not read what the game is waiting for"
             with contextlib.suppress(ERRORS):
                 number, name = self.blocker()
                 waiting = "the game is waiting for %s" % name
                 if number == NOT_BLOCKED:
                     waiting = "nothing blocks the turn, so the other players may still be moving"
-            raise GameError("%s; %s" % (e, waiting))
+            raise CheckError("%s; %s" % (e, waiting))
         self.say("turn %d" % (turn + 1))
         return turn + 1
 
     def save(self, name, timeout=60):
-        path = self.path(SAVES, name + ".Civ5Save")
+        self.say("saving %s" % name)
+        path = self.path(files.SAVES, name + ".Civ5Save")
         before = os.path.getmtime(path) if os.path.exists(path) else 0
         self.lua(IN_GAME, "UI.SaveGame(%s)" % tuner.lua_text(name))
 
@@ -458,63 +361,76 @@ class Game:
         self.tuner.close()
         self.wait("Civilization V closing", lambda: not game_processes(), timeout)
 
-    def clean_up(self, mods, saved):
-        """Put the player's game back as it was; returns what could not be. Interrupted, as by a second Ctrl+C, it
-        still puts the files back, or says where their copies are, before stopping."""
+    def put_menu_back(self, mods):
+        """Why the player's Mods menu could not be put back, or None."""
+        try:
+            self.to_main_menu()
+            if mods is not None:
+                self.set_mods([(m, v) for m, v, _ in mods])
+        except ERRORS as e:
+            return e
+        return None
+
+    def leftovers(self, mods, menu, copies, running):
+        """What the player has left to put back by hand."""
+        left = [menu_not_back(mods, menu)] if menu is not None and mods is not None else []
+        return left + self.files.put_back(copies, game_running=running)
+
+    def clean_up(self, mods, copies):
+        """Put the player's game back as it was; returns what could not be. Stopped part way, as by a second Ctrl+C or
+        an error it did not expect, it still puts the files back and says what is left before stopping."""
+        menu = None
+        settled = False
         problems = []
         try:
-            try:
-                self.to_main_menu()
-                if mods is not None:
-                    self.set_mods([(m, v) for m, v, _ in mods])
-            except ERRORS as e:
-                if mods is not None:
-                    names = ", ".join("%s (v %d)" % (name, v) for _, v, name in mods)
-                    problems.append(
-                        "your Mods menu could not be put back (%s); switch these on there again: %s" % (e, names)
-                    )
-            try:
-                self.quit()
-            except ERRORS as e:
-                problems.append("%s; close Civilization V by hand" % e)
-        except BaseException:
-            for problem in self.restore_user_files(saved):
+            menu = self.put_menu_back(mods)
+            settled = True
+            self.quit()
+        except ERRORS as e:
+            problems.append("%s; close Civilization V by hand" % e)
+        except BaseException as e:
+            if not settled:
+                menu = e if isinstance(e, Exception) else STOPPED
+            # After Ctrl+C the player wants it to stop now, so the game is left for them to close.
+            if isinstance(e, Exception):
+                with contextlib.suppress(Exception):
+                    self.quit(30)
+            running = bool(game_processes())
+            for problem in self.leftovers(mods, menu, copies, running):
                 self.say(problem)
+            if running:
+                self.say("close Civilization V by hand")
             raise
-        problems += self.restore_user_files(saved)
+        problems = self.leftovers(mods, menu, copies, bool(game_processes())) + problems
         if not problems:
             self.say("your Mods menu choices, plugin order and autosaves are as they were")
         return problems
 
     def log(self, name="Bazaar.log"):
-        """The log's lines if the game wrote it during this run. Bazaar empties its log only when it first writes, so
-        an older file holds a past run's lines."""
-        path = self.path("Logs", name)
-        if self.started is None or not os.path.exists(path) or os.path.getmtime(path) < self.started:
-            return []
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return f.read().splitlines()
+        return self.files.log(name, self.started)
 
 
 @contextlib.contextmanager
 def session(game):
     """Start the game, and close it afterwards with the player's mods, plugin order and autosaves as they were. A
     problem putting things back is reported without hiding the error that ended the run."""
-    saved = game.save_user_files()
+    copies = game.files.copy_aside()
     try:
         game.start()
     except BaseException:
-        for problem in game.restore_user_files(saved, autosaves_touched=False):
+        for problem in game.files.put_back(copies, autosaves_touched=False):
             game.say(problem)
+        if game.started is not None and game_processes():
+            game.say("close Civilization V by hand")
         raise
     mods = None
     try:
         mods = game.mods()
         yield game
     except BaseException:
-        for problem in game.clean_up(mods, saved):
+        for problem in game.clean_up(mods, copies):
             game.say(problem)
         raise
-    problems = game.clean_up(mods, saved)
+    problems = game.clean_up(mods, copies)
     if problems:
-        raise GameError("; ".join(problems))
+        raise CheckError("; ".join(problems))
