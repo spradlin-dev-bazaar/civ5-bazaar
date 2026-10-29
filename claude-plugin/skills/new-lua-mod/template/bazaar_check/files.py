@@ -1,5 +1,6 @@
-"""The player's Civilization V folder in Documents. Nothing here needs the game, so all of it works with the game
-closed."""
+"""The player's Civilization V folder in Documents: reading mod descriptions, installing mods into MODS, writing
+Bazaar's plugin order, and copying aside and putting back what a check changes there. Nothing here needs the game, so
+all of it works with the game closed."""
 
 import collections
 import contextlib
@@ -35,6 +36,12 @@ ORDER_KEYS = {"file", "skip", "use_both_with"}
 ModInfo = collections.namedtuple("ModInfo", "id version name dependencies")
 Dependency = collections.namedtuple("Dependency", "id title low high")
 Copies = collections.namedtuple("Copies", "folder mods_database order config autosaves")
+Kept = collections.namedtuple("Kept", "label rel field held_by_game")
+KEPT = (
+    Kept("Mods menu choices", MODS_DATABASE, "mods_database", True),
+    Kept("plugin order", ORDER_FILE, "order", False),
+    Kept("config.ini", CONFIG, "config", True),
+)
 
 
 def user_folder():
@@ -131,14 +138,9 @@ def and_list(names):
     return ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 1 else "".join(names)
 
 
-def copied(copies):
-    kept = (
-        ("Mods menu choices", copies.mods_database),
-        ("plugin order", copies.order),
-        ("config.ini", copies.config),
-        ("autosaves", copies.autosaves),
-    )
-    return and_list([name for name, copy in kept if copy is not None])
+def copied_text(copies):
+    names = [kept.label for kept in KEPT if getattr(copies, kept.field) is not None]
+    return and_list(names + (["autosaves"] if copies.autosaves is not None else []))
 
 
 def leftover_copies():
@@ -200,15 +202,15 @@ class PlayerFiles:
         a test build or a Workshop download, or a copy that differs from what was installed."""
         problems = []
         for expected in expected_folders:
-            key = mod_key(expected)
-            folders = mod_folders(self.path("MODS"), key)
+            info = read_modinfo(expected)
+            folders = mod_folders(self.path("MODS"), (info.id, info.version))
             if not folders:
-                problems.append("MODS holds no copy of %s v%d" % key)
+                problems.append("MODS holds no copy of %s (v %d)" % (info.name, info.version))
                 continue
             if len(folders) > 1:
                 problems.append(
-                    "MODS holds %d copies of %s v%d (%s): move the others out of MODS"
-                    % (len(folders), key[0], key[1], ", ".join(folders))
+                    "MODS holds %d copies of %s (v %d): %s; move the others out of MODS"
+                    % (len(folders), info.name, info.version, ", ".join(folders))
                 )
                 continue
             changed = different_files(expected, folders[0])
@@ -272,20 +274,17 @@ class PlayerFiles:
             "These are copies a Bazaar check made before it changed your files. If it could not put them back, close",
             "Civilization V, then:",
         ]
-        for what, rel, copy in (
-            ("Mods menu choices", MODS_DATABASE, copies.mods_database),
-            ("plugin order", ORDER_FILE, copies.order),
-            ("game settings", CONFIG, copies.config),
-        ):
-            name = os.path.basename(rel)
-            if copy is None:
-                lines.append("- delete %s if it is there: you had no %s before the check" % (self.path(rel), name))
+        none = "if it is there, since you had none before the check"
+        for kept in KEPT:
+            path = self.path(kept.rel)
+            if getattr(copies, kept.field) is None:
+                lines.append("- your %s: delete %s %s" % (kept.label, path, none))
             else:
-                lines.append("- copy %s, your %s, into %s" % (name, what, os.path.dirname(self.path(rel))))
+                lines.append("- your %s: copy %s into %s" % (kept.label, os.path.basename(path), os.path.dirname(path)))
         if copies.autosaves is None:
-            lines.append("- delete the folder %s if it is there: you had no autosaves before" % self.path(AUTOSAVES))
+            lines.append("- your autosaves: delete the folder %s %s" % (self.path(AUTOSAVES), none))
         else:
-            lines.append("- put the auto folder, your autosaves, in place of %s" % self.path(AUTOSAVES))
+            lines.append("- your autosaves: put the auto folder in place of %s" % self.path(AUTOSAVES))
         lines.append("Then delete this folder.")
         return "\r\n".join(lines) + "\r\n"
 
@@ -301,39 +300,37 @@ class PlayerFiles:
                 autosaves = os.path.join(folder, "auto")
                 shutil.copytree(self.path(AUTOSAVES), autosaves)
             copies = Copies(
-                folder=folder,
-                mods_database=self.copy_file(MODS_DATABASE, folder),
-                order=self.copy_file(ORDER_FILE, folder),
-                config=self.copy_file(CONFIG, folder),
-                autosaves=autosaves,
+                folder=folder, autosaves=autosaves, **{kept.field: self.copy_file(kept.rel, folder) for kept in KEPT}
             )
             with open(os.path.join(folder, WHERE_THEY_GO), "w", encoding="utf-8", newline="") as f:
                 f.write(self.where_they_go(copies))
         except BaseException:
             shutil.rmtree(folder, ignore_errors=True)
             raise
-        if copied(copies):
-            self.say("copies of your %s are kept in %s until the check ends" % (copied(copies), folder))
+        if copied_text(copies):
+            self.say("copies of your %s are kept in %s until the check ends" % (copied_text(copies), folder))
         return copies
 
     def put_back(self, copies, autosaves_touched=True, game_running=False):
         """Returns what could not be put back; the copies are deleted unless something was not. The game holds its
         mods database, config.ini and autosaves while it runs, so those go back only once it has closed."""
-        problems = [self.put_back_file("plugin order", ORDER_FILE, copies.order)]
-        held = [("Mods menu choices", MODS_DATABASE, copies.mods_database), ("config.ini", CONFIG, copies.config)]
+        problems, left = [], []
+        for kept in KEPT:
+            content = getattr(copies, kept.field)
+            if game_running and kept.held_by_game:
+                left += [kept.label] if content is not None else []
+            else:
+                problems.append(self.put_back_file(kept.label, kept.rel, content))
         if game_running:
-            left = [what for what, _, content in held if content is not None]
             left += ["autosaves"] if autosaves_touched and copies.autosaves else []
             if left:
                 problems.append("Civilization V is still running, so your %s were not put back" % and_list(left))
             if autosaves_touched and not copies.autosaves:
                 problems.append("Civilization V is still running, so the autosaves its game made stay")
-        else:
-            problems += [self.put_back_file(*entry) for entry in held]
-            if autosaves_touched:
-                problems.append(self.put_back_autosaves(copies.autosaves))
+        elif autosaves_touched:
+            problems.append(self.put_back_autosaves(copies.autosaves))
         problems = [problem for problem in problems if problem]
-        if problems and copied(copies):
+        if problems and copied_text(copies):
             return problems + [
                 'the copies stay in %s, and "%s" there says where each goes' % (copies.folder, WHERE_THEY_GO)
             ]

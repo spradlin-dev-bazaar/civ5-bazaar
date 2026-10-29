@@ -16,7 +16,6 @@ import package  # noqa: E402
 from bazaar_check import CheckError, files, game, runner  # noqa: E402
 
 CHECKS = os.path.join(HERE, "checks")
-TEST_MOD_IDS = {toy.mod_id for toy in package.TOYS} | {package.VMC_CHECK_ID}
 
 
 def checks_path(name):
@@ -39,7 +38,7 @@ def remove_test_mods(player):
             info = files.read_modinfo(folder) if os.path.isdir(folder) else None
         except (CheckError, OSError):
             continue
-        if info and info.id in TEST_MOD_IDS:
+        if info and info.id in package.TEST_MOD_IDS:
             try:
                 shutil.rmtree(folder)
                 removed.append(name)
@@ -54,6 +53,7 @@ def main(argv):
     try:
         all_checks = {name: runner.read_checks(checks_path(name)) for name in names}
         player = files.PlayerFiles(files.user_folder())
+        game.Game().preflight()
     except CheckError as e:
         print(e)
         return 1

@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from fakes import HERE, write_mod
+from fakes import HERE, use_own_temp, write_mod
 
 from bazaar_check import CheckError, files, game, runner, tuner
 
@@ -63,7 +63,12 @@ class FakeGame:
         self.enabled = set(wanted)
 
     def activate(self):
+        """Keeps the plugin order as it stood when Bazaar loaded the plugins."""
         self.steps.append(("activate",))
+        path = self.files.path(files.ORDER_FILE)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                self.order_at_activate = f.read()
 
     def start_game(self, timeout=300):
         self.steps.append(("start_game",))
@@ -109,6 +114,7 @@ class FolderTest(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.root)
+        use_own_temp(self)
         os.makedirs(self.path("MODS"))
 
     def path(self, *parts):
@@ -184,6 +190,7 @@ class ReadChecksTest(FolderTest):
             ),
             ('[[steps]]\nlua = "x"\nhas = "("\n', "has pattern Python cannot read"),
             ('[[steps]]\nlua = "x"\nwithin = 0\n', "within needs 1 or more seconds"),
+            ('[[steps]]\nplugin = "A.dll"\nstatus = "Not Loaded"\n', 'step 1 \\(plugin\\): status is one of "Loaded"'),
             ('[[steps]]\nlog = "Bazaar.log"\nlacks = "x"\nwithin = 5\n', "within waits for a line to appear"),
         ]
         for steps, why in cases:
@@ -268,7 +275,13 @@ class PlayTest(FolderTest):
         checks = runner.Checks([self.plugin], [], list(steps), crash_expected, lua_errors_expected)
         results = []
         runner.play(checks, g, [self.plugin], results)
+        results.extend(runner.final_checks(checks, g))
         return g, results
+
+    def test_the_plugin_order_is_written_before_bazaar_loads_the_plugins(self):
+        g = FakeGame(self.root, self.installed)
+        runner.play(runner.Checks([self.plugin], ["A.dll"]), g, [self.plugin], [])
+        self.assertEqual(g.order_at_activate, b"load\tA.dll\t\t\r\n")
 
     def test_every_method_of_the_fake_is_one_the_game_has_called_the_same_way(self):
         methods = [name for name, value in vars(FakeGame).items() if callable(value) and not name.startswith("_")]
@@ -309,7 +322,7 @@ class PlayTest(FolderTest):
 
     def test_another_copy_in_mods_stops_before_anything_is_switched_on(self):
         shutil.copytree(self.plugin, self.path("MODS", "Plugin copy"))
-        with self.assertRaisesRegex(CheckError, "MODS holds 2 copies of plugin v1"):
+        with self.assertRaisesRegex(CheckError, "MODS holds 2 copies of Plugin \\(v 1\\)"):
             self.play()
 
     def test_lua_checks_pass_on_anything_but_false_or_nil(self):
@@ -437,7 +450,11 @@ class PlayTest(FolderTest):
         _, results = self.play(steps, plugins=rows)
         self.assertEqual([r.passed for r in results[:4]], [True, True, False, False])
         self.assertEqual(results[2].found, "it shows Not loaded: It needs API 0.7.")
+        self.assertEqual(
+            results[1].what, "the Plugins screen shows Other.dll as Not loaded with a problem matching needs API"
+        )
         self.assertEqual(results[3].found, "it does not list Missing.dll")
+        self.assertEqual(results[3].what, "the Plugins screen lists Missing.dll")
 
     def test_a_description_must_match_whole(self):
         step = {"description_of": "bazaar", "version": 7, "is": "Bazaar 0.6.0."}
@@ -488,8 +505,10 @@ class RunChecksTest(FolderTest):
         def session(game, seed):
             done.append("session with seed %d" % seed)
             yield game
+            done.append("game closed")
 
         g.files.install.side_effect = install
+        g.log.side_effect = lambda name="Bazaar.log": done.append("read " + name) or []
         with mock.patch.object(game, "session", session), mock.patch.object(runner, "play", side_effect=play):
             try:
                 runner.run_checks(runner.Checks(["a"]), g, [])
@@ -498,7 +517,7 @@ class RunChecksTest(FolderTest):
 
     def test_the_mods_go_in_only_once_the_game_is_closed_and_before_it_starts(self):
         self.run_checks(lambda checks, g, expected, results: None)
-        self.assertEqual(self.done, ["preflight", "install", "session with seed %d" % runner.DEFAULT_SEED])
+        self.assertEqual(self.done[:3], ["preflight", "install", "session with seed %d" % runner.DEFAULT_SEED])
         self.assertFalse(os.path.exists(self.staging))
 
     def test_copies_an_earlier_check_left_stop_the_run_before_any_mod_is_installed(self):
@@ -509,6 +528,10 @@ class RunChecksTest(FolderTest):
                 self.run_checks(lambda checks, g, expected, results: None)
         self.assertEqual(self.done, ["preflight"])
 
+    def test_crashes_and_lua_errors_are_read_once_the_game_has_closed(self):
+        self.run_checks(lambda checks, g, expected, results: None)
+        self.assertEqual(self.done[3:], ["game closed", "read Bazaar.log", "read Lua.log"])
+
     def test_the_staging_folder_goes_even_when_a_check_fails(self):
         with self.assertRaises(CheckError):
             self.run_checks(mock.Mock(side_effect=CheckError("turn 1 cannot end")))
@@ -516,10 +539,18 @@ class RunChecksTest(FolderTest):
 
 
 class RunTest(unittest.TestCase):
-    def run_checks(self, side_effect, checks=None, started=1000.0):
+    def run_checks(
+        self,
+        side_effect,
+        checks=None,
+        started=1000.0,
+        log=("Plugin Template Plugin 1 loaded (built for API 0.6).",),
+        mods_on=None,
+    ):
         g = mock.create_autospec(game.Game, instance=True)
         g.started = started
-        g.log.return_value = ["Plugin Template Plugin 1 loaded (built for API 0.6)."]
+        g.mods_on = started is not None if mods_on is None else mods_on
+        g.log.return_value = list(log)
         printed = io.StringIO()
         with (
             mock.patch.object(runner, "run_checks", side_effect=side_effect) as run_checks,
@@ -552,7 +583,23 @@ class RunTest(unittest.TestCase):
             with self.subTest(error=error):
                 failed, printed = self.run_checks(run)
                 self.assertTrue(failed.startswith("could not finish: %s\n" % error))
-                self.assertEqual(printed, "  PASS  the first check\n")
+                self.assertEqual(
+                    printed,
+                    "  PASS  the first check\n  PASS  no plugin stopped working\n  PASS  Lua.log has no Lua errors\n",
+                )
+
+    def test_a_crash_that_ended_the_run_is_named_above_its_call_stack(self):
+        crash = "Plugin Toy Crash: Faulted (code 0xC0000005) in CvPlayer::doTurn."
+        stack = ["  #%02d ToyCrash.dll+0x00001A2B" % frame for frame in range(30)]
+        timeout = CheckError("turn 2 starting did not happen within 180 seconds")
+        failed, printed = self.run_checks(mock.Mock(side_effect=timeout), log=[crash] + stack)
+        self.assertIn("  FAIL  no plugin stopped working\n        Bazaar.log has: " + crash, printed)
+        self.assertNotIn(crash, failed)
+
+    def test_a_run_that_never_switched_the_mods_on_shows_no_crash_or_lua_checks(self):
+        refused = CheckError("Steam started civilizationv.exe, not the DirectX 11 version")
+        _, printed = self.run_checks(mock.Mock(side_effect=refused), mods_on=False)
+        self.assertEqual(printed, "")
 
     def test_an_error_before_the_game_started_shows_no_log(self):
         failed, _ = self.run_checks(mock.Mock(side_effect=CheckError("MODS holds no copy")), started=None)
@@ -602,8 +649,15 @@ class SourceContractTest(unittest.TestCase):
         for name in ("CivHostRuntime.cpp", "CivHostRuntime.h", "CivHostOrder.cpp"):
             with open(os.path.join(REPO, "host", name), encoding="latin-1") as f:
                 source += f.read()
-        for status in ("Loaded", "Not loaded", "Turned off after a crash", "Skipped"):
+        for status in runner.STATUSES:
             self.assertIn('"%s"' % status, source)
+
+    def test_the_plugins_screen_s_table_has_the_columns_the_checker_reads(self):
+        with open(os.path.join(REPO, "host", "CivHostEngine.cpp"), encoding="latin-1") as f:
+            (columns,) = re.findall(r"CREATE TABLE BazaarPlugins \(([^)]*)\)", f.read())
+        made = {column.split()[0] for column in columns.split(",")}
+        read, order = re.search(r"SELECT (.+?) FROM BazaarPlugins ORDER BY (\w+)", game.PLUGINS).groups()
+        self.assertLessEqual({column.strip() for column in read.split(",")} | {order}, made)
 
 
 if __name__ == "__main__":

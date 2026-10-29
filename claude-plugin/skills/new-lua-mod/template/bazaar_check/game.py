@@ -26,8 +26,6 @@ LEGAL_SCREEN = "LegalScreen"
 NOT_BLOCKED = -1
 REFUSED = "refused: "
 ERRORS = (CheckError, tuner.TunerError, tuner.LuaError)
-# Bazaar's crash pop-up; close_popups leaves it, since its name does not end in Popup, for a check to see.
-BAZAAR_STOPPED = "BazaarStopped"
 
 
 def config_problems(text):
@@ -101,6 +99,17 @@ if not (GameInfo.Civilizations.CIVILIZATION_AMERICA and GameInfo.Civilizations.C
     print("%(refused)sthe checks play America against Rome, and a mod switched on has removed one of them")
     return
 end
+local continents
+for row in GameInfo.MapScripts() do
+    if row.FileName and string.find(row.FileName, "\\Continents.lua", 1, true) then
+        continents = row.FileName
+        break
+    end
+end
+if not continents then
+    print("%(refused)sthe checks play on the Continents map, and the game lists no Continents map script")
+    return
+end
 PreGame.SetPrivateGame(false)
 PreGame.SetGameType(GameTypes.GAME_SINGLE_PLAYER)
 PreGame.ResetSlots()
@@ -114,13 +123,8 @@ PreGame.SetHandicap(0, GameInfo.HandicapInfos.HANDICAP_PRINCE.ID)
 PreGame.SetGameSpeed(GameInfo.GameSpeeds.GAMESPEED_STANDARD.ID)
 PreGame.SetEra(GameInfo.Eras.ERA_ANCIENT.ID)
 PreGame.SetLoadWBScenario(false)
-for row in GameInfo.MapScripts() do
-    if row.FileName and string.find(row.FileName, "\\Continents.lua", 1, true) then
-        PreGame.SetRandomMapScript(false)
-        PreGame.SetMapScript(row.FileName)
-        break
-    end
-end
+PreGame.SetRandomMapScript(false)
+PreGame.SetMapScript(continents)
 local world = GameInfo.Worlds.WORLDSIZE_DUEL
 PreGame.SetRandomWorldSize(false)
 PreGame.SetWorldSize(world.ID)
@@ -195,6 +199,7 @@ class Game:
         self.tuner = tuner.Tuner(port=port)
         self.files = files.PlayerFiles(user or files.user_folder(), say)
         self.started = None
+        self.mods_on = False
 
     def path(self, *parts):
         return self.files.path(*parts)
@@ -213,7 +218,8 @@ class Game:
 
     def wait(self, what, ready, timeout):
         """While the game loads it answers slowly or not at all, so a failed ready() only means not yet. The last
-        failure is named if the wait runs out."""
+        failure is named if the wait runs out. A dropped tuner connection is made again, and the wait ends with
+        GameClosed once the game has gone."""
         deadline = time.time() + timeout
         last = None
         while True:
@@ -255,9 +261,13 @@ class Game:
         if not running:
             raise CheckError("Civilization V closed as it started")
         if DX11_EXE not in running:
+            with contextlib.suppress(ERRORS):
+                self.tuner.connect(60)
+                self.wait("the main menu showing", self.menu_ready, 120)
+                self.quit(60)
             raise CheckError(
-                "Steam started %s, not the DirectX 11 version. Close it, start the game once from Steam choosing"
-                " DirectX 11, then run this again" % ", ".join(running)
+                "Steam started %s, not the DirectX 11 version: start the game once from Steam choosing DirectX 11,"
+                " then run this again" % ", ".join(running)
             )
         try:
             self.tuner.connect(timeout)
@@ -275,6 +285,10 @@ class Game:
 
     def at_main_menu(self):
         return bool(self.state_ids(FRONT_END)) and not self.flag(FRONT_END, "ContextPtr:IsHidden()")
+
+    def live_state(self):
+        """The game's Lua state in a game, and the menus' outside one."""
+        return IN_GAME if self.state_ids(IN_GAME) else FRONT_END
 
     def mods(self, enabled_only=True):
         rows = []
@@ -298,12 +312,12 @@ class Game:
 
     def plugins(self):
         """The Plugins screen's rows as (file, status, problems)."""
-        state = IN_GAME if self.state_ids(IN_GAME) else FRONT_END
-        return [tuple((line.split("\t", 2) + ["", ""])[:3]) for line in self.lua(state, PLUGINS)]
+        return [tuple((line.split("\t", 2) + ["", ""])[:3]) for line in self.lua(self.live_state(), PLUGINS)]
 
     def activate(self):
         """Switch the chosen mods on as the Mods menu's Next button does, which loads Bazaar and its plugins."""
         self.say("switching the mods on")
+        self.mods_on = True
         self.lua(MODS_BROWSER, "OnNextButtonClicked()", timeout=180)
 
     def _through_load_screen(self, state, code, timeout):
@@ -329,9 +343,8 @@ class Game:
 
     def load(self, name, timeout=300):
         self.say("loading %s" % name)
-        state = IN_GAME if self.state_ids(IN_GAME) else FRONT_END
         code = LOAD_GAME % {"ending": tuner.lua_text("\\" + name + ".Civ5Save"), "refused": REFUSED}
-        self._through_load_screen(state, code, timeout)
+        self._through_load_screen(self.live_state(), code, timeout)
 
     def turn(self):
         return int(self.text(IN_GAME, "Game.GetGameTurn()"))
@@ -344,11 +357,13 @@ class Game:
         return int(fields[0]), fields[1]
 
     def close_popups(self):
-        """Close the game's pop-ups, which hold a turn while they are open, as their own Close buttons do."""
+        """Close the game's pop-ups, which hold a turn while they are open, as their own Close buttons do. Bazaar's
+        crash pop-up, BazaarStopped, is not one, so a check can still read it."""
         closed = []
         for name in sorted({name for _, name in self.tuner.states() if name.endswith("Popup")}):
-            if self.lua(name, CLOSE_POPUP) == ["closed"]:
-                closed.append(name)
+            with contextlib.suppress(tuner.NoSuchState, tuner.LuaError):
+                if self.lua(name, CLOSE_POPUP) == ["closed"]:
+                    closed.append(name)
         if closed:
             self.say("closed " + ", ".join(closed))
         return closed
@@ -406,8 +421,7 @@ class Game:
 
     def quit(self, timeout=120):
         with contextlib.suppress(tuner.TunerError, tuner.LuaError):
-            state = IN_GAME if self.state_ids(IN_GAME) else FRONT_END
-            self.lua(state, "UI.ExitGame()", timeout=10)
+            self.lua(self.live_state(), "UI.ExitGame()", timeout=10)
         self.tuner.close()
         self.wait("Civilization V closing", lambda: not game_processes(), timeout)
 
@@ -424,16 +438,20 @@ class Game:
             if isinstance(e, Exception):
                 with contextlib.suppress(Exception):
                     self.quit(30)
-            running = bool(game_processes())
-            for problem in self.files.put_back(copies, game_running=running):
-                self.say(problem)
-            if running:
-                self.say("close Civilization V by hand")
+            self.put_back_now(copies)
             raise
         problems = self.files.put_back(copies, game_running=bool(game_processes())) + problems
         if not problems:
-            self.say("your %s are as they were" % files.copied(copies))
+            self.say("your %s are as they were" % files.copied_text(copies))
         return problems
+
+    def put_back_now(self, copies, autosaves_touched=True):
+        """For a run stopping at once: put back what the game, as it is now, lets go of, and say what is left."""
+        running = bool(game_processes())
+        for problem in self.files.put_back(copies, autosaves_touched, running):
+            self.say(problem)
+        if running and self.started is not None:
+            self.say("close Civilization V by hand")
 
     def log(self, name="Bazaar.log"):
         return self.files.log(name, self.started)
@@ -449,11 +467,7 @@ def session(game, seed):
         game.files.use_seed(seed)
         game.start()
     except BaseException:
-        running = bool(game_processes())
-        for problem in game.files.put_back(copies, autosaves_touched=False, game_running=running):
-            game.say(problem)
-        if game.started is not None and running:
-            game.say("close Civilization V by hand")
+        game.put_back_now(copies, autosaves_touched=False)
         raise
     try:
         yield game

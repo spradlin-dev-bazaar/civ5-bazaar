@@ -39,6 +39,7 @@ import common  # noqa: E402
 import generate  # noqa: E402
 import layouts  # noqa: E402
 import mods  # noqa: E402
+import sync_checker  # noqa: E402
 import upload  # noqa: E402
 import version  # noqa: E402
 from bazaar_check import files, game, runner  # noqa: E402
@@ -524,6 +525,13 @@ def build_template(sdk_zip):
         z.extractall(CHECK_FOLDER)
     sdk = os.path.join(CHECK_FOLDER, os.path.basename(build_sdk.SDK))
     template = os.path.join(sdk, "plugin-template")
+    different = sync_checker.differences(os.path.join(template, "bazaar_check"))
+    if different:
+        stop(
+            "the SDK's copy of the checker differs from tools\\bazaar_check in %s. If tools\\bazaar_check changed"
+            " after the build, undo that; if not, run tools\\sync_checker.py, put the change on main and build again"
+            % ", ".join(different[:5])
+        )
     env = dict(os.environ, BAZAAR_SDK=sdk)
     if subprocess.run(["cmd", "/c", os.path.join(template, "build.cmd")], cwd=template, env=env).returncode != 0:
         stop("the template plugin did not build from %s" % sdk_zip)
@@ -581,8 +589,10 @@ def check(trial):
         g.preflight()
         say("building the template plugin from %s" % names.sdk)
         template_checks = build_template(sdk_zip)
-    except game.ERRORS + (OSError,) as e:
+    except game.ERRORS + (OSError, zipfile.BadZipFile) as e:
         stop("the in-game check could not start: %s" % e)
+    if os.path.exists(os.path.join(out, CHECKED)):
+        os.remove(os.path.join(out, CHECKED))
     failed = runner.run(release_checks(current, packages, template_checks, trial), g)
     if failed:
         stop("the in-game check " + failed)

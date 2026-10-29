@@ -56,4 +56,4 @@ Everything under `sdk/` and `claude-plugin/` ships to plugin authors. Flag:
 
 ## Where tests go
 
-What a plugin can observe of Bazaar (loading, refusals, hook order, vetoes, crashes) is tested in `tests/runtime` against a fake engine; a change to it needs a test there. What only the game shows (the Plugins screen, mod load order, SQL, notifications) can't be tested there: the finding names the in-game check the change needs.
+What a plugin can observe of Bazaar (loading, refusals, hook order, vetoes, crashes) is tested in `tests/runtime` against a fake engine; a change to it needs a test there. What only the game shows (the Plugins screen, mod load order, SQL, notifications) is checked by the checks files in `tests/ingame/checks`, which `tests/ingame/run.py` plays: a change to it needs a step in one of them, and the finding names the step.

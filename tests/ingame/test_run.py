@@ -118,6 +118,15 @@ class MainTest(unittest.TestCase):
         self.assertEqual((code, built, played, removed), (1, True, 2, True))
         self.assertIn("1 of 2 checks files passed: failed crash_lua", printed)
 
+    def test_a_game_that_cannot_be_checked_stops_before_anything_is_built(self):
+        with mock.patch.object(run.game, "Game") as Game:
+            Game.return_value.preflight.side_effect = run.CheckError("Civilization V is already running")
+            printed = io.StringIO()
+            with mock.patch.object(run.package, "main") as build, contextlib.redirect_stdout(printed):
+                self.assertEqual(run.main(["use_both"]), 1)
+        build.assert_not_called()
+        self.assertIn("Civilization V is already running", printed.getvalue())
+
     def test_a_failed_build_plays_nothing(self):
         code, _, _, played, _ = self.main(["use_both"], built=1)
         self.assertEqual((code, played), (1, 0))

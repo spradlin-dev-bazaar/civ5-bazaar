@@ -206,8 +206,8 @@ class Tuner:
             message = self._read(deadline - time.time())
             if message is None:
                 raise TunerError(
-                    "no answer from the %s Lua state within %d seconds: is LoggingEnabled = 1 in the game's"
-                    " config.ini?" % (state, timeout)
+                    "no answer from the %s Lua state within %d seconds: the game may be busy, or LoggingEnabled"
+                    " may not be 1 in its config.ini" % (state, timeout)
                 )
             _, fields = message
             if fields and fields[0].startswith("ERR:"):

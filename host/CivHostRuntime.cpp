@@ -1385,6 +1385,7 @@ std::vector<CivPluginReportRow> CivHostReportRows()
 		row.name = p.name;
 		row.version = p.version;
 		row.failed = p.status != CIV_PLUGIN_LOADED || p.quarantined;
+		// Mod authors' checks files compare these words, and CivHostOrder.cpp's, so they stay as they are.
 		if (p.quarantined)
 			row.status = "Turned off after a crash";
 		else if (row.failed)

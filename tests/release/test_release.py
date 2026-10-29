@@ -8,6 +8,8 @@ import contextlib
 import io
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -816,7 +818,7 @@ class CheckTest(unittest.TestCase):
 
     CURRENT = version.Version("0.6.0", 6)
 
-    def run_check(self, failed=None, trial=False, built_from=True, files=3, preflight=None):
+    def run_check(self, failed=None, trial=False, built_from=True, files=3, preflight=None, checked=False):
         with tempfile.TemporaryDirectory() as folder:
             out = os.path.join(folder, "v0.6.0")
             os.makedirs(out)
@@ -825,6 +827,9 @@ class CheckTest(unittest.TestCase):
                     f.write("x")
             if built_from:
                 with open(os.path.join(out, release.BUILT_FROM), "w") as f:
+                    f.write("abc123\n")
+            if checked:
+                with open(os.path.join(out, release.CHECKED), "w") as f:
                     f.write("abc123\n")
             g = mock.create_autospec(release.game.Game, instance=True)
             g.preflight.side_effect = preflight
@@ -872,13 +877,76 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(stopped, "release: the in-game check failed.\nThe end of Bazaar.log:\nx")
         self.assertIsNone(mark)
 
+    def test_a_check_that_cannot_start_keeps_an_earlier_pass(self):
+        preflight = release.game.CheckError("Civilization V is already running")
+        self.assertEqual(self.run_check(preflight=preflight, checked=True)[1], "abc123\n")
+
+    def test_a_failed_check_withdraws_an_earlier_pass_of_the_same_build(self):
+        stopped, mark = self.run_check(failed="failed.", checked=True)
+        self.assertEqual(stopped, "release: the in-game check failed.")
+        self.assertIsNone(mark)
+
     def test_a_passed_check_marks_the_build_it_checked_and_a_trial_marks_nothing(self):
         self.assertEqual(self.run_check(), (None, "abc123\n"))
         self.assertEqual(self.run_check(trial=True, built_from=False), (None, None))
 
 
+class BuildTemplateTest(unittest.TestCase):
+    """build_template on a small SDK zip, with the template's build.cmd replaced by one that makes the mod folders a
+    test names."""
+
+    def build(self, made=("Template Plugin",), change_checker=False):
+        with tempfile.TemporaryDirectory() as folder:
+            source = os.path.join(folder, "zip")
+            template = os.path.join(source, os.path.basename(release.build_sdk.SDK), "plugin-template")
+            checker = os.path.join(template, "bazaar_check")
+            shutil.copytree(
+                os.path.dirname(release.runner.__file__), checker, ignore=shutil.ignore_patterns("__pycache__")
+            )
+            if change_checker:
+                with open(os.path.join(checker, "runner.py"), "a") as f:
+                    f.write("# changed\n")
+            with open(os.path.join(template, "checks.toml"), "w") as f:
+                f.write('mods = ["Build/Template Plugin"]\n')
+            sdk_zip = os.path.join(folder, "sdk.zip")
+            with zipfile.ZipFile(sdk_zip, "w") as z:
+                for path, _, names in os.walk(source):
+                    for name in names:
+                        z.write(os.path.join(path, name), os.path.relpath(os.path.join(path, name), source))
+
+            def build_cmd(command, cwd, env):
+                for name in made:
+                    os.makedirs(os.path.join(cwd, "Build", name))
+                    release.mods.write_modinfo(os.path.join(cwd, "Build", name), name, "id-" + name, "x", [], [])
+                return subprocess.CompletedProcess(command, 0)
+
+            check_folder = os.path.join(folder, "check")
+            with (
+                mock.patch.object(release, "CHECK_FOLDER", check_folder),
+                mock.patch.object(release.subprocess, "run", side_effect=build_cmd),
+            ):
+                try:
+                    checks = release.build_template(sdk_zip)
+                except SystemExit as e:
+                    return None, str(e)
+            return [os.path.relpath(mod, check_folder) for mod in checks.mods], None
+
+    def test_the_template_s_own_checks_are_read_for_the_one_mod_its_build_made(self):
+        mods, _ = self.build()
+        sdk = os.path.basename(release.build_sdk.SDK)
+        self.assertEqual(mods, [os.path.join(sdk, "plugin-template", "Build", "Template Plugin")])
+
+    def test_a_build_that_makes_two_mods_stops(self):
+        _, stopped = self.build(made=("Template Plugin", "Another"))
+        self.assertIn("the template plugin's build made 2 mod folders", stopped)
+
+    def test_an_sdk_whose_checker_is_not_tools_bazaar_check_stops(self):
+        _, stopped = self.build(change_checker=True)
+        self.assertIn("the SDK's copy of the checker differs from tools\\bazaar_check in runner.py.", stopped)
+
+
 class SourceContractTest(unittest.TestCase):
-    """The check reads lines Bazaar and the template plugin write, and a file Bazaar keeps: these tie it to them."""
+    """The check reads lines Bazaar and the template plugin write: these tie it to them."""
 
     def source(self, *parts):
         return release.read_text(os.path.join(release.common.REPO, *parts), encoding="latin-1")
@@ -888,11 +956,6 @@ class SourceContractTest(unittest.TestCase):
             r'Log\("(Plugin %s %s loaded \(built for API %d\.%d\)\.)"', self.source("host", "CivHostRuntime.cpp")
         )
         self.assertRegex(fmt % ("Template Plugin", "1", 0, 6), release.TEMPLATE_LOADED % (0, 6))
-
-    def test_the_plugin_order_file_is_the_one_bazaar_reads(self):
-        self.assertIn(
-            '"\\\\%s"' % release.files.ORDER_FILE.replace("\\", "\\\\"), self.source("host", "CivHostEngine.cpp")
-        )
 
 
 if __name__ == "__main__":

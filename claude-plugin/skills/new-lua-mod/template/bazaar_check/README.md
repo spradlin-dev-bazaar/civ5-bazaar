@@ -20,8 +20,9 @@ Close Civilization V before each run, and FireTuner too: the tuner port takes on
 3. It copies your Mods menu choices, plugin order, `config.ini` and autosaves to a folder in Windows' temporary folder, and says where. That folder also gets a `where these go.txt` naming where each copy belongs.
 4. It writes the run's seed into `config.ini` and starts Civilization V through Steam.
 5. It switches on the mods `checks.toml` names, and the mods they need, and no others. For a mod they need, it takes the newest installed version their dependencies allow, leaving out test builds (mod version 900 or above) unless `checks.toml` names one.
-6. It plays the steps, then checks that no plugin stopped working and that `Lua.log` has no Lua errors.
+6. It plays the steps.
 7. It closes the game and puts back everything it copied, even when a check failed or the game crashed. Your mod stays in MODS.
+8. It checks that no plugin stopped working, even as the game closed, and that `Lua.log` has no Lua errors.
 
 Unless `checks.toml` sets `seed = 0`, every run starts the game with the same seed, and every `start_game` step sets up the same game: America against Rome, Prince difficulty, standard speed, ancient era, on a duel-sized Continents map. Other game options come from the game's own setup screen, as you last left them. So until your mod, Bazaar or those options change, every run of a checks file on your computer plays the same game, and the AI makes the same moves on the same turns.
 

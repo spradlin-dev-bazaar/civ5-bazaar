@@ -45,6 +45,7 @@ TOYS = [
     Toy("SAVES", "ToySaves", "Toy Saves Plugin", "b012c631-4178-4d68-99af-7c2fcf5d3701"),
 ]
 VMC_CHECK_ID = "a78808bb-cf9a-4543-9953-bc7b1ea3bed0"
+TEST_MOD_IDS = {toy.mod_id for toy in TOYS} | {VMC_CHECK_ID}
 # Runs after VMC's CustomModOptions.xml has added the row only if the game orders it after VMC's files, because like
 # mods made for VMC it only references VMC's mod id.
 VMC_CHECK_SQL = "UPDATE CustomModOptions SET Value = 1 WHERE Name = 'EVENTS_PLAYER_TURN';\n"
@@ -92,8 +93,8 @@ def write_toy_mod(dll_name, mod_name, mod_id):
 def write_vmc_check_mod():
     name = "Toy VMC Check"
     folder = mods.new_mod_folder(MODS, name)
-    files = [("VmcCheck.sql", VMC_CHECK_SQL, 0), ("VmcCheck.lua", VMC_CHECK_LUA, 1), ("VmcCheck.xml", VMC_CHECK_XML, 1)]
-    for file_name, content, _ in files:
+    parts = [("VmcCheck.sql", VMC_CHECK_SQL, 0), ("VmcCheck.lua", VMC_CHECK_LUA, 1), ("VmcCheck.xml", VMC_CHECK_XML, 1)]
+    for file_name, content, _ in parts:
         with open(os.path.join(folder, file_name), "w") as f:
             f.write(content)
     teaser = "Test mod for the %s: switches on one VMC event and writes it to Lua.log." % mods.HOST_NAME
@@ -102,7 +103,7 @@ def write_vmc_check_mod():
         name,
         VMC_CHECK_ID,
         teaser,
-        [(file_name, vfs) for file_name, _, vfs in files],
+        [(file_name, vfs) for file_name, _, vfs in parts],
         ["VmcCheck.sql"],
         [("InGameUIAddin", "VmcCheck.xml", "VMC check", teaser)],
         references=[(mods.VMC_MOD_ID, "DLL - Various Mod Components")],

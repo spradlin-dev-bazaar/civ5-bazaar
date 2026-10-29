@@ -14,6 +14,7 @@ from xml.etree import ElementTree
 
 from fakes import HERE
 
+import sync_checker
 from bazaar_check import runner
 
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -35,26 +36,12 @@ def source(*parts):
         return f.read()
 
 
-def files_in(folder):
-    found = []
-    for path, folders, names in os.walk(folder):
-        folders[:] = [name for name in folders if name != "__pycache__"]
-        found += [os.path.relpath(os.path.join(path, name), folder) for name in names]
-    return sorted(found)
-
-
 class TemplatesTest(unittest.TestCase):
     def test_each_template_s_checker_is_tools_bazaar_check(self):
         for template in TEMPLATES:
             copy = os.path.join(template, "bazaar_check")
             with self.subTest(template=template):
-                self.assertEqual(files_in(copy), files_in(SOURCE), "copy tools/bazaar_check into %s again" % copy)
-                different = [
-                    name
-                    for name in files_in(SOURCE)
-                    if not filecmp.cmp(os.path.join(SOURCE, name), os.path.join(copy, name), shallow=False)
-                ]
-                self.assertEqual(different, [], "copy tools/bazaar_check into %s again" % copy)
+                self.assertEqual(sync_checker.differences(copy), [], "run tools/sync_checker.py")
 
     def test_both_templates_have_the_same_check_cmd(self):
         first, second = (os.path.join(template, "check.cmd") for template in TEMPLATES)

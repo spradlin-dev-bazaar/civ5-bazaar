@@ -5,6 +5,7 @@ what happened, and put back the player's Mods menu choices, plugin order, config
 """
 
 import collections
+import contextlib
 import os
 import re
 import shutil
@@ -39,6 +40,7 @@ STEPS = {
     "description_of": Step(str, {"version": int, "is": str}, {"what": str}),
 }
 PATTERNS = ("has", "lacks", "problems")
+STATUSES = ("Loaded", "Not loaded", "Turned off after a crash", "Skipped")
 CRASH = r"^Plugin (?P<plugin>.+): (Faulted \(code |It stopped working)"
 LUA_ERROR = r"(Runtime|Syntax) Error:"
 
@@ -77,6 +79,10 @@ def check_step(number, step):
         raise CheckError("step %d (log): within waits for a line to appear, so it does not go with lacks" % number)
     if "count" in step and ("has" not in step or step["count"] < 1):
         raise CheckError("step %d (log) takes count only with has, and needs 1 or more" % number)
+    if kind == "plugin" and step.get("status", STATUSES[0]) not in STATUSES:
+        raise CheckError(
+            "step %d (plugin): status is one of %s" % (number, ", ".join('"%s"' % status for status in STATUSES))
+        )
     if kind == "start_game" and step[kind] != "duel":
         raise CheckError('step %d (start_game) can only start a "duel" game' % number)
     if kind == "end_turns" and step[kind] < 1:
@@ -215,15 +221,26 @@ class Marks:
         return lines[self.ends[since][log] :] if since else lines
 
 
+def log_where(name, since):
+    return "%s after %s" % (name, since) if since else name
+
+
+def log_label(name, has=None, lacks=None, count=None, since=None):
+    if lacks is not None:
+        return "%s lacks %s" % (log_where(name, since), lacks)
+    if count is None:
+        return "%s has %s" % (log_where(name, since), has)
+    return "%s has %s %d times" % (log_where(name, since), has, count)
+
+
 def log_check(lines, name, has=None, lacks=None, what=None, count=None, since=None):
-    where = "%s after %s" % (name, since) if since else name
+    what = what or log_label(name, has, lacks, count, since)
     if lacks is not None:
         found = [line for line in lines if re.search(lacks, line)]
-        return Result(what or "%s lacks %s" % (where, lacks), not found, "it has: " + found[0] if found else "")
+        return Result(what, not found, "it has: " + found[0] if found else "")
     found = [line for line in lines if re.search(has, line)]
     if count is None:
-        return Result(what or "%s has %s" % (where, has), bool(found), "%s has no such line" % where)
-    what = what or "%s has %s %d times" % (where, has, count)
+        return Result(what, bool(found), "%s has no such line" % log_where(name, since))
     return Result(what, len(found) == count, "it has it %d times" % len(found))
 
 
@@ -275,22 +292,25 @@ def lua_check(g, step):
 
 
 def log_step(g, step, marks):
+    options = {key: value for key, value in step.items() if key not in ("log", "within", "what")}
+    what = step.get("what") or log_label(step["log"], **options)
+
     def result(lines):
-        return log_check(
-            lines, step["log"], **{key: value for key, value in step.items() if key not in ("log", "within")}
-        )
+        return log_check(lines, step["log"], what=what, **options)
 
     def lines():
         return marks.lines(g, step["log"], step.get("since"))
 
-    what = result([]).what
     found, why = asked(g, step, what, lines, lambda found: result(found).passed)
     return Result(what, False, why) if why else result(found)
 
 
 def plugin_check(g, step):
     rows = {file.lower(): (status, problems) for file, status, problems in g.plugins()}
-    what = step.get("what") or "the Plugins screen shows %s as %s" % (step["plugin"], step.get("status", "listed"))
+    status = " as %s" % step["status"] if "status" in step else ""
+    problems = " with a problem matching %s" % step["problems"] if "problems" in step else ""
+    shows = "shows %s%s%s" % (step["plugin"], status, problems) if status or problems else "lists %s" % step["plugin"]
+    what = step.get("what") or "the Plugins screen " + shows
     row = rows.get(step["plugin"].lower())
     if row is None:
         return Result(what, False, "it does not list %s" % step["plugin"])
@@ -356,10 +376,16 @@ def play(checks, g, expected, results):
     marks = Marks(checks.steps)
     for step in checks.steps:
         do_step(g, step, results, marks)
+
+
+def final_checks(checks, g):
+    """Read once the game has closed, so a plugin that faults while the game shuts down counts too."""
+    results = []
     if checks.crash_expected is not True:
         results.append(crash_check(g, checks.crash_expected or []))
     if not checks.lua_errors_expected:
         results.append(log_check(g.log("Lua.log"), "Lua.log", lacks=LUA_ERROR, what="Lua.log has no Lua errors"))
+    return results
 
 
 def run_checks(checks, g, results):
@@ -372,6 +398,7 @@ def run_checks(checks, g, results):
         expected = g.files.install(checks.mods, staging)
         with game.session(g, checks.seed):
             play(checks, g, expected, results)
+        results.extend(final_checks(checks, g))
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
@@ -392,7 +419,8 @@ def log_tail(g):
 
 
 def run(checks, g):
-    """Run the checks and print what each found; returns why they did not all pass, or None."""
+    """Run the checks and print what each found; returns None, or why they did not all pass in words that follow
+    "The checks ", such as "failed."."""
     try:
         validate(checks)
     except CheckError as e:
@@ -401,6 +429,9 @@ def run(checks, g):
     try:
         run_checks(checks, g, results)
     except game.ERRORS + (OSError,) as e:
+        if g.mods_on:
+            with contextlib.suppress(OSError):
+                results.extend(final_checks(checks, g))
         print_results(results)
         return "could not finish: %s%s" % (e, log_tail(g))
     print_results(results)

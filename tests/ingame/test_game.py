@@ -23,6 +23,8 @@ from fakes import (
 from bazaar_check import CheckError, files, game, tuner
 
 CONFIG_INI = b"[CONFIG]\r\nEnableTuner = 1\r\nSyncRandSeed = 0\r\n\r\n; seed for maps\r\nMapRandSeed = 0\r\n"
+STOPPED = os.path.splitext(os.path.basename(mods.STOPPED_POPUP[1]))[0]
+DX11 = ["civilizationv_dx11.exe"]
 
 
 class UserFolderTest(unittest.TestCase):
@@ -80,6 +82,9 @@ class ScriptedGame(game.Game):
         return result
 
     def start(self, timeout=300):
+        with open(self.path(files.CONFIG), "rb") as f:
+            self.config_at_start = f.read()
+        self.started = 1000.0
         rotate_autosaves(self.files.user)
         write_files(self.files.user, {files.MODS_DATABASE: b"the check's mods"})
         self.step("start")
@@ -112,10 +117,8 @@ class SessionTest(UserFolderTest):
         g = self.scripted()
         with game.session(g, 7):
             g.step("check")
-            with open(self.path(files.CONFIG), "rb") as f:
-                during = f.read()
         self.assertEqual(g.calls, ["start", "check", "quit"])
-        self.assertEqual(during, CONFIG_INI.replace(b"Seed = 0", b"Seed = 7"))
+        self.assertEqual(g.config_at_start, CONFIG_INI.replace(b"Seed = 0", b"Seed = 7"))
         self.assertEqual(read_files(self.user)[files.CONFIG], CONFIG_INI)
         self.assertEqual(self.mods(), b"the player's mods")
         self.assertEqual(self.autosaves(), PLAYER_AUTOSAVES)
@@ -214,12 +217,15 @@ class SessionTest(UserFolderTest):
 
 
 class StartTest(UserFolderTest):
-    def started(self, *processes):
+    def started(self, *processes, connect=None):
         with open(self.path("config.ini"), "w") as f:
             f.write("EnableTuner = 1\nLoggingEnabled = 1\n")
         with (
             mock.patch.object(game, "game_processes", side_effect=[[]] + list(processes)),
             mock.patch.object(game.os, "startfile", create=True),
+            mock.patch.object(self.game.tuner, "connect", side_effect=connect),
+            mock.patch.object(self.game, "menu_ready", return_value=True),
+            mock.patch.object(self.game, "quit") as self.quit,
             mock.patch.object(game, "time", FakeClock()),
         ):
             self.game.start()
@@ -228,9 +234,15 @@ class StartTest(UserFolderTest):
         with self.assertRaisesRegex(CheckError, "closed as it started"):
             self.started(["civilizationv_dx11.exe"], [])
 
-    def test_the_directx_9_version_is_refused(self):
+    def test_the_directx_9_version_is_refused_and_closed(self):
         with self.assertRaisesRegex(CheckError, "civilizationv.exe, not the DirectX 11 version"):
             self.started(["civilizationv.exe"], ["civilizationv.exe"])
+        self.quit.assert_called_once_with(60)
+
+    def test_a_game_that_does_not_answer_is_closed(self):
+        with self.assertRaisesRegex(tuner.TunerError, "refused"):
+            self.started(DX11, DX11, connect=tuner.TunerError("the game refused the connection"))
+        self.quit.assert_called_once_with(60)
 
 
 class StartedSessionTest(UserFolderTest):
@@ -249,6 +261,48 @@ class StartedSessionTest(UserFolderTest):
                 pass
         startfile.assert_called_once_with(game.GAME_URL)
         self.assertEqual(files.leftover_copies(), [])
+
+    def test_a_refused_directx_9_game_is_closed_and_every_file_put_back(self):
+        config = CONFIG_INI + b"LoggingEnabled = 1\r\n"
+        write_files(self.user, {files.CONFIG: config})
+        dx9 = ["civilizationv.exe"]
+        with (
+            mock.patch.object(game, "game_processes", side_effect=[[], dx9, dx9, []]),
+            mock.patch.object(game.os, "startfile", create=True),
+            mock.patch.object(self.game.tuner, "connect"),
+            mock.patch.object(self.game, "menu_ready", return_value=True),
+            mock.patch.object(self.game, "quit") as quit,
+            mock.patch.object(game, "time", FakeClock()),
+        ):
+            with self.assertRaisesRegex(CheckError, "not the DirectX 11 version"):
+                with game.session(self.game, 1):
+                    pass
+        quit.assert_called_once_with(60)
+        self.assertEqual(read_files(self.user)[files.CONFIG], config)
+        self.assertEqual(files.leftover_copies(), [])
+
+
+class SaveTest(UserFolderTest):
+    def save(self, writes):
+        """Save as the game would: writes says whether it writes the file anew."""
+        rel = os.path.join(files.SAVES, "Check.Civ5Save")
+        write_files(self.user, {rel: b"an older save of the same name"})
+        os.utime(self.path(rel), (1, 1))
+
+        def lua(state, code, timeout=30):
+            if writes:
+                write_files(self.user, {rel: b"this save"})
+            return []
+
+        with mock.patch.object(self.game, "lua", side_effect=lua), mock.patch.object(game, "time", FakeClock()):
+            return self.game.save("Check")
+
+    def test_a_save_counts_once_the_game_has_written_it_anew(self):
+        self.assertEqual(self.save(writes=True), self.path(files.SAVES, "Check.Civ5Save"))
+
+    def test_an_older_save_of_the_same_name_does_not_count(self):
+        with self.assertRaisesRegex(CheckError, "the save Check did not happen"):
+            self.save(writes=False)
 
 
 class LoadScreenTest(UserFolderTest):
@@ -311,7 +365,7 @@ class EndTurnTest(UserFolderTest):
         g = game.Game(say=said.append, user=self.user)
         states = [
             (5, "CityStateGreetingPopup"),
-            (6, game.BAZAAR_STOPPED),
+            (6, STOPPED),
             (7, "TechPopup"),
             (8, "CityStateGreetingPopup"),
         ]
@@ -326,9 +380,20 @@ class EndTurnTest(UserFolderTest):
         self.assertEqual(asked, ["CityStateGreetingPopup", "TechPopup"])
         self.assertEqual(said, ["closed CityStateGreetingPopup"])
 
-    def test_bazaar_s_pop_up_is_the_state_its_file_gives_and_is_not_closed(self):
-        self.assertEqual(os.path.splitext(os.path.basename(mods.STOPPED_POPUP[1]))[0], game.BAZAAR_STOPPED)
-        self.assertFalse(game.BAZAAR_STOPPED.endswith("Popup"))
+    def test_bazaar_s_pop_up_is_not_one_the_checks_close(self):
+        self.assertFalse(STOPPED.endswith("Popup"))
+
+    def test_a_pop_up_that_will_not_close_does_not_keep_the_others_open(self):
+        g = game.Game(say=lambda text: None, user=self.user)
+
+        def lua(state, code, timeout=30):
+            if state == "AdvisorPopup":
+                raise tuner.LuaError("attempt to index a nil value")
+            return ["closed"]
+
+        states = [(5, "AdvisorPopup"), (6, "TechPopup")]
+        with mock.patch.object(g.tuner, "states", return_value=states), mock.patch.object(g, "lua", side_effect=lua):
+            self.assertEqual(g.close_popups(), ["TechPopup"])
 
     def test_a_game_that_closes_while_a_turn_ends_is_not_reported_as_a_stuck_turn(self):
         g = game.Game(say=lambda text: None, user=self.user)
@@ -373,6 +438,24 @@ class WaitTest(UserFolderTest):
             with self.assertRaisesRegex(CheckError, "no Lua state named InGame"):
                 g.wait("the game starting", ready, 60)
         connect.assert_not_called()
+
+    def test_a_dropped_connection_is_made_again_while_the_game_runs(self):
+        g = game.Game(say=lambda text: None, user=self.user)
+        answers = iter([tuner.TunerError("the game closed the tuner connection"), True])
+
+        def ready():
+            answer = next(answers)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        with (
+            mock.patch.object(g.tuner, "connect") as connect,
+            mock.patch.object(game, "game_processes", return_value=DX11),
+            mock.patch.object(game, "time", FakeClock()),
+        ):
+            g.wait("the game loading", ready, 60)
+        connect.assert_called_once()
 
     def test_a_game_that_closed_ends_the_wait_at_once(self):
         g = game.Game(say=lambda text: None, user=self.user)

@@ -8,9 +8,24 @@ import unittest
 from unittest import mock
 from xml.etree import ElementTree
 
-from fakes import PLAYER_AUTOSAVES, files, mods, read_files, rotate_autosaves, use_own_temp, write_files, write_mod
+from fakes import (
+    HERE,
+    PLAYER_AUTOSAVES,
+    files,
+    mods,
+    read_files,
+    rotate_autosaves,
+    use_own_temp,
+    write_files,
+    write_mod,
+)
 
 import version
+
+
+def host_source(name):
+    with open(os.path.join(HERE, "..", "..", "host", name), encoding="latin-1") as f:
+        return f.read()
 
 
 class ModInfoTest(unittest.TestCase):
@@ -66,9 +81,17 @@ class ModInfoTest(unittest.TestCase):
 
 class PluginOrderTest(unittest.TestCase):
     def test_order_lines_are_the_ones_bazaar_reads(self):
+        """Bazaar reads load or skip, the DLL, its name and version, then the plugins to use both with. The lines
+        looked for are where CivHostOrder.cpp reads them: if it was rewritten, check the format by hand."""
+        parser = host_source("CivHostOrder.cpp")
+        for line in ('kLoad = "load"', 'kSkip = "skip"', "entry.file = fields[1];", "for (size_t j = 4;"):
+            self.assertIn(line, parser)
         self.assertEqual(files.order_line("MCPServer.dll"), "load\tMCPServer.dll\t\t\r\n")
         entry = {"file": "A.dll", "skip": True, "use_both_with": ["B.dll", "C.dll"]}
         self.assertEqual(files.order_line(entry), "skip\tA.dll\t\t\tB.dll\tC.dll\r\n")
+
+    def test_the_plugin_order_file_is_the_one_bazaar_reads(self):
+        self.assertIn('"\\\\%s"' % files.ORDER_FILE.replace("\\", "\\\\"), host_source("CivHostEngine.cpp"))
 
     def test_entries_are_dll_names_or_tables_with_a_file(self):
         self.assertIsNone(files.order_entry_problem("A.dll"))
@@ -172,7 +195,7 @@ class InstalledProblemsTest(PlayerFolderTest):
         self.put("Bazaar (v 6)")
         test_build = self.put("Bazaar test build")
         (problem,) = self.files.installed_problems([self.expected])
-        self.assertIn("2 copies of bazaar v6", problem)
+        self.assertIn("2 copies of A Mod (v 6)", problem)
         self.assertIn(test_build, problem)
 
     def test_a_copy_that_changed_since_it_was_installed_is_named(self):
@@ -184,7 +207,7 @@ class InstalledProblemsTest(PlayerFolderTest):
 
     def test_no_copy_is_named(self):
         (problem,) = self.files.installed_problems([self.expected])
-        self.assertEqual(problem, "MODS holds no copy of bazaar v6")
+        self.assertEqual(problem, "MODS holds no copy of A Mod (v 6)")
 
 
 class CopiesTest(PlayerFolderTest):
@@ -355,10 +378,10 @@ class CopiesTest(PlayerFolderTest):
         self.assertEqual(
             lines[2:],
             [
-                "- copy Civ5ModsDatabase.db, your Mods menu choices, into %s" % self.path("cache"),
-                "- copy Bazaar plugin order.txt, your plugin order, into %s" % self.path("ModUserData"),
-                "- copy config.ini, your game settings, into %s" % self.user,
-                "- put the auto folder, your autosaves, in place of %s" % self.path(files.AUTOSAVES),
+                "- your Mods menu choices: copy Civ5ModsDatabase.db into %s" % self.path("cache"),
+                "- your plugin order: copy Bazaar plugin order.txt into %s" % self.path("ModUserData"),
+                "- your config.ini: copy config.ini into %s" % self.user,
+                "- your autosaves: put the auto folder in place of %s" % self.path(files.AUTOSAVES),
                 "Then delete this folder.",
                 "",
             ],
@@ -366,14 +389,9 @@ class CopiesTest(PlayerFolderTest):
 
     def test_the_note_says_to_delete_what_the_player_did_not_have(self):
         lines = self.note(self.copy_aside())
-        self.assertIn(
-            "- delete %s if it is there: you had no Bazaar plugin order.txt before the check"
-            % (self.path(files.ORDER_FILE)),
-            lines,
-        )
-        self.assertIn(
-            "- delete the folder %s if it is there: you had no autosaves before" % self.path(files.AUTOSAVES), lines
-        )
+        none = "if it is there, since you had none before the check"
+        self.assertIn("- your plugin order: delete %s %s" % (self.path(files.ORDER_FILE), none), lines)
+        self.assertIn("- your autosaves: delete the folder %s %s" % (self.path(files.AUTOSAVES), none), lines)
 
     def test_what_the_game_holds_waits_for_it_to_close_but_the_plugin_order_goes_back(self):
         self.write(files.MODS_DATABASE, b"the player's mods")
