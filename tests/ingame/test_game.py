@@ -4,6 +4,7 @@ game itself is replaced by a Game whose game-facing calls are scripted."""
 import os
 import re
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -523,6 +524,122 @@ class WaitTest(UserFolderTest):
                 g.wait_until_closed()
         self.assertEqual(len(said), 1)
         self.assertTrue(said[0].startswith("Close Civilization V to finish"))
+
+    def run_hand_over(self, processes=DX11, sleeping=None, presses=(False,), connect_error=None):
+        self.said, self.clock = [], FakeClock()
+        g = self.g = game.Game(say=self.said.append, user=self.user)
+        g.files.running = tempfile.mkdtemp(prefix=files.COPIES_PREFIX)
+        pause, presses = self.clock.sleep, list(presses)
+
+        def sleep(seconds):
+            pause(seconds)
+            if sleeping:
+                sleeping()
+
+        def enter_pressed():
+            return presses.pop(0) if len(presses) > 1 else presses[0]
+
+        self.clock.sleep = sleep
+        with (
+            mock.patch.object(game, "game_processes", return_value=processes) as self.processes,
+            mock.patch.object(game, "enter_pressed", enter_pressed),
+            mock.patch.object(g.tuner, "connect", side_effect=connect_error) as self.connect,
+            mock.patch.object(g.tuner, "close") as self.close,
+            mock.patch.object(game, "time", self.clock),
+        ):
+            g.hand_over("Ask Claude to test over MCP.")
+        return g
+
+    def hand_back_after_a_minute(self):
+        if self.clock.now >= 1060:
+            open(os.path.join(self.g.files.running, files.HAND_BACK), "wb").close()
+
+    def test_a_game_handed_over_lets_the_tuner_go_until_handed_back_then_connects_again(self):
+        g = self.run_hand_over(sleeping=self.hand_back_after_a_minute)
+        self.assertGreaterEqual(self.clock.now, 1060)
+        self.assertFalse(g.handed_over)
+        self.close.assert_called_once_with()
+        self.connect.assert_called_once_with(10)
+        self.assertEqual(self.said, ["Ask Claude to test over MCP.", game.hand_back_how(), "took the game back"])
+        self.assertEqual(os.listdir(g.files.running), [])
+
+    def test_enter_hands_the_game_back(self):
+        g = self.run_hand_over(presses=[False, False, True])
+        self.assertFalse(g.handed_over)
+        self.connect.assert_called_once_with(10)
+
+    def test_a_game_slow_to_answer_after_its_hand_back_is_given_longer(self):
+        g = self.run_hand_over(presses=[False, True], connect_error=[tuner.TunerError("no answer"), None])
+        self.assertEqual(self.connect.call_args_list, [mock.call(10), mock.call(60)])
+        self.assertFalse(g.handed_over)
+        self.assertEqual(self.said[-1], "took the game back")
+
+    def test_an_enter_typed_before_the_hand_over_does_not_hand_it_back(self):
+        self.run_hand_over(sleeping=self.hand_back_after_a_minute, presses=[True, False])
+        self.assertGreaterEqual(self.clock.now, 1060)
+
+    def test_a_game_closed_during_a_hand_over_ends_the_wait_and_is_left_closed(self):
+        with self.assertRaisesRegex(game.GameClosed, "closed during the hand-over"):
+            self.run_hand_over(processes=[])
+        self.connect.assert_not_called()
+        self.assertNotIn("took the game back", self.said)
+        self.assertTrue(self.g.handed_over)
+        self.assertEqual(os.listdir(self.g.files.running), [])
+
+    def test_a_game_closed_just_before_its_hand_back_counts_as_closed_during_the_hand_over(self):
+        def closed_then_handed_back():
+            self.processes.return_value = []
+            open(os.path.join(self.g.files.running, files.HAND_BACK), "wb").close()
+
+        with self.assertRaisesRegex(game.GameClosed, "closed during the hand-over"):
+            self.run_hand_over(sleeping=closed_then_handed_back, connect_error=tuner.TunerError("no answer"))
+        self.assertNotIn("took the game back", self.said)
+
+    def test_the_hand_back_line_names_this_python_and_offers_enter_only_in_a_console_window(self):
+        command = 'run "%s" -m bazaar_check --hand-back in the folder that holds bazaar_check' % sys.executable
+        ends = "Closing the game instead ends the run."
+        with mock.patch.object(game, "has_console", return_value=True):
+            self.assertEqual(
+                game.hand_back_how(),
+                "When you are done, hand the game back: press Enter here, or %s. %s" % (command, ends),
+            )
+        with mock.patch.object(game, "has_console", return_value=False):
+            self.assertEqual(game.hand_back_how(), "When you are done, hand the game back: %s. %s" % (command, ends))
+
+    def test_a_first_ctrl_c_during_a_hand_over_says_how_to_finish_and_a_second_stops(self):
+        pauses = []
+
+        def ctrl_c_at_the_first_and_third_pause():
+            pauses.append(1)
+            if len(pauses) in (1, 3):
+                raise KeyboardInterrupt
+
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_hand_over(sleeping=ctrl_c_at_the_first_and_third_pause)
+        self.assertEqual(len(self.said), 3)
+        self.assertEqual(self.said[2], "Hand the game back to finish the run. " + game.LEFT_OPEN)
+        self.assertEqual(os.listdir(self.g.files.running), [])
+
+    def test_enter_counts_only_in_a_console_window(self):
+        keys = iter(["a", "\r", "x"])
+        with (
+            mock.patch.object(game, "has_console", return_value=True) as has_console,
+            mock.patch.object(game.msvcrt, "kbhit", side_effect=[True, True, True, False, False]),
+            mock.patch.object(game.msvcrt, "getwch", side_effect=lambda: next(keys, "b")),
+        ):
+            self.assertTrue(game.enter_pressed())
+            self.assertFalse(game.enter_pressed())
+            has_console.return_value = False
+            self.assertFalse(game.enter_pressed())
+
+    def test_input_from_nul_or_a_pipe_is_no_console_window_though_nul_passes_isatty(self):
+        read_end, write_end = os.pipe()
+        with open(os.devnull) as nul, os.fdopen(read_end) as pipe:
+            os.close(write_end)
+            self.assertTrue(nul.isatty())
+            for stdin in (nul, pipe, None):
+                with self.subTest(stdin=stdin), mock.patch.object(game.sys, "stdin", stdin):
+                    self.assertFalse(game.has_console())
 
     def test_quitting_connects_again_when_the_port_was_let_go(self):
         g = game.Game(say=lambda text: None, user=self.user)

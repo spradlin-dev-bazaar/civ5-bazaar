@@ -1,9 +1,11 @@
 """Run a checks file: start Civilization V with the mods it names and the mods they depend on, play its steps, check
 what happened, and put back everything the run changed in the player's folder. With --play, switch the mods on and
-leave the game to the player instead; closing it puts everything back.
+leave the game to the player instead; closing it puts everything back. --hand-back gives the game back to a run waiting
+at a hand_over step.
 
     python -m bazaar_check checks.toml
     python -m bazaar_check --play checks.toml
+    python -m bazaar_check --hand-back
 """
 
 import collections
@@ -39,6 +41,7 @@ STEPS = {
     "mark": Step(str, {}, {}),
     "plugin": Step(str, {}, {"status": str, "problems": str, "what": str}),
     "description_of": Step(str, {"version": int, "is": str}, {"what": str}),
+    "hand_over": Step(str, {}, {}),
 }
 PATTERNS = ("has", "lacks", "problems")
 STATUSES = ("Loaded", "Not loaded", "Turned off after a crash", "Skipped")
@@ -92,6 +95,8 @@ def check_step(number, step):
         raise CheckError("step %d (end_turns) needs 1 or more" % number)
     if kind == "main_menu" and not step[kind]:
         raise CheckError("step %d (main_menu) needs true" % number)
+    if kind == "hand_over" and not step[kind].strip():
+        raise CheckError("step %d (hand_over) needs text saying what to do with the game" % number)
     if step.get("within", 1) < 1:
         raise CheckError("step %d (%s): within needs 1 or more seconds" % (number, kind))
     for key in set(PATTERNS) & set(step):
@@ -354,6 +359,8 @@ def do_step(g, step, results, marks):
         results.append(plugin_check(g, step))
     elif kind == "description_of":
         results.append(description_check(g, step))
+    elif kind == "hand_over":
+        g.hand_over(step[kind])
     else:
         raise AssertionError("STEPS has %s, which do_step does not do" % kind)
 
@@ -382,8 +389,15 @@ def play_steps(checks, g, expected, results):
     """The part of a run inside the game; it adds a Result to results as each check is made."""
     switch_on(checks, g, expected)
     marks = Marks(checks.steps)
-    for step in checks.steps:
-        do_step(g, step, results, marks)
+    for number, step in enumerate(checks.steps, 1):
+        try:
+            do_step(g, step, results, marks)
+        except game.GameClosed as e:
+            if kind_of(step) != "hand_over":
+                raise
+            if number == len(checks.steps):
+                return
+            raise game.GameClosed("%s, so the steps after it did not run" % e)
 
 
 def final_checks(checks, g):
@@ -432,12 +446,16 @@ def play_by_hand(checks, g):
             )
             g.wait_until_closed()
     except KeyboardInterrupt:
-        if g.handed_over:
-            return "stopped with the game still open: the next run of check.cmd or play.cmd puts your files back"
-        return "stopped"
+        return stopped_by_ctrl_c(g)
     except game.ERRORS + (OSError,) as e:
         return "stopped: %s" % e
     return None
+
+
+def stopped_by_ctrl_c(g):
+    if g.handed_over:
+        return "stopped with the game still open: the next run of check.cmd or play.cmd puts your files back"
+    return "stopped"
 
 
 def print_results(results):
@@ -478,6 +496,12 @@ def run(checks, g):
 
 
 def main(argv):
+    if argv == ["--hand-back"]:
+        if files.hand_back():
+            print("handed the game back to the check")
+            return 0
+        print("no check is waiting for its game back")
+        return 1
     playing = argv[:1] == ["--play"]
     paths = argv[1:] if playing else argv
     if len(paths) != 1:
@@ -494,6 +518,9 @@ def main(argv):
         if stopped:
             print("Playing " + stopped)
         return 1 if stopped else 0
-    failed = run(checks, g)
+    try:
+        failed = run(checks, g)
+    except KeyboardInterrupt:
+        failed = stopped_by_ctrl_c(g)
     print("The checks " + (failed or "passed."))
     return 1 if failed else 0

@@ -44,6 +44,8 @@ WHERE_THEY_GO = "where these go.txt"
 MANIFEST = "copies.json"
 MANIFEST_VERSION = 1
 HEARTBEAT = "last seen"
+HANDED_OVER = "handed over"
+HAND_BACK = "hand back"
 RUN_LOCK = "Bazaar check running"
 # A run changes files within seconds of its last mark; later changes count as the player's, even a game's own after
 # its run was stopped, which is why the Mods menu choices and the lines in RUN_LINES go back whatever their age.
@@ -221,6 +223,26 @@ def one_run_at_a_time():
 def copies_folders():
     pattern = os.path.join(glob.escape(tempfile.gettempdir()), glob.escape(COPIES_PREFIX) + "*")
     return sorted(glob.glob(pattern))
+
+
+def hand_back(timeout=10):
+    for folder in copies_folders():
+        if not os.path.isfile(os.path.join(folder, HANDED_OVER)):
+            continue
+        asked = os.path.join(folder, HAND_BACK)
+        try:
+            open(asked, "wb").close()
+        except OSError:
+            continue
+        # The waiting run deletes the file as it takes the game back; a run killed during its hand-over never will.
+        deadline = time.time() + timeout
+        while os.path.exists(asked) and time.time() < deadline:
+            time.sleep(0.2)
+        if not os.path.exists(asked):
+            return True
+        with contextlib.suppress(OSError):
+            os.remove(asked)
+    return False
 
 
 def finished_copying(folder):
@@ -443,6 +465,19 @@ class PlayerFiles:
         if self.running:
             with contextlib.suppress(OSError):
                 os.utime(os.path.join(self.running, HEARTBEAT))
+
+    def begin_hand_over(self):
+        with contextlib.suppress(OSError):
+            os.remove(os.path.join(self.running, HAND_BACK))
+        open(os.path.join(self.running, HANDED_OVER), "wb").close()
+
+    def handed_back(self):
+        return os.path.isfile(os.path.join(self.running, HAND_BACK))
+
+    def end_hand_over(self):
+        for name in (HANDED_OVER, HAND_BACK):
+            with contextlib.suppress(OSError):
+                os.remove(os.path.join(self.running, name))
 
     def read_copies(self, folder):
         """The copies a run left in folder, as copy_aside made them, and when that run started."""

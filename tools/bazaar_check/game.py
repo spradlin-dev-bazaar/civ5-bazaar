@@ -8,10 +8,13 @@ the last time it was started from Steam, since starting it through steam://runga
 
 import contextlib
 import csv
+import ctypes
 import io
+import msvcrt
 import os
 import re
 import subprocess
+import sys
 import time
 
 from . import CheckError, files, tuner
@@ -26,6 +29,38 @@ LEGAL_SCREEN = "LegalScreen"
 NOT_BLOCKED = -1
 REFUSED = "refused: "
 ERRORS = (CheckError, tuner.TunerError, tuner.LuaError)
+HAND_BACK_HOW = "When you are done, hand the game back: %s. Closing the game instead ends the run."
+CLOSED_DURING_HAND_OVER = "Civilization V was closed during the hand-over"
+LEFT_OPEN = "Ctrl+C again stops now and leaves the game open: the next run puts your files back."
+LOOK_EVERY = 5
+
+
+def print_now(text):
+    # A program running the check reads its output through a pipe, which Python would otherwise hold back.
+    print(text, flush=True)
+
+
+def has_console():
+    # isatty takes input from NUL, which a program running the check in the background gives it, for a console.
+    try:
+        handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+    except (AttributeError, OSError, ValueError):
+        return False
+    return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(ctypes.c_uint())))
+
+
+def enter_pressed():
+    if not has_console():
+        return False
+    pressed = False
+    while msvcrt.kbhit():
+        pressed = msvcrt.getwch() in "\r\n" or pressed
+    return pressed
+
+
+def hand_back_how():
+    command = 'run "%s" -m bazaar_check --hand-back in the folder that holds bazaar_check' % sys.executable
+    return HAND_BACK_HOW % ("press Enter here, or " + command if has_console() else command)
 
 
 def config_problems(text):
@@ -194,7 +229,7 @@ class GameClosed(CheckError):
 
 
 class Game:
-    def __init__(self, say=print, port=tuner.PORT, user=None):
+    def __init__(self, say=print_now, port=tuner.PORT, user=None):
         self.say = say
         self.tuner = tuner.Tuner(port=port)
         self.files = files.PlayerFiles(user or files.user_folder(), say)
@@ -463,21 +498,52 @@ class Game:
         FireTuner can use it meanwhile. A first Ctrl+C only says how to finish; a second leaves the game open."""
         self.handed_over = True
         self.tuner.close()
-        warned, closed_polls = False, 0
+        self._left_to_player("Close Civilization V to finish, and your files go back then.")
+
+    def hand_over(self, message):
+        self.files.begin_hand_over()
+        try:
+            # Keys typed before the hand-over would otherwise hand the game back the moment it starts.
+            enter_pressed()
+            self.say(message)
+            self.say(hand_back_how())
+            self.handed_over = True
+            # FireTuner can connect meanwhile, and what Lua prints does not pile up unread.
+            self.tuner.close()
+            back = self._left_to_player(
+                "Hand the game back to finish the run.", lambda: enter_pressed() or self.files.handed_back()
+            )
+        finally:
+            self.files.end_hand_over()
+        if not back:
+            raise GameClosed(CLOSED_DURING_HAND_OVER)
+        self.handed_over = False
+        try:
+            self.tuner.connect(10)
+        except tuner.TunerError:
+            if not game_processes():
+                raise GameClosed(CLOSED_DURING_HAND_OVER)
+            self.tuner.connect(60)
+        self.say("took the game back")
+
+    def _left_to_player(self, finish_how, handed_back=lambda: False):
+        warned, closed_polls, look_at = False, 0, 0
         # One empty answer from tasklist can be a glitch, and taking it for a closed game ends the player's session.
         while closed_polls < 2:
             try:
-                time.sleep(5)
-                self.files.beat()
-                closed_polls = 0 if game_processes() else closed_polls + 1
+                if handed_back():
+                    return True
+                if time.time() >= look_at:
+                    look_at = time.time() + LOOK_EVERY
+                    self.files.beat()
+                    closed_polls = 0 if game_processes() else closed_polls + 1
+                time.sleep(0.5)
             except KeyboardInterrupt:
                 if warned:
                     raise
                 warned = True
-                self.say(
-                    "Close Civilization V to finish, and your files go back then. Ctrl+C again stops now and leaves"
-                    " the game open: the next run puts your files back."
-                )
+                self.say("%s %s" % (finish_how, LEFT_OPEN))
+        return False
 
     def log(self, name="Bazaar.log"):
         return self.files.log(name, self.started)

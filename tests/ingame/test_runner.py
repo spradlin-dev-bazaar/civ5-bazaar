@@ -29,6 +29,7 @@ ONE_OF_EACH = {
     "plugin": {"plugin": "A.dll"},
     "description_of": {"description_of": "id", "version": 1, "is": "x"},
     "mark": {"mark": "a"},
+    "hand_over": {"hand_over": "Look around."},
 }
 
 
@@ -36,7 +37,17 @@ class FakeGame:
     """Stands in for game.py's Game as the runner uses it, over a real player's folder. Each of its methods is one Game
     has, which a test checks."""
 
-    def __init__(self, user, installed, enabled=(), logs=None, answers=None, plugins=(), description=None):
+    def __init__(
+        self,
+        user,
+        installed,
+        enabled=(),
+        logs=None,
+        answers=None,
+        plugins=(),
+        description=None,
+        closed_at_hand_over=False,
+    ):
         self.files = files.PlayerFiles(user)
         self.installed = list(installed)
         self.enabled = set(enabled)
@@ -44,6 +55,7 @@ class FakeGame:
         self.answers = answers or {}
         self.plugin_rows = list(plugins)
         self.description = description
+        self.closed_at_hand_over = closed_at_hand_over
         self.said = []
         self.say = self.said.append
         self.steps = []
@@ -84,6 +96,11 @@ class FakeGame:
 
     def to_main_menu(self, timeout=180):
         self.steps.append(("to_main_menu",))
+
+    def hand_over(self, message):
+        self.steps.append(("hand_over", message))
+        if self.closed_at_hand_over:
+            raise game.GameClosed(game.CLOSED_DURING_HAND_OVER)
 
     def lua(self, state, code, timeout=30):
         """Code "--log NAME: LINE" writes LINE to the log NAME, as a plugin would."""
@@ -194,6 +211,7 @@ class ReadChecksTest(FolderTest):
             ('[[steps]]\nlog = "Bazaar.log"\nlacks = "x"\nwithin = 5\n', "within waits for a line to appear"),
             ('[[steps]]\nsave = "a/b"\n', "step 1 \\(save\\) needs a name that can be a file name"),
             ('[[steps]]\nload = " . "\n', "step 1 \\(load\\) needs a name that can be a file name"),
+            ('[[steps]]\nhand_over = " "\n', "step 1 \\(hand_over\\) needs text saying what to do with the game"),
         ]
         for steps, why in cases:
             with self.subTest(steps=steps):
@@ -316,6 +334,29 @@ class PlayTest(FolderTest):
         self.assertTrue(all(r.passed for r in results))
         with open(self.path(files.ORDER_FILE), "rb") as f:
             self.assertEqual(f.read(), b"")
+
+    def test_the_steps_after_a_hand_over_run_once_the_game_is_back(self):
+        g, results = self.play([{"start_game": "duel"}, {"hand_over": "Look around."}, {"run": "x = 1"}])
+        self.assertEqual(
+            [s[:2] for s in g.steps[2:]], [("start_game",), ("hand_over", "Look around."), ("lua", game.IN_GAME)]
+        )
+        self.assertTrue(all(r.passed for r in results))
+
+    def test_closing_the_game_during_the_last_hand_over_ends_the_run_as_closing_play_cmd_does(self):
+        _, results = self.play([{"start_game": "duel"}, {"hand_over": "Play."}], closed_at_hand_over=True)
+        self.assertEqual([r.what for r in results], ["no plugin stopped working", "Lua.log has no Lua errors"])
+
+    def test_closing_the_game_during_a_hand_over_with_steps_after_it_says_they_did_not_run(self):
+        steps = [{"hand_over": "Play."}, {"lua": "true"}]
+        with self.assertRaisesRegex(game.GameClosed, "during the hand-over, so the steps after it did not run"):
+            self.play(steps, closed_at_hand_over=True)
+
+    def test_closing_the_game_during_any_other_last_step_still_ends_the_run(self):
+        g = FakeGame(self.root, self.installed)
+        g.end_turn = mock.Mock(side_effect=game.GameClosed("Civilization V closed while waiting for the turn"))
+        checks = runner.Checks([self.plugin], [], [{"start_game": "duel"}, {"end_turns": 1}])
+        with self.assertRaisesRegex(game.GameClosed, "while waiting for the turn"):
+            runner.play_steps(checks, g, [self.plugin], [])
 
     def test_a_mod_the_game_never_lists_stops(self):
         self.installed = self.installed[1:]
@@ -623,6 +664,23 @@ class PlayByHandTest(FolderTest):
                 self.assertEqual(play.call_args[0][0].mods, [os.path.join(self.root, "a")])
                 self.assertEqual(printed.getvalue(), printed_line)
 
+    def test_main_says_a_check_run_stopped_by_ctrl_c_as_play_cmd_does(self):
+        path = os.path.join(self.root, "checks.toml")
+        with open(path, "w") as f:
+            f.write('mods = ["a"]\n')
+        open_game = "stopped with the game still open: the next run of check.cmd or play.cmd puts your files back"
+        for handed_over, stopped in ((True, open_game), (False, "stopped")):
+            with self.subTest(handed_over=handed_over):
+                printed = io.StringIO()
+                with (
+                    mock.patch.object(game, "Game") as Game,
+                    mock.patch.object(runner, "run", side_effect=KeyboardInterrupt),
+                    contextlib.redirect_stdout(printed),
+                ):
+                    Game.return_value.handed_over = handed_over
+                    self.assertEqual(runner.main([path]), 1)
+                self.assertEqual(printed.getvalue(), "The checks %s\n" % stopped)
+
 
 class RunTest(unittest.TestCase):
     def run_checks(
@@ -707,6 +765,22 @@ class RunTest(unittest.TestCase):
     def test_every_setting_is_one_the_checks_have(self):
         self.assertEqual(set(runner.SETTINGS), set(runner.Checks._fields))
         runner.validate(runner.Checks(("a",), steps=({"start_game": "duel"},), crash_expected=("Toy Crash",)))
+
+    def test_main_hands_the_game_back_to_a_waiting_run_or_says_none_is_waiting(self):
+        for waiting, code, said in (
+            (True, 0, "handed the game back to the check\n"),
+            (False, 1, "no check is waiting for its game back\n"),
+        ):
+            with self.subTest(waiting=waiting):
+                printed = io.StringIO()
+                with (
+                    mock.patch.object(files, "hand_back", return_value=waiting),
+                    mock.patch.object(game, "Game") as Game,
+                    contextlib.redirect_stdout(printed),
+                ):
+                    self.assertEqual(runner.main(["--hand-back"]), code)
+                self.assertEqual(printed.getvalue(), said)
+                Game.assert_not_called()
 
     def test_main_names_a_file_it_cannot_use_without_starting_the_game(self):
         printed = io.StringIO()
