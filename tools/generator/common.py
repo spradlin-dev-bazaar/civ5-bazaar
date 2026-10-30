@@ -20,10 +20,20 @@ FREEZE = (0, 5)
 FREEZE_SHOWN = "%d.%d" % FREEZE
 NOTICE = os.path.join(REPO, "NOTICE")
 
-VS2008_INCLUDE = [
-    r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\INCLUDE",
-    r"C:\Program Files\Microsoft SDKs\Windows\v6.0A\include",
-]
+
+def vs2008_include(environ=os.environ):
+    """The compiler's and the Windows SDK's include folders. BAZAAR_VS2008_INCLUDE names them, with os.pathsep between
+    them, where they are not in their usual place, such as on a Mac running Visual C++ 2008 under Wine."""
+    if environ.get("BAZAAR_VS2008_INCLUDE"):
+        return [folder for folder in environ["BAZAAR_VS2008_INCLUDE"].split(os.pathsep) if folder]
+    return [
+        r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\INCLUDE",
+        r"C:\Program Files\Microsoft SDKs\Windows\v6.0A\include",
+    ]
+
+
+# From the environment, which reaches the generator's worker processes however they start.
+VS2008_INCLUDE = vs2008_include()
 VSVARS = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\Tools\vsvars32.bat"
 
 SUPPORT_INCLUDE = [
@@ -93,11 +103,17 @@ class Project:
         return clang_arguments(CLANG_DEFINES, self.include_dirs)
 
 
+def path_key(path):
+    """The form two spellings of one file share. The game's source names its files without minding capital letters,
+    as Windows does, so they are folded on every system: os.path.normcase folds them only on Windows."""
+    return os.path.normcase(os.path.abspath(path)).lower()
+
+
 def under(path, folders):
     if not path:
         return False
-    path = os.path.normcase(os.path.abspath(path))
-    return any(path.startswith(os.path.normcase(os.path.abspath(folder)) + os.sep) for folder in folders)
+    path = path_key(path)
+    return any(path.startswith(path_key(folder) + os.sep) for folder in folders)
 
 
 def clang_arguments(defines, include_dirs):
@@ -183,7 +199,7 @@ def engine_sources():
 
 
 def engine_project():
-    includes = [ENGINE_DIR] + [os.path.join(SOURCE_ROOT, inc) for inc in SUPPORT_INCLUDE]
+    includes = [ENGINE_DIR] + [os.path.join(SOURCE_ROOT, *inc.split("\\")) for inc in SUPPORT_INCLUDE]
     return Project(
         ENGINE_DIR,
         engine_sources(),
