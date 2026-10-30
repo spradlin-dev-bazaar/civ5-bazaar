@@ -4,6 +4,7 @@ game itself is replaced by a Game whose game-facing calls are scripted."""
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -65,6 +66,32 @@ class HelpersTest(unittest.TestCase):
 
     def test_mod_table_quotes_ids(self):
         self.assertEqual(game.mod_table([("a-b", 5), ('q"', 1)]), '{{"a-b", 5}, {"q\\"", 1}}')
+
+    def test_a_program_running_checks_whose_output_nobody_reads_any_more_still_ends_with_its_own_exit_code(self):
+        temp = use_own_temp(self)
+        tools = os.path.dirname(os.path.dirname(game.__file__))
+        for args, code in (
+            (["-m", "bazaar_check", "--hand-back"], 1),
+            ([os.path.join(tools, "release.py"), "--help"], 0),
+            ([os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.py"), "--play"], 2),
+        ):
+            read_end, write_end = os.pipe()
+            os.close(read_end)
+            try:
+                done = subprocess.run(
+                    [sys.executable, "-B"] + args,
+                    cwd=tools,
+                    stdin=subprocess.DEVNULL,
+                    stdout=write_end,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=dict(os.environ, TEMP=temp, TMP=temp, TMPDIR=temp),
+                    timeout=60,
+                )
+            finally:
+                os.close(write_end)
+            with self.subTest(args=args):
+                self.assertEqual((done.returncode, done.stderr), (code, ""))
 
 
 class ScriptedGame(game.Game):
