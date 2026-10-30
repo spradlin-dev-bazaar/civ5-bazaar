@@ -40,6 +40,41 @@ def print_now(text):
     print(text, flush=True)
 
 
+class CarryOnWhenUnread:
+    """Stands in for stdout, so that a run whose reader has gone, such as a program that ran the check and was then
+    killed, still finishes: it puts everything back and ends with the exit code that says whether the checks passed."""
+
+    def __init__(self, stream):
+        self.stream = stream
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+    def write(self, text):
+        return self._carry_on(self.stream.write, text)
+
+    def flush(self):
+        return self._carry_on(self.stream.flush)
+
+    def _carry_on(self, do, *args):
+        try:
+            return do(*args)
+        except OSError:
+            # Windows says EINVAL here, not BrokenPipeError. Python's own flush at exit would fail too, and change the
+            # exit code.
+            nul = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(nul, self.stream.fileno())
+            os.close(nul)
+            return do(*args)
+
+
+def make_output_safe():
+    """For each program that runs checks. Piped, Python writes cp1252, and a character it lacks would end a run at the
+    line that holds it, as would a reader that has gone."""
+    sys.stdout.reconfigure(errors="replace")
+    sys.stdout = CarryOnWhenUnread(sys.stdout)
+
+
 def has_console():
     # isatty takes input from NUL, which a program running the check in the background gives it, for a console.
     try:
