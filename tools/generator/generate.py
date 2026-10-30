@@ -890,11 +890,12 @@ def run(project):
     marked, missed = mark_exports(functions, files, edits)
     shared, missed_shared = mark_exports(variables, files, edits)
     write_mirror(project, files, edits, wrappers)
-    registry.save()
     write_table(project, registry, hand_hook_sites(hooks, files, project.root))
     untyped = write_plugin_header(project, registry, hooks)
     if project.vcproj:
         write_engine_build_files(project)
+    # Ids are never given back, so a run that stops on a check before this must leave the committed list as it was.
+    registry.save()
 
     vanished = len(registry.entries) - len(hooks)
     print(

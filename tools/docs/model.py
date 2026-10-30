@@ -27,11 +27,11 @@ class Engine:
         self.project = project
         self.texts, self.line_starts = {}, {}
         results = read_all(project)
-        errors = analyze.project_errors(project, results)
+        errors = analyze.stopping_errors(project, results)
         if errors:
             for path, line, message in sorted(errors)[:20]:
                 print("  %s:%d %s" % (os.path.basename(path), line, message))
-            raise SystemExit("docs: %d new parse errors outside function bodies, nothing written" % len(errors))
+            raise SystemExit("docs: %d parse errors that stop the build, nothing written" % len(errors))
         self.body_errors = sum(1 for r in results for e in r["errors"] if e[3])
         self.functions, self.classes = merge(results, project)
         self.plan_hooks()

@@ -230,7 +230,8 @@ def analyze_tu(job):
 
 
 def parse_errors(tu, src, bodies):
-    """(file, line, message, inside one of src's function bodies) for each error clang reported."""
+    """(file, line, message, inside one of src's function bodies, fatal) for each error clang reported. After a fatal
+    one, such as a header it cannot find, clang reads nothing more of src, wherever the error is."""
     errors = []
     for d in tu.diagnostics:
         if d.severity < ci.Diagnostic.Error:
@@ -238,7 +239,7 @@ def parse_errors(tu, src, bodies):
         path = os.path.abspath(d.location.file.name) if d.location.file else ""
         in_src = common.path_key(path) == common.path_key(src)
         in_body = in_src and any(s is not None and s <= d.location.offset < e for s, e in bodies)
-        errors.append((path, d.location.line, d.spelling, in_body))
+        errors.append((path, d.location.line, d.spelling, in_body, d.severity >= ci.Diagnostic.Fatal))
     return errors
 
 
@@ -385,8 +386,11 @@ def run(project):
     for r, n in sorted(reasons.items(), key=lambda kv: -kv[1]):
         print("  skipped, %s: %d" % (r, n))
     in_bodies = {(e[0], e[1], e[2]) for r in results for e in r["errors"] if project.contains(e[0]) and e[3]}
-    errors = project_errors(project, results)
-    print("parse errors in project files: %d inside function bodies, %d new elsewhere" % (len(in_bodies), len(errors)))
+    errors = stopping_errors(project, results)
+    print(
+        "parse errors: %d inside function bodies in project files, %d that stop the build"
+        % (len(in_bodies), len(errors))
+    )
     for e in sorted(errors)[:20]:
         print("  %s:%d %s" % (os.path.basename(e[0]), e[1], e[2]))
     return results
@@ -433,18 +437,19 @@ def check_plugin_header(project, header):
     return lines, originals
 
 
-def project_errors(project, results):
-    """New parse errors in the project outside function bodies: they can hide functions, so the build must stop.
-    Errors inside a body cannot, since the generator never needs a body's contents."""
+def stopping_errors(project, results):
+    """The parse errors that must stop the build, since they can hide functions: new ones in the project outside
+    function bodies, and fatal ones anywhere. Other errors inside a body cannot, since the generator never needs a
+    body's contents."""
     known = common.known_errors()
     return {
         (e[0], e[1], e[2])
         for r in results
         for e in r["errors"]
-        if project.contains(e[0]) and not e[3] and not common.known_error(known, e[0], e[1], e[2])
+        if e[4] or (project.contains(e[0]) and not e[3] and not common.known_error(known, e[0], e[1], e[2]))
     }
 
 
 if __name__ == "__main__":
     project = common.engine_project()
-    sys.exit(1 if project_errors(project, run(project)) else 0)
+    sys.exit(1 if stopping_errors(project, run(project)) else 0)

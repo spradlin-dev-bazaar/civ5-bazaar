@@ -26,7 +26,7 @@ def fixture_project(sources):
 
 def generate_hooks(sources):
     project = fixture_project(sources)
-    if analyze.project_errors(project, analyze.run(project)):
+    if analyze.stopping_errors(project, analyze.run(project)):
         raise SystemExit("FAIL: the fixture does not parse")
     return dict((fn["hook_key"], (fn["hook_id"], fn["hook_name"])) for fn in generate.run(project))
 
