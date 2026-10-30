@@ -638,13 +638,22 @@ class StepRecorder:
 class PrepareTest(unittest.TestCase):
     LISTS = (["0\tCvCity_init"], ["DllGetGameContext"])
 
-    def prepare(self, failing=None, planned=version.Version("0.4.0", 2), same_bazaar=False):
+    CHECKS = ["the tests", "the docs checks", "the lint", "the format check"]
+
+    def prepare(self, failing=None, planned=version.Version("0.4.0", 2), same_bazaar=False, failing_check=None):
         steps = StepRecorder(failing)
+        record_run = steps.step("run")
+
+        def run(what, cmd):
+            record_run(what, cmd)
+            if what == failing_check:
+                raise SystemExit("release: %s failed" % what)
+
         replaced = [
             (release, "require_main", steps.step("require_main")),
             (release, "require_no_release_branch", steps.step("branch check")),
             (release, "last_release", steps.step("last_release", "v0.3.0")),
-            (release, "run", steps.step("run")),
+            (release, "run", run),
             (release, "current_lists", steps.step("lists", self.LISTS)),
             (release, "plan", steps.step("plan", planned)),
             (release.version, "write", steps.step("VERSION")),
@@ -660,17 +669,40 @@ class PrepareTest(unittest.TestCase):
         ]
         return steps, steps.run(lambda: release.prepare(False, same_bazaar), replaced)
 
-    def test_the_checks_come_first_the_history_before_the_docs_and_the_branch_last(self):
+    def test_the_checks_run_last_on_the_branch_at_the_raised_numbers(self):
         steps, message = self.prepare()
         self.assertIsNone(message)
         names = steps.names()
-        self.assertEqual(names[: names.index("VERSION")].count("run"), 5)
+        self.assertEqual(names[: names.index("VERSION")].count("run"), 1)
         self.assertLess(names.index("plugin version"), names.index("numbers agree"))
         self.assertLess(names.index("template bazaar"), names.index("numbers agree"))
         self.assertLess(names.index("mod versions"), names.index("numbers agree"))
         self.assertLess(names.index("restore history"), names.index("docs"))
         self.assertEqual(steps.arguments("git"), [(("switch", "-c", "release-0.4.0"), {})])
-        self.assertEqual(names[-1], "git")
+        self.assertEqual(names[names.index("git") + 1 :], ["run"] * len(self.CHECKS))
+        self.assertEqual([args[0] for args, _ in steps.arguments("run")[1:]], self.CHECKS)
+
+    def test_a_check_that_fails_leaves_the_raised_numbers_on_the_branch_for_a_fix(self):
+        for check in self.CHECKS:
+            with self.subTest(check=check):
+                steps, message = self.prepare(failing_check=check)
+                self.assertIn("%s failed" % check, message)
+                self.assertIn("the numbers are raised to 0.4.0 on branch release-0.4.0", message)
+                self.assertNotIn("git restore", message)
+                for name in self.CHECKS:
+                    self.assertIn(name, message.split("run all the checks again")[1])
+                self.assertEqual([args[0] for args, _ in steps.arguments("run")][-1], check)
+
+    def test_a_stop_adds_its_advice_and_ctrl_c_prints_it(self):
+        with self.assertRaises(SystemExit) as stop:
+            with release.stopping_says("do this"):
+                release.stop("broken")
+        self.assertEqual(str(stop.exception), "release: broken\nrelease: do this")
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed), self.assertRaises(KeyboardInterrupt):
+            with release.stopping_says("do this"):
+                raise KeyboardInterrupt
+        self.assertEqual(printed.getvalue(), "release: do this\n")
 
     def test_each_step_gets_the_new_release(self):
         steps, _ = self.prepare()
@@ -699,10 +731,12 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(steps.arguments("template bazaar"), [(("0.4.0",), {})])
 
     def test_a_stop_part_way_says_how_to_start_again(self):
-        steps, message = self.prepare(failing="docs")
-        self.assertIn("docs: broken", message)
-        self.assertIn("git restore :/", message)
-        self.assertNotIn("git", steps.names())
+        for failing in ("docs", "git"):
+            with self.subTest(failing=failing):
+                steps, message = self.prepare(failing=failing)
+                self.assertIn("docs: broken", message)
+                self.assertIn("git restore :/", message)
+                self.assertEqual(steps.names().count("run"), 1)
 
 
 class BuildTest(unittest.TestCase):

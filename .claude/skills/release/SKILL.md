@@ -18,7 +18,7 @@ Ask the developer before each step that publishes something or changes git: comm
 
 ## 2. Prepare
 
-1. Run `.venv\Scripts\python.exe tools\release.py prepare`, with `--major` or `--same-bazaar` if chosen. It builds the host, runs the tests and the lint, raises the numbers, saves the lists and the docs' function history, and leaves the changes on a new branch, `release-<number>`. It takes a while. A release that keeps Bazaar keeps its mod version and adds no row to `VERSIONS.md`.
+1. Run `.venv\Scripts\python.exe tools\release.py prepare`, with `--major` or `--same-bazaar` if chosen. It builds the host, raises the numbers, saves the lists and the docs' function history, and leaves the changes on a new branch, `release-<number>`. Then it runs the tests and the lint on that branch, so that they check the release at its own numbers. It takes a while. If a check fails, `prepare` stops and leaves the branch as it is: fix what failed there, run all the checks again, as its message says, and commit the fix with the release. If the fix changes Bazaar's own code, start again from main instead. A release that keeps Bazaar keeps its mod version and adds no row to `VERSIONS.md`.
 2. Draft the commit message, titled "Prepare release <number>" with a few plain lines on what the release holds, and the pull request description. Once they are approved, commit, push the branch and open the pull request to main.
 3. Wait for the developer to merge it. Then pull main and delete the local branch with `git branch -d release-<number>`: the next `prepare` refuses while it is there.
 
