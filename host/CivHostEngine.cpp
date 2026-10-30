@@ -480,11 +480,14 @@ namespace
 		const std::string game = GameFolder();
 		std::vector<CivActiveMod> mods;
 		if (!ActiveMods(&mods))
-			LogLine("Could not read the game's list of mods, so Continue looks only for the game's own Advanced Setup screen.");
+			LogLine("Could not read the game's list of mods, so Continue passes over other mods' Advanced Setup screens.");
 		CivReplacedSetup setup;
 		setup.problem = "Bazaar could not find its own folder or the game's.";
 		if (!own.empty() && !game.empty())
-			setup = CivCopyReplacedSetup(game, own, mods, lua_toboolean(L, 2) != 0);
+			setup = CivCopyReplacedSetup(game, own, mods);
+		for (size_t i = 0; i < setup.unreadablePacks.size(); ++i)
+			LogLine(("Could not read the DLC pack file " + setup.unreadablePacks[i]
+				+ ", so Continue passes over any Advanced Setup screen that pack has.").c_str());
 		if (setup.copy.empty())
 		{
 			LogLine(("Could not open the Advanced Setup screen that Bazaar replaced: " + setup.problem).c_str());

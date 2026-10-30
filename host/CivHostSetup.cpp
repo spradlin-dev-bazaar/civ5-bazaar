@@ -1,4 +1,5 @@
 #include "CivHostSetup.h"
+#include "CivHostDlc.h"
 #include "CivHostPath.h"
 
 #include <windows.h>
@@ -34,20 +35,25 @@ namespace
 		}
 		return source;
 	}
+
+	std::string SetupSource(const std::string& gameFolder, const std::string& ownFolder, const std::vector<CivActiveMod>& mods,
+		const std::vector<CivDlcSkin>& skins, const char* fileName)
+	{
+		std::string source = ImportedByActiveMod(mods, ownFolder, fileName);
+		if (source.empty())
+			source = CivFileInDlcSkins(skins, fileName);
+		if (source.empty())
+			source = gameFolder + "\\Assets\\UI\\FrontEnd\\GameSetup\\" + fileName;
+		return source;
+	}
 }
 
-CivReplacedSetup CivCopyReplacedSetup(const std::string& gameFolder, const std::string& ownFolder, const std::vector<CivActiveMod>& mods,
-	bool expansion1)
+CivReplacedSetup CivCopyReplacedSetup(const std::string& gameFolder, const std::string& ownFolder, const std::vector<CivActiveMod>& mods)
 {
 	CivReplacedSetup result;
-	result.xmlSource = ImportedByActiveMod(mods, ownFolder, kXml);
-	result.luaSource = ImportedByActiveMod(mods, ownFolder, kLua);
-	const std::string gameSetup = gameFolder + "\\Assets\\UI\\FrontEnd\\GameSetup\\";
-	const std::string expansionSetup = gameFolder + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\";
-	if (result.xmlSource.empty())
-		result.xmlSource = expansion1 && CivExists(expansionSetup + kXml) ? expansionSetup + kXml : gameSetup + kXml;
-	if (result.luaSource.empty())
-		result.luaSource = gameSetup + kLua;
+	const std::vector<CivDlcSkin> skins = CivReadDlcSkins(gameFolder, &result.unreadablePacks);
+	result.xmlSource = SetupSource(gameFolder, ownFolder, mods, skins, kXml);
+	result.luaSource = SetupSource(gameFolder, ownFolder, mods, skins, kLua);
 
 	const std::string copy = ownFolder + "\\" + kCopyName;
 	const std::string sources[] = {result.xmlSource, result.luaSource};
