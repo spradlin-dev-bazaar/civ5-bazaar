@@ -15,12 +15,14 @@ struct CivReplacedSetup
 	std::string xmlSource;
 	std::string luaSource;
 	std::string problem;
+	// DLC package files that could not be read, so any Advanced Setup screen their packs have was passed over.
+	std::vector<std::string> unreadablePacks;
 };
 
-// Copies each of the screen's two files, from the last mod importing it (other than the mod in ownFolder) or else the
-// game, into ownFolder under a name of its own: the game finds screens by name, and that name is taken by Bazaar's.
-CivReplacedSetup CivCopyReplacedSetup(const std::string& gameFolder, const std::string& ownFolder, const std::vector<CivActiveMod>& mods,
-	bool expansion1);
+// Copies each of the screen's two files into ownFolder under a name of its own, since the game finds screens by name and
+// that name is taken by Bazaar's. Each comes from where the game would take it: the last mod importing it (other than
+// the mod in ownFolder), else the DLC pack with the highest priority whose Brave New World skin has it, else the game.
+CivReplacedSetup CivCopyReplacedSetup(const std::string& gameFolder, const std::string& ownFolder, const std::vector<CivActiveMod>& mods);
 
 // The game gives a screen two switched-on mods import to the one with the newest row in its mod list, whatever their switch-on order.
 struct CivInstalledMod

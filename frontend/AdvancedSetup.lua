@@ -6,7 +6,6 @@ include( "InstanceManager" );
 
 local g_InstanceManager = InstanceManager:new( "PluginInstance", "Root", Controls.PluginStack );
 
-local GODS_AND_KINGS = "0E3751A1-F840-4e1b-9706-519BF484E59D";
 local g_NextSetup = nil;
 
 -- Bazaar's own notes, rows with no file, stay at the top and cannot be moved.
@@ -218,7 +217,7 @@ local function OpenNextSetup()
 	end
 	if g_NextSetup == nil then
 		local ok, path = pcall(function()
-			return UI.GetMapPreview("bazaar:nextsetup", ContentManager.IsActive(GODS_AND_KINGS, ContentType.GAMEPLAY));
+			return UI.GetMapPreview("bazaar:nextsetup");
 		end);
 		if not ok or type(path) ~= "string" then
 			print("Bazaar could not open Advanced Setup: " .. tostring(path));

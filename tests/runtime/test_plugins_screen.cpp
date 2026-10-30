@@ -39,6 +39,63 @@ namespace
 		return text;
 	}
 
+	void RemoveTree(const std::string& folder)
+	{
+		WIN32_FIND_DATAW found;
+		HANDLE search = FindFirstFileW(CivWide(folder + "\\*").c_str(), &found);
+		if (search != INVALID_HANDLE_VALUE)
+		{
+			do
+			{
+				const std::string path = folder + "\\" + CivUtf8(found.cFileName);
+				if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+					DeleteFileW(CivWide(path).c_str());
+				else if (wcscmp(found.cFileName, L".") != 0 && wcscmp(found.cFileName, L"..") != 0)
+					RemoveTree(path);
+			} while (FindNextFileW(search, &found));
+			FindClose(search);
+		}
+		RemoveDirectoryW(CivWide(folder).c_str());
+	}
+
+	std::string Folder(const char* folder)
+	{
+		return std::string("      <Directory>") + folder + "</Directory>\r\n";
+	}
+
+	std::string Listed(const char* file)
+	{
+		return std::string("      <File>") + file + "</File>\r\n";
+	}
+
+	// One UI skin of a DLC pack, with its folders listed under kind: Skin or GameplaySkin.
+	std::string Skin(const char* set, const char* platform, const char* kind, const std::string& folders)
+	{
+		return std::string("  <UISkin name=\"Primary\" set=\"") + set + "\" platform=\"" + platform + "\">\r\n    <" + kind + ">\r\n" + folders
+			+ "    </" + kind + ">\r\n  </UISkin>\r\n";
+	}
+
+	enum PackText
+	{
+		kPlain,
+		kUtf8Mark,
+		kUtf16
+	};
+
+	// The name is written as given, so it can hold bytes that are not UTF-8. Every form declares UTF-8, as packs do.
+	void WritePack(const std::string& path, int priority, const std::string& skins, const std::string& name = "A pack", PackText form = kPlain)
+	{
+		char number[16];
+		_snprintf_s(number, sizeof(number), _TRUNCATE, "%d", priority);
+		const std::string text = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Civ5Package>\r\n  <Priority>" + std::string(number)
+			+ "</Priority>\r\n  <Name>\r\n    <Value language=\"en_US\">" + name + "</Value>\r\n  </Name>\r\n" + skins + "</Civ5Package>\r\n";
+		const std::wstring wide = CivWide(text);
+		if (form == kUtf16)
+			WriteText(path, "\xFF\xFE" + std::string((const char*)wide.data(), wide.size() * sizeof(wchar_t)));
+		else
+			WriteText(path, (form == kUtf8Mark ? "\xEF\xBB\xBF" : "") + text);
+	}
+
 	CivActiveMod Mod(const char* id, int version)
 	{
 		CivActiveMod mod;
@@ -247,7 +304,12 @@ void TestReplacedSetup()
 	WriteText(own + "\\frontend\\AdvancedSetup.xml", "bazaar xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "game xml");
 	WriteText(game + "\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.lua", "game lua");
-	WriteText(game + "\\Assets\\DLC\\Expansion\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "expansion xml");
+	const std::string dlc = game + "\\Assets\\DLC";
+	// Packs an earlier run of this section wrote would win before the checks that expect none.
+	RemoveTree(dlc);
+	// Gods and Kings' pack has its own layout, in a skin the game does not use with Brave New World.
+	WritePack(dlc + "\\Expansion\\Expansion1.Civ5Pkg", 100, Skin("Expansion1", "Common", "Skin", Folder("UI/Frontend")));
+	WriteText(dlc + "\\Expansion\\UI\\FrontEnd\\GameSetup\\AdvancedSetup.xml", "expansion xml");
 
 	// Mixed slashes, as the game's mod database gives them.
 	std::vector<CivActiveMod> active;
@@ -260,7 +322,7 @@ void TestReplacedSetup()
 	active.push_back(Mod("bazaar-id", 1));
 	active.back().files.push_back(File(own + "\\frontend/AdvancedSetup.xml", true));
 
-	const CivReplacedSetup first = CivCopyReplacedSetup(game, own, active, true);
+	const CivReplacedSetup first = CivCopyReplacedSetup(game, own, active);
 	const std::string copy = own + "\\BazaarNextSetup";
 	Check(first.copy == copy, "another active mod's screen is copied beside Bazaar under a name of its own");
 	Check(ReadText(copy + ".xml") == "ras xml", "its layout is that mod's, and Bazaar's own is passed over");
@@ -269,26 +331,63 @@ void TestReplacedSetup()
 
 	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_READONLY);
 	// This copy is read-only too, and the next copy must still overwrite it.
-	CivCopyReplacedSetup(game, own, active, true);
-	Check(!CivCopyReplacedSetup(game, own, active, true).copy.empty(), "a read-only source does not stop the next copy");
+	CivCopyReplacedSetup(game, own, active);
+	Check(!CivCopyReplacedSetup(game, own, active).copy.empty(), "a read-only source does not stop the next copy");
 	SetFileAttributesW(CivWide(rasXml).c_str(), FILE_ATTRIBUTE_NORMAL);
 
 	std::vector<CivActiveMod> late(active);
 	late.push_back(Mod("late-id", 2));
 	late.back().files.push_back(File(mods + "\\Late (v 2)\\AdvancedSetup.xml", true));
 	WriteText(mods + "\\Late (v 2)\\AdvancedSetup.xml", "late xml");
-	const CivReplacedSetup lastWins = CivCopyReplacedSetup(game, own, late, true);
+	const CivReplacedSetup lastWins = CivCopyReplacedSetup(game, own, late);
 	Check(ReadText(copy + ".xml") == "late xml" && lastWins.luaSource == mods + "\\RAS (v 15)\\UI Overrides\\AdvancedSetup.lua",
 		"of two mods replacing one file, the later one is copied");
 
 	std::vector<CivActiveMod> withoutRas(active.begin() + 1, active.end());
-	CivCopyReplacedSetup(game, own, withoutRas, true);
-	Check(ReadText(copy + ".xml") == "expansion xml", "with no such mod active, the game's own layout is copied");
+	CivCopyReplacedSetup(game, own, withoutRas);
+	Check(ReadText(copy + ".xml") == "game xml", "with no such mod active, the game's own layout is copied, not Gods and Kings'");
 	Check(ReadText(copy + ".lua") == "game lua", "with no such mod active, the game's own script is copied");
-	CivCopyReplacedSetup(game, own, withoutRas, false);
-	Check(ReadText(copy + ".xml") == "game xml", "the game's base layout is used when Gods and Kings is off");
 
-	const CivReplacedSetup failed = CivCopyReplacedSetup(root + "\\NoGame", own, withoutRas, false);
+	// An in-game skin with two folders, the screen deep inside the second. Saved with a byte order mark.
+	WritePack(dlc + "\\Lek\\Lek.Civ5Pkg", 300, Skin("Expansion2", "Common", "GameplaySkin", Folder("Art") + Folder("Lua")), "Lek", kUtf8Mark);
+	WriteText(dlc + "\\Lek\\Art\\Icons.dds", "art");
+	WriteText(dlc + "\\Lek\\Lua\\UI\\Deeper\\AdvancedSetup.lua", "lek lua");
+	WriteText(dlc + "\\Lek\\Lua\\UI\\AdvancedSetup.lua.ignore", "ignored");
+	CivCopyReplacedSetup(game, own, withoutRas);
+	Check(ReadText(copy + ".lua") == "lek lua", "a DLC pack's Brave New World skin takes the game's place, from any folder inside the skin's");
+	Check(ReadText(copy + ".xml") == "game xml", "the game's own layout stays when the pack has none");
+
+	WritePack(dlc + "\\Listed\\Listed.Civ5Pkg", 350, Skin("Expansion2", "Common", "Skin", Listed("Front/AdvancedSetup.*")), "Listed", kUtf16);
+	WriteText(dlc + "\\Listed\\Front\\AdvancedSetup.lua", "listed lua");
+	CivCopyReplacedSetup(game, own, withoutRas);
+	Check(ReadText(copy + ".lua") == "listed lua", "a file a skin lists by name counts too, wildcards included, from a package file saved as UTF-16");
+
+	// The highest priority sits between a lower one before it and one after it, so the order packs are read in decides nothing.
+	// Its name is in the system's code page, not UTF-8, and its folder name has spaces and line breaks around it.
+	WritePack(dlc + "\\Mid\\Mid.Civ5Pkg", 400, Skin("Expansion2", "Common", "Skin", "      <Directory>\r\n        UI/Front\r\n      </Directory>\r\n"),
+		"Caf\xE9");
+	WriteText(dlc + "\\Mid\\UI\\Front\\AdvancedSetup.lua", "mid lua");
+	WriteText(dlc + "\\Mid\\UI\\Front\\AdvancedSetup.xml", "mid xml");
+	WritePack(dlc + "\\Zlow\\Zlow.Civ5Pkg", 100, Skin("Expansion2", "Common", "Skin", Folder("UI")));
+	WriteText(dlc + "\\Zlow\\UI\\AdvancedSetup.lua", "low lua");
+	WritePack(dlc + "\\Other\\Other.Civ5Pkg", 900, Skin("Expansion1", "Common", "Skin", Folder("UI")));
+	WriteText(dlc + "\\Other\\UI\\AdvancedSetup.lua", "other set lua");
+	// As Brave New World's own pack does: a PC skin, then a tablet one.
+	WritePack(dlc + "\\Pad\\Pad.Civ5Pkg", 900, Skin("Expansion2", "Common", "Skin", Folder("PC")) + Skin("Expansion2", "Tablet", "Skin", Folder("UI")));
+	WriteText(dlc + "\\Pad\\UI\\AdvancedSetup.lua", "tablet lua");
+	const std::string broken = dlc + "\\Broken\\Broken.Civ5Pkg";
+	WriteText(broken, "<Civ5Package><Priority>900</Priority><UISkin set=\"Expansion2\" platform=\"Common\"><Skin><Directory>UI</Directory>");
+	WriteText(dlc + "\\Broken\\UI\\AdvancedSetup.lua", "broken lua");
+	const CivReplacedSetup packs = CivCopyReplacedSetup(game, own, withoutRas);
+	Check(ReadText(copy + ".lua") == "mid lua",
+		"the pack with the highest priority wins; other skin sets, tablet skins and broken package files count for nothing");
+	Check(ReadText(copy + ".xml") == "mid xml", "a pack's layout takes the game's place too");
+	Check(packs.luaSource == dlc + "\\Mid\\UI\\Front\\AdvancedSetup.lua", "it says which pack's file it copied, with Windows slashes");
+	Check(packs.unreadablePacks.size() == 1 && packs.unreadablePacks[0] == broken, "a package file that cannot be read is named");
+	CivCopyReplacedSetup(game, own, active);
+	Check(ReadText(copy + ".lua") == "ras lua", "an active mod's screen still comes before a DLC pack's");
+
+	const CivReplacedSetup failed = CivCopyReplacedSetup(root + "\\NoGame", own, withoutRas);
 	Check(failed.copy.empty(), "a screen that cannot be copied gives no path");
 	Check(failed.problem.find("Could not copy") == 0, "a screen that cannot be copied gives a reason");
 }
