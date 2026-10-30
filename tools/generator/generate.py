@@ -74,7 +74,7 @@ class PathDict(dict):
 
     @staticmethod
     def _key(path):
-        return os.path.normcase(os.path.abspath(path))
+        return common.path_key(path)
 
     def __getitem__(self, path):
         return dict.__getitem__(self, self._key(path))
@@ -550,7 +550,7 @@ def mark_exports(functions, files, edits):
         if ex["is_definition"]:
             marked += "hook_id" in fn
             continue
-        site = (os.path.normcase(ex["file"]), ex["start"])
+        site = (common.path_key(ex["file"]), ex["start"])
         if site in sites:
             continue
         data = cached_read(files, ex["file"])

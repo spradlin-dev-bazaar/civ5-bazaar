@@ -67,6 +67,25 @@ class UnderTest(unittest.TestCase):
         self.assertFalse(common.under(folder + "2" + os.sep + "CvUnit.h", [folder]))
         self.assertFalse(common.under("", [folder]))
 
+    def test_capitals_do_not_count_on_a_system_whose_file_names_mind_them(self):
+        folder = os.path.join(tempfile.gettempdir(), "Engine")
+        with mock.patch.object(os.path, "normcase", lambda path: path):
+            self.assertTrue(common.under(os.path.join(folder.upper(), "CvUnit.h"), [folder]))
+            self.assertEqual(
+                common.path_key(os.path.join(folder, "CvUnit.h")), common.path_key(os.path.join(folder, "CVUNIT.H"))
+            )
+
+
+class VS2008IncludeTest(unittest.TestCase):
+    def test_the_usual_folders_unless_the_environment_names_others(self):
+        usual = common.vs2008_include({})
+        self.assertTrue(usual)
+        self.assertEqual(common.vs2008_include({"BAZAAR_VS2008_INCLUDE": ""}), usual)
+        for named in ("/wine/vc/include{0}/wine/sdk/include", "/wine/vc/include{0}{0}/wine/sdk/include{0}"):
+            with self.subTest(named=named):
+                value = {"BAZAAR_VS2008_INCLUDE": named.format(os.pathsep)}
+                self.assertEqual(common.vs2008_include(value), ["/wine/vc/include", "/wine/sdk/include"])
+
 
 if __name__ == "__main__":
     unittest.main()

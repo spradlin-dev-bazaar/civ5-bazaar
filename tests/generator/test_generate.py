@@ -447,12 +447,27 @@ class EditProducerTest(unittest.TestCase):
         self.assertEqual(generate.mark_exports(functions, generate.PathDict(), edits), (2, 1))
         self.assertEqual(edits[path], [(0, 0, "CIV_HOST_API ")])
 
+    def test_a_declaration_reached_under_two_spellings_is_marked_once_where_capitals_count(self):
+        path = write_file(self.folder, "Unit.h", b"int a();\n")
+        site = {"first_token": "int", "is_definition": False, "file": path, "start": 0}
+        functions = [{"export_decl": site}, {"export_decl": dict(site, file=path.upper())}]
+        edits = generate.PathDict()
+        with mock.patch.object(os.path, "normcase", lambda path: path):
+            self.assertEqual(generate.mark_exports(functions, generate.PathDict(), edits), (1, 0))
+            self.assertEqual(edits[path.lower()], [(0, 0, "CIV_HOST_API ")])
+
 
 class PathDictTest(unittest.TestCase):
     def test_a_path_is_found_in_any_case_and_with_either_slash(self):
         files = generate.PathDict()
         files[os.path.join(tempfile.gettempdir(), "Engine", "CvUnit.h")] = 1
         self.assertEqual(files[os.path.join(tempfile.gettempdir(), "engine", "CVUNIT.H").replace("\\", "/")], 1)
+
+    def test_a_path_is_found_in_any_case_where_capitals_count(self):
+        files = generate.PathDict()
+        with mock.patch.object(os.path, "normcase", lambda path: path):
+            files[os.path.join(tempfile.gettempdir(), "Engine", "CvUnit.h")] = 1
+            self.assertEqual(files[os.path.join(tempfile.gettempdir(), "engine", "CVUNIT.H")], 1)
 
 
 class SignatureTest(unittest.TestCase):

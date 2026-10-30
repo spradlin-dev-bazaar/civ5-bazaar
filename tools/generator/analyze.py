@@ -216,7 +216,7 @@ def analyze_tu(job):
     functions, variables = [], []
 
     def in_this_file(c):
-        return c.location.file and os.path.normcase(os.path.abspath(c.location.file.name)) == os.path.normcase(src)
+        return c.location.file and common.path_key(c.location.file.name) == common.path_key(src)
 
     for c in tu.cursor.walk_preorder():
         if c.kind in FUNCTION_KINDS and c.is_definition() and in_this_file(c):
@@ -236,7 +236,7 @@ def parse_errors(tu, src, bodies):
         if d.severity < ci.Diagnostic.Error:
             continue
         path = os.path.abspath(d.location.file.name) if d.location.file else ""
-        in_src = os.path.normcase(path) == os.path.normcase(src)
+        in_src = common.path_key(path) == common.path_key(src)
         in_body = in_src and any(s is not None and s <= d.location.offset < e for s, e in bodies)
         errors.append((path, d.location.line, d.spelling, in_body))
     return errors
@@ -403,8 +403,8 @@ def parse_as_plugin(project, header, code=""):
 def check_plugin_header(project, header):
     """Parses CivHooks.h as a plugin includes it. Returns the lines of header with an error, and each Original
     typedef's canonical types by line: (result, parameters)."""
-    header = os.path.normcase(os.path.abspath(header))
-    tu = parse_as_plugin(project, header)
+    tu = parse_as_plugin(project, os.path.abspath(header))
+    header = common.path_key(header)
     known = common.known_errors()
     lines = set()
     for d in tu.diagnostics:
@@ -417,13 +417,13 @@ def check_plugin_header(project, header):
             # Types the game's headers no longer declare would leave hook points untyped without a word.
             where = "%s:%d " % (common.shown(path), d.location.line) if path else ""
             raise RuntimeError("generator: could not read the game's headers as a plugin does: " + where + d.spelling)
-        if d.severity >= ci.Diagnostic.Error and os.path.normcase(path) == header:
+        if d.severity >= ci.Diagnostic.Error and common.path_key(path) == header:
             lines.add(d.location.line)
     originals = {}
     for space in tu.cursor.get_children():
         if space.spelling != "CivHooks" or not space.location.file:
             continue
-        if os.path.normcase(os.path.abspath(space.location.file.name)) != header:
+        if common.path_key(space.location.file.name) != header:
             continue
         for c in (c for struct in space.get_children() for c in struct.get_children()):
             original = c.kind == CK.TYPEDEF_DECL and c.spelling == "Original"
