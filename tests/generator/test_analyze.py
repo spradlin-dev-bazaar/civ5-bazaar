@@ -17,8 +17,8 @@ import analyze  # noqa: E402
 import common  # noqa: E402
 
 
-class ProjectErrorsTest(unittest.TestCase):
-    def test_only_a_new_error_outside_a_body_in_the_project_stops_the_build(self):
+class StoppingErrorsTest(unittest.TestCase):
+    def test_a_new_error_outside_a_body_in_the_project_or_a_fatal_one_anywhere_stops_the_build(self):
         root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, root)
         header, utility = os.path.join(root, "CvUnit.h"), os.path.join(root, "CvDatabaseUtility.h")
@@ -26,20 +26,32 @@ class ProjectErrorsTest(unittest.TestCase):
             f.write("int a\n")
         with open(utility, "w") as f:
             f.write("int x = ;\nint y = ;\n")
+        support = os.path.join(tempfile.gettempdir(), "support", "Headers.h")
         errors = [
-            (os.path.join(root, "CvUnit.cpp"), 3, "use of undeclared identifier", True),
-            (header, 1, "expected ';'", False),
-            (utility, 1, "expected expression", False),
-            (utility, 2, "expected expression", False),
-            (os.path.join(tempfile.gettempdir(), "sdk", "windows.h"), 1, "unknown type name", False),
+            (os.path.join(root, "CvUnit.cpp"), 3, "use of undeclared identifier", True, False),
+            (header, 1, "expected ';'", False, False),
+            (utility, 1, "expected expression", False, False),
+            (utility, 2, "expected expression", False, False),
+            (os.path.join(tempfile.gettempdir(), "sdk", "windows.h"), 1, "unknown type name", False, False),
+            (support, 53, "'Windows.h' file not found", False, True),
         ]
         project = types.SimpleNamespace(contains=lambda path: path.startswith(root + os.sep))
         known = {("CvDatabaseUtility.h", "expected expression", "int x = ;")}
         with mock.patch.object(common, "known_errors", lambda: known):
             self.assertEqual(
-                analyze.project_errors(project, [{"errors": errors}]),
-                {(header, 1, "expected ';'"), (utility, 2, "expected expression")},
+                analyze.stopping_errors(project, [{"errors": errors}]),
+                {
+                    (header, 1, "expected ';'"),
+                    (utility, 2, "expected expression"),
+                    (support, 53, "'Windows.h' file not found"),
+                },
             )
+
+    def test_a_header_that_cannot_be_found_is_a_fatal_error(self):
+        source = '#include "Missing.h"\nint f();\nint g = ;\n'
+        tu = analyze.ci.Index.create().parse("f.cpp", args=["-x", "c++"], unsaved_files=[("f.cpp", source)])
+        fatal = [(e[2], e[4]) for e in analyze.parse_errors(tu, "f.cpp", [])]
+        self.assertEqual(fatal, [("'Missing.h' file not found", True)])
 
 
 class CanonicalParametersTest(unittest.TestCase):

@@ -4,6 +4,8 @@ over a fixture.
     python -m unittest discover -s tests/generator
 """
 
+import contextlib
+import io
 import os
 import shutil
 import sys
@@ -140,6 +142,52 @@ class RegistryTest(unittest.TestCase):
         first = function("Pack", "Pack(bool)", cls="CvUnit", params=["bool"])
         second = function("Pack", "Pack(char)", cls="CvUnit", params=["char"])
         self.assertEqual([registry.claim(fn)[2] for fn in (first, second)], ["CvUnit_Pack", "CvUnit_Pack_with_char"])
+
+    def run_claiming(self, header_problem=None, build_files_problem=None):
+        """A generator run that claims one new function; its plugin-header check fails with header_problem, and writing
+        the engine's build files with build_files_problem."""
+
+        def plan(functions, project, files, edits, registry):
+            registry.claim(function("B"))
+            return [], {}, {}
+
+        def fail_with(problem, result=None):
+            def step(*args):
+                if problem:
+                    raise problem
+                return result
+
+            return step
+
+        project = types.SimpleNamespace(registry=self.path, root=self.folder, vcproj="Engine.vcproj")
+        with contextlib.ExitStack() as stack:
+            for name, replacement in (
+                ("load_analysis", lambda project: ([], [])),
+                ("plan_hooks", plan),
+                ("mark_exports", lambda functions, files, edits: (0, 0)),
+                ("write_mirror", lambda *args: None),
+                ("hand_hook_sites", lambda *args: []),
+                ("write_table", lambda *args: None),
+                ("write_plugin_header", fail_with(header_problem, [])),
+                ("write_engine_build_files", fail_with(build_files_problem)),
+            ):
+                stack.enter_context(mock.patch.object(generate, name, replacement))
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            generate.run(project)
+
+    def test_a_run_saves_its_new_ids_only_once_its_checks_have_passed(self):
+        self.write("0\tA\tA()\n")
+        for failing in (
+            {"header_problem": RuntimeError("generator: could not read the game's headers as a plugin does")},
+            {"build_files_problem": SystemExit("generator: the project file no longer contains its source list")},
+        ):
+            with self.subTest(failing=failing), self.assertRaises(BaseException):
+                self.run_claiming(**failing)
+            with open(self.path, encoding="utf-8") as f:
+                self.assertEqual(f.read(), "0\tA\tA()\n")
+        self.run_claiming()
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "0\tA\tA()\n1\tB\tB()\tvoid\n")
 
     def test_an_id_is_never_reused(self):
         self.write("0\tA\tA()\n5\tB\tB()\n")
