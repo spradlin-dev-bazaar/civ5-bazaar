@@ -22,6 +22,7 @@ check runs in the game.
 
 import argparse
 import collections
+import contextlib
 import difflib
 import glob
 import json
@@ -64,6 +65,22 @@ BRANCH_PREFIX = "release-"
 PART_WAY = (
     "prepare stopped part way. Before running it again, put back the files it changed with git restore :/ and delete"
     " any it added, which git status lists"
+)
+PREPARE_CHECKS = (
+    ("the tests", "tests\\runtime\\run.cmd", ["cmd", "/c", os.path.join(common.REPO, "tests", "runtime", "run.cmd")]),
+    (
+        "the docs checks",
+        "tests\\docs\\check_docs.py",
+        [sys.executable, os.path.join(common.REPO, "tests", "docs", "check_docs.py")],
+    ),
+    ("the lint", "ruff check .", [sys.executable, "-m", "ruff", "check", "."]),
+    ("the format check", "ruff format --check .", [sys.executable, "-m", "ruff", "format", "--check", "."]),
+)
+CHECKS_STOPPED = (
+    "the numbers are raised to %s on branch %s. Fix what failed on that branch and run all the checks again: "
+    + ", ".join("%s (%s)" % (what, shown) for what, shown, _ in PREPARE_CHECKS)
+    + ". Then commit and open a pull request to main. If the fix changes Bazaar's own code, start again from main"
+    " instead, since the lists and the docs were made before it"
 )
 
 BOOTSTRAP_PATTERN = "Bazaar-VMC-Bootstrap-*.civ5mod"
@@ -164,7 +181,10 @@ def require_main():
 def require_no_release_branch():
     branches = git("branch", "--list", BRANCH_PREFIX + "*", "--format=%(refname:short)").split()
     if branches:
-        stop("the release branch %s is still here: delete it once its pull request has merged" % branches[0])
+        stop(
+            "the release branch %s is still here: delete it with git branch -D %s once its pull request has merged, or"
+            " now if you are starting that release again" % (branches[0], branches[0])
+        )
 
 
 def require_numbers_agree():
@@ -571,6 +591,17 @@ def require_build_as_prepared(current):
             )
 
 
+@contextlib.contextmanager
+def stopping_says(message):
+    try:
+        yield
+    except SystemExit as e:
+        raise SystemExit("%s\nrelease: %s" % (e, message))
+    except BaseException:
+        say(message)
+        raise
+
+
 def restore_history(tag, path=build_docs.HISTORY):
     """The docs' function history as the last release left it, so that this release's marks are made afresh."""
     if tag is None:
@@ -594,11 +625,7 @@ def prepare(major, same_bazaar=False):
     run("building the host", ["cmd", "/c", BUILD_HOOKED])
     lists = current_lists()
     new = plan(lists, major, same_bazaar)
-    run("the tests", ["cmd", "/c", os.path.join(common.REPO, "tests", "runtime", "run.cmd")])
-    run("the docs checks", [sys.executable, os.path.join(common.REPO, "tests", "docs", "check_docs.py")])
-    run("the lint", [sys.executable, "-m", "ruff", "check", "."])
-    run("the format check", [sys.executable, "-m", "ruff", "format", "--check", "."])
-    try:
+    with stopping_says(PART_WAY):
         version.write(new)
         new_major, new_minor, _ = version.numbers(new.release)
         layouts.set_api_version(new_major, new_minor)
@@ -611,13 +638,12 @@ def prepare(major, same_bazaar=False):
         build_docs.build(common.engine_project(), build_docs.DEFAULT_OUT, release=new.release)
         write_list(HOOKS_LIST, new.release, lists[0])
         write_list(EXPORTS_LIST, new.release, lists[1])
-    except SystemExit as e:
-        raise SystemExit("%s\nrelease: %s" % (e, PART_WAY))
-    except BaseException:
-        say(PART_WAY)
-        raise
-    branch = BRANCH_PREFIX + new.release
-    git("switch", "-c", branch)
+        branch = BRANCH_PREFIX + new.release
+        git("switch", "-c", branch)
+    # A test can depend on the release's own version.
+    with stopping_says(CHECKS_STOPPED % (new.release, branch)):
+        for what, _, cmd in PREPARE_CHECKS:
+            run(what, cmd)
     say("%s is ready on branch %s: commit it and open a pull request to main" % (new.release, branch))
     return 0
 
