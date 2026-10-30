@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 
 from fakes import (
     HERE,
+    FakeClock,
     PLAYER_AUTOSAVES,
     files,
     mods,
@@ -387,6 +388,39 @@ class CopiesTest(PlayerFolderTest):
         os.utime(heartbeat, (1000, 1000))
         self.files.beat()
         self.assertGreater(os.path.getmtime(heartbeat), 1000)
+
+    def test_hand_back_reaches_only_a_run_waiting_for_its_game_and_waits_for_it_to_take_it(self):
+        self.assertFalse(files.hand_back())
+        copies = self.copy_aside()
+        before = sorted(os.listdir(copies.folder))
+        self.assertFalse(files.hand_back())
+        self.assertFalse(self.files.handed_back())
+        self.files.begin_hand_over()
+        clock, taken = FakeClock(), []
+
+        def the_run_takes_it_back(seconds):
+            taken.append(self.files.handed_back())
+            self.files.end_hand_over()
+
+        clock.sleep = the_run_takes_it_back
+        with mock.patch.object(files, "time", clock):
+            self.assertTrue(files.hand_back())
+        self.assertEqual(taken, [True])
+        self.assertFalse(files.hand_back())
+        self.assertEqual(sorted(os.listdir(copies.folder)), before)
+
+    def test_hand_back_to_a_run_killed_during_its_hand_over_says_no_run_took_it(self):
+        self.copy_aside()
+        self.files.begin_hand_over()
+        with mock.patch.object(files, "time", FakeClock()):
+            self.assertFalse(files.hand_back())
+        self.assertFalse(self.files.handed_back())
+
+    def test_a_hand_back_left_from_an_earlier_hand_over_does_not_end_the_next(self):
+        self.copy_aside()
+        open(os.path.join(self.files.running, files.HAND_BACK), "wb").close()
+        self.files.begin_hand_over()
+        self.assertFalse(self.files.handed_back())
 
     def test_a_second_run_cannot_start_until_the_first_ends_and_leaves_no_lock_behind(self):
         with files.one_run_at_a_time():

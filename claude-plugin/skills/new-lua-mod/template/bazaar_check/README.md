@@ -58,6 +58,7 @@ Each step is a table with one action:
 | `mark = "a name"` | Remembers where every log ends, for a later `since`. |
 | `plugin = "MyPlugin.dll"` | A check of the row Bazaar's Plugins screen shows for the DLL: `status = "Loaded"`, or `"Not loaded"`, `"Turned off after a crash"` or `"Skipped"`, word for word, and `problems = "pattern"`. Without either, it checks only that the screen lists the DLL. |
 | `description_of = "mod ID"` | A check of a mod's description in the Mods menu: `version = 1` and `is = "the whole text"`. |
+| `hand_over = "what to do"` | Leaves the game to you and shows the text: try the mod by hand, or with a program such as an AI connected over MCP. The checker waits as long as you take, and FireTuner can connect meanwhile. Hand the game back with Enter in the checker's window, or by running the `--hand-back` command it shows from any window, in the folder that holds `bazaar_check` (in PowerShell, put `&` and a space before it); the steps after it then run. Closing the game instead ends the run, and says so if steps were left. Saves you make yourself stay. Ctrl+C works as in `play.cmd`. |
 
 A setting or a step the checker does not know, or a value it cannot use, stops it before the game starts.
 
