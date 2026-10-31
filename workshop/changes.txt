@@ -1,3 +1,20 @@
+[b]0.5.3[/b]
+Fixes one problem for players: Continue on the Plugins screen passed over a DLC pack's own Advanced Setup. Plugins built for 0.5.0 or later work with it unchanged.
+
+For players:
+[list]
+[*]When a DLC pack brings its own Advanced Setup screen, as some mods installed in the game's DLC folder do, Continue on the Plugins screen now opens that screen, as the game does without Bazaar. Before, it opened the game's own. An active mod's Advanced Setup still comes first.
+[*]When no pack or mod brings its own, Continue now opens the game's Advanced Setup in the layout the game itself uses with Brave New World, not the Gods and Kings one.
+[/list]
+For plugin authors:
+[list]
+[*]Nothing plugins use was added, removed or changed, so plugins built for 0.5.0 or later keep working without a rebuild.
+[*]The in-game checker in the SDK, on the release's GitHub page, has a new step, hand_over: a checks file can leave the game to you, or to another program, part way through a run, then take it back and play its last steps. Lua mod authors get the same in the Claude Code plugin's Lua mod template.
+[*]The checker now finishes its run, closing the game and putting everything back, when the program reading its output stops part way.
+[*]For those who build Bazaar itself from source: the hook generator can run outside Windows, and a generator run that fails no longer keeps the hook numbers it gave out.
+[/list]
+This is plugin API version 0.5.
+
 [b]0.5.1[/b]
 Fixes one problem for players: another mod could hide the Plugins screen. Plugins built for 0.5.0 work with it unchanged.
 
