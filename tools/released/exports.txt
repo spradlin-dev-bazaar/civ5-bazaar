@@ -1,4 +1,4 @@
-release 0.5.2
+release 0.5.3
 ??0CustomMods@@QAE@XZ
 ??0CustomOption@CvPreGame@@QAE@ABV01@@Z
 ??0CustomOption@CvPreGame@@QAE@PBDH@Z
