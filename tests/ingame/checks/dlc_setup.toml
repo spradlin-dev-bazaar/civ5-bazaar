@@ -1,0 +1,42 @@
+# A DLC pack whose UI skin has its own Advanced Setup script, which run.py puts in the game's DLC folder for this run
+# only. Bazaar's Plugins screen still comes first, and its Continue opens the pack's script with the game's layout.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+]
+
+[[steps]]
+run = "OnAdvanced()"
+state = "GameSetupScreen"
+
+[[steps]]
+lua = "Controls.PluginStack ~= nil"
+state = "AdvancedSetup"
+has = '^true$'
+within = 30
+what = "with the pack installed, the game still shows Bazaar's Plugins screen"
+
+[[steps]]
+log = "Lua.log"
+lacks = "AdvancedSetup: Bazaar Test Skin's Advanced Setup script ran"
+what = "Bazaar's script, not the pack's, runs the Plugins screen"
+
+[[steps]]
+lua = 'UI.GetMapPreview("bazaar:nextsetup")'
+state = "MainMenu"
+has = 'BazaarNextSetup$'
+what = "Continue copies the screen it opens"
+
+[[steps]]
+log = "Bazaar.log"
+has = 'Continue opened Advanced Setup from .*\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup\.xml and .*\\Bazaar Test Skin\\Lua\\UI\\Deep\\AdvancedSetup\.lua\.'
+what = "Continue takes the pack's script and the game's own layout"
+
+[[steps]]
+run = 'ContextPtr:LoadNewContext(UI.GetMapPreview("bazaar:nextsetup"))'
+state = "MainMenu"
+
+[[steps]]
+log = "Lua.log"
+has = "Bazaar Test Skin's Advanced Setup script ran"
+what = "the game runs the pack's script from Continue's copy"

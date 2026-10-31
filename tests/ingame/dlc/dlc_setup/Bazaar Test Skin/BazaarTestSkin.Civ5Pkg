@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Civ5Package>
+  <GUID>{B0A0A001-0000-4000-8000-0000000000B1}</GUID>
+  <SteamApp>235580</SteamApp>
+  <Version>1</Version>
+  <Priority>300</Priority>
+  <Key>00000000000000000000000000000000</Key>
+  <Name>
+    <Value language="en_US">Bazaar Test Skin</Value>
+  </Name>
+  <Description>
+    <Value language="en_US">A test pack for Bazaar's in-game checks: its UI skin has its own Advanced Setup script.</Value>
+  </Description>
+  <Gameplay>
+  </Gameplay>
+  <UISkin name="Expansion2Primary" set="Expansion2" platform="Common">
+    <GameplaySkin>
+      <Directory>Lua</Directory>
+    </GameplaySkin>
+  </UISkin>
+</Civ5Package>

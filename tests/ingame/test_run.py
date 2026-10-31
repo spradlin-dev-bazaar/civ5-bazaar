@@ -5,6 +5,8 @@ import contextlib
 import io
 import os
 import re
+import shutil
+import tempfile
 import unittest
 from unittest import mock
 
@@ -51,15 +53,113 @@ class ChecksFilesTest(unittest.TestCase):
                 self.assertFalse(step.get("state", "").endswith("Popup"), name)
 
 
+class DlcFolderTest(unittest.TestCase):
+    def setUp(self):
+        self.steam = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.steam)
+        self.library = os.path.join(self.steam, "Other Library")
+        for folder in (self.steam, self.library):
+            os.makedirs(os.path.join(folder, "steamapps"))
+
+    def write(self, path, text):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def list_libraries(self, *libraries):
+        rows = "".join(
+            '\t"%d"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n' % (i, path.replace("\\", "\\\\"))
+            for i, path in enumerate(libraries)
+        )
+        self.write(os.path.join(self.steam, "steamapps", "libraryfolders.vdf"), '"libraryfolders"\n{\n%s}\n' % rows)
+
+    def test_the_game_is_found_in_the_steam_library_that_has_it(self):
+        self.list_libraries(self.steam, self.library)
+        manifest = os.path.join(self.library, "steamapps", "appmanifest_8930.acf")
+        self.write(manifest, '"AppState"\n{\n\t"appid"\t\t"8930"\n\t"installdir"\t\t"Sid Meier\'s Civilization V"\n}\n')
+        found = run.dlc_folder(self.steam)
+        self.assertEqual(
+            found, os.path.join(self.library, "steamapps", "common", "Sid Meier's Civilization V", "Assets", "DLC")
+        )
+
+    def test_a_steam_without_the_game_says_so(self):
+        self.list_libraries(self.steam)
+        with self.assertRaisesRegex(run.CheckError, "Steam lists no Civilization V install"):
+            run.dlc_folder(self.steam)
+        with self.assertRaisesRegex(run.CheckError, "could not find Civilization V's folder through Steam"):
+            run.dlc_folder(os.path.join(self.steam, "missing"))
+
+
+def put_in_game(dlc, *names):
+    """A folder named like the test pack in the game's DLC folder, holding these files."""
+    folder = os.path.join(dlc, "Bazaar Test Skin")
+    os.makedirs(folder)
+    for name in names:
+        with open(os.path.join(folder, name), "w") as f:
+            f.write("left")
+    return folder
+
+
+class PacksTest(unittest.TestCase):
+    def setUp(self):
+        self.dlc = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dlc)
+        patcher = mock.patch.object(run, "dlc_folder", return_value=self.dlc)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_checks_file_s_packs_are_in_the_game_for_its_run_only_even_when_it_stops(self):
+        pack = put_in_game(self.dlc, "BazaarTestSkin.Civ5Pkg", "left by a stopped run.txt")
+        with self.assertRaises(RuntimeError):
+            with run.packs_in_game("dlc_setup"):
+                self.assertEqual(os.listdir(self.dlc), ["Bazaar Test Skin"])
+                self.assertTrue(os.path.isfile(os.path.join(pack, "Lua", "UI", "Deep", "AdvancedSetup.lua")))
+                self.assertFalse(os.path.exists(os.path.join(pack, "left by a stopped run.txt")))
+                raise RuntimeError("the run stopped")
+        self.assertEqual(os.listdir(self.dlc), [])
+
+    def test_a_folder_of_that_name_without_the_test_pack_s_package_file_is_not_touched(self):
+        folder = put_in_game(self.dlc, "SomePack.Civ5Pkg")
+        with self.assertRaisesRegex(
+            run.CheckError, "could not put the test pack Bazaar Test Skin in the game's DLC folder"
+        ):
+            with run.packs_in_game("dlc_setup"):
+                self.fail("the run started")
+        self.assertEqual(os.listdir(folder), ["SomePack.Civ5Pkg"])
+
+    def test_a_pack_that_cannot_be_taken_out_fails_the_run(self):
+        with mock.patch.object(run.files, "remove_tree"):
+            with self.assertRaisesRegex(
+                run.CheckError, "could not take .*Bazaar Test Skin out of the game's DLC folder"
+            ):
+                with run.packs_in_game("dlc_setup"):
+                    pass
+
+    def test_a_checks_file_without_packs_leaves_the_game_alone(self):
+        with mock.patch.object(run, "dlc_folder", side_effect=AssertionError("looked for the game")):
+            with run.packs_in_game("plugins"):
+                pass
+        self.assertEqual(os.listdir(self.dlc), [])
+
+
 class MainTest(unittest.TestCase):
     stopped = None
+
+    def setUp(self):
+        self.dlc = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dlc)
+        self.find_game = mock.Mock(return_value=self.dlc)
+
+    def play(self, *args):
+        self.in_game_while_played = os.listdir(self.dlc)
+        return self.stopped
 
     def main(self, argv, outcomes=None, built=0):
         printed = io.StringIO()
         with (
+            mock.patch.object(run, "dlc_folder", self.find_game),
             mock.patch.object(run.package, "main", return_value=built) as build,
             mock.patch.object(run.runner, "run", side_effect=outcomes or []) as play,
-            mock.patch.object(run.runner, "play_by_hand", return_value=self.stopped) as self.play_by_hand,
+            mock.patch.object(run.runner, "play_by_hand", side_effect=self.play) as self.play_by_hand,
             mock.patch.object(run.game, "Game"),
             contextlib.redirect_stdout(printed),
         ):
@@ -101,6 +201,26 @@ class MainTest(unittest.TestCase):
                 self.assertEqual(run.main(["use_both"]), 1)
         build.assert_not_called()
         self.assertIn("Civilization V is already running", printed.getvalue())
+
+    def test_a_test_pack_a_run_stopped_by_force_left_in_the_game_is_taken_out_first(self):
+        put_in_game(self.dlc, "BazaarTestSkin.Civ5Pkg")
+        os.makedirs(os.path.join(self.dlc, "Expansion2"))
+        self.main(["use_both"], [None])
+        self.assertEqual(os.listdir(self.dlc), ["Expansion2"])
+
+    def test_a_file_whose_packs_cannot_go_in_the_game_fails_and_the_rest_still_play(self):
+        self.find_game.side_effect = run.CheckError("Steam lists no Civilization V install")
+        code, printed, _, played = self.main(["dlc_setup", "use_both"], [None])
+        self.assertEqual((code, played), (1, 1))
+        self.assertIn("dlc_setup Steam lists no Civilization V install", printed)
+
+    def test_play_has_the_file_s_packs_in_the_game_while_it_is_played(self):
+        code, _, _, _ = self.main(["--play", "dlc_setup"])
+        self.assertEqual((code, self.in_game_while_played, os.listdir(self.dlc)), (0, ["Bazaar Test Skin"], []))
+        self.find_game.side_effect = run.CheckError("Steam lists no Civilization V install")
+        code, printed, _, _ = self.main(["--play", "dlc_setup"])
+        self.assertEqual(code, 1)
+        self.assertIn("Playing stopped: Steam lists no Civilization V install", printed)
 
     def test_a_failed_build_plays_nothing(self):
         code, _, _, played = self.main(["use_both"], built=1)

@@ -37,6 +37,17 @@ problems = "held back.+Use both anyway"
 what = "Toy Hand Replace, below Toy Hand, is held back"
 
 [[steps]]
+lua = 'UI.GetMapPreview("bazaar:nextsetup")'
+state = "MainMenu"
+has = 'BazaarNextSetup$'
+what = "Continue copies the screen it opens"
+
+[[steps]]
+log = "Bazaar.log"
+has = 'Continue opened Advanced Setup from .*\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup\.xml and .*\\Assets\\UI\\FrontEnd\\GameSetup\\AdvancedSetup\.lua\.'
+what = "with no other Advanced Setup, Continue opens the game's own, in its base layout"
+
+[[steps]]
 start_game = "duel"
 
 [[steps]]
