@@ -23,3 +23,9 @@ It builds the test plugins below against the last `build-hooked.cmd` build with 
 | Toy Crash | Crashes as the human player's first turn starts, or in a Lua function. | `crash_turn`, `crash_lua` |
 | Toy Saves | Keeps data in saved games, publishes values that carry over when the game replaces a unit or city, and a function Toy Gold calls. | `saves` |
 
+## The test DLC pack
+
+`dlc\dlc_setup\Bazaar Test Skin` is a DLC pack whose UI skin has its own Advanced Setup script, as some mods install themselves. `run.py` copies it into the game's own `Assets\DLC` folder, which it finds through Steam, for the `dlc_setup` run only, and takes it out again afterwards. If a run is stopped by force, the pack stays there, and Advanced Setup does nothing in any game until `run.py` next starts and takes it out, or until you delete `Bazaar Test Skin` from that folder by hand.
+
+`dlc_setup` checks that the game still shows Bazaar's Plugins screen with the pack installed, and that Continue then opens the pack's script with the game's own layout. `plugins` checks that with no such pack, Continue opens the game's own Advanced Setup, in its base layout, so it fails on a computer that has a DLC pack with its own Advanced Setup installed.
+
