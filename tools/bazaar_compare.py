@@ -85,6 +85,14 @@ def folder_differences(then, now):
     return sorted(set(files.different_files(then, now)) | set(files.different_files(now, then)))
 
 
+def package_differences(then_package, now_package):
+    """The files that differ between two packages. Raises files.CheckError for a package that cannot be read."""
+    with tempfile.TemporaryDirectory() as folder:
+        then = files.unpack(then_package, os.path.join(folder, "then"))
+        now = files.unpack(now_package, os.path.join(folder, "now"))
+        return folder_differences(then, now)
+
+
 def package_changes(host_package, bootstrap_package):
     """What today's files would package differently from these Bazaar and VMC Bootstrap packages, given their own DLL,
     mod version and description. Raises files.CheckError for a package that cannot be read."""
