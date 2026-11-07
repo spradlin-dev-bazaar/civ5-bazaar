@@ -1,5 +1,6 @@
 """Build settings shared by the generator and the scripts that build against its output."""
 
+import collections
 import os
 import re
 import subprocess
@@ -14,8 +15,8 @@ HOST_DIR = os.path.join(REPO, "host")
 HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
 HOST_DLL = os.path.join(HOST_OUTPUT, "CvGameCore_Expansion2.dll")
 LICENSE = os.path.join(REPO, "LICENSE")
-# From this release on, what plugins use is frozen: removing or changing any of it needs a new major version. Bazaar's
-# loader has its own copy in host/CivHostRuntime.h, which a test keeps equal.
+# From this release on, what plugins use is frozen: removing or changing any of it needs the next version of Bazaar, on
+# its own branch. Bazaar's loader has its own copy in host/CivHostRuntime.h, which a test keeps equal.
 FREEZE = (0, 5)
 FREEZE_SHOWN = "%d.%d" % FREEZE
 NOTICE = os.path.join(REPO, "NOTICE")
@@ -70,8 +71,16 @@ CLANG_DEFINES = ENGINE_DEFINES + ["CVGAMECOREDLL_EXPORTS"] + LAYOUT_DEFINES + CL
 
 PLUGIN_DEFINES = ["CIV_HOST_API=__declspec(dllimport)"] + LAYOUT_DEFINES + ENGINE_DEFINES
 
-# The host's mod, which the plugin and Lua mod templates depend on.
-HOST_MOD_ID = "b829cadb-b570-46c5-a0ba-419434eb6398"
+BazaarVersion = collections.namedtuple("BazaarVersion", "mod_id on_workshop workshop_item")
+# The versions of Bazaar from 0.5 up to this branch's, oldest first: the mod ID of Bazaar's mod in that version,
+# whether the version goes on the Steam Workshop, and Bazaar's Workshop item for it, None until its mod is first
+# published there.
+# The SDK's build script lists the same mod IDs, which a test keeps equal.
+BAZAAR_VERSIONS = {
+    "0.5": BazaarVersion("b829cadb-b570-46c5-a0ba-419434eb6398", True, 3825428828),
+}
+# The host's mod in this branch's version, which the plugin and Lua mod templates depend on.
+HOST_MOD_ID = list(BAZAAR_VERSIONS.values())[-1].mod_id
 HOST_MOD_NAME = "Bazaar Multi-DLL Mod Loader"
 
 

@@ -294,8 +294,8 @@ def last_release_tag():
 
 
 def frozen_advice(tag):
-    """The way out when a changed class is refused. VERSION must keep agreeing with CivPluginApi.h, so the changed
-    number goes back once the record is saved, and release.py prepare --major raises it for the release."""
+    """The way out when a changed class is refused. VERSION must keep agreeing with CivPluginApi.h, so a changed number
+    goes back once the record is saved."""
     released = released_version(tag)
     if released is None:
         return ["No release tag is here, so the last release is not known: run git fetch --tags, then build again."]
@@ -309,12 +309,12 @@ def frozen_advice(tag):
             "Rebuild every plugin.",
         ]
     return [
-        "From %s on, a class or enum value can change only in a new major version, which release.py prepare --major"
+        "From Bazaar %s on, a release can't change the layout of a class or an enum value that plugins see, because"
         % common.FREEZE_SHOWN,
-        "starts. To accept the change for it, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to %d, one more than the"
-        % (released[0] + 1),
-        "last release's, and run build-hooked.cmd accept-layouts. Then " + SET_BACK,
-        "Rebuild every plugin.",
+        "plugins that were built against Bazaar %s would break. Make this change in the next version of Bazaar instead,"
+        % common.FREEZE_SHOWN,
+        "on that version's own branch, whose first release is a breaking release (a release that is allowed to change",
+        "the layout of these classes and enum values).",
     ]
 
 
@@ -376,10 +376,11 @@ def check(project):
         tag = last_release_tag()
         if not any(now for _, _, now in lost):
             print(
-                "Once no plugin uses what is gone, run build-hooked.cmd accept-layouts. From %s on, the release"
+                "Once no plugin uses what is gone, run build-hooked.cmd accept-layouts. From Bazaar %s on, a release"
                 % common.FREEZE_SHOWN
             )
-            print("without it must be a new major version.")
+            print("can't remove a class or an enum value that plugins see, and the removal belongs in the next version")
+            print("of Bazaar, on that version's own branch, whose first release is a breaking release.")
         elif accept_allowed(recorded_version, version, tag):
             print("To change them on purpose, run build-hooked.cmd accept-layouts, then rebuild every plugin.")
         else:

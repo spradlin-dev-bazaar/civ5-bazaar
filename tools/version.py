@@ -99,6 +99,17 @@ def disagreements(version, api, plugin):
     return found
 
 
+def bazaar_version(release):
+    """The version of Bazaar that a release belongs to: its first two numbers, such as 0.5."""
+    return "%d.%d" % numbers(release)[:2]
+
+
+def bazaar_made_in(version, listed):
+    """The release that made the Bazaar that version has: the listed release with version's mod version, or version
+    itself. listed may already hold rows for releases after version."""
+    return next((row.release for row in listed if row.mod == version.mod), version.release)
+
+
 def kept_bazaar(version, listed):
     """The earlier release whose Bazaar version keeps, or None. A release that keeps one keeps its mod version and adds
     no row to VERSIONS.md, so the newest row names an earlier release with the same mod version. listed is what

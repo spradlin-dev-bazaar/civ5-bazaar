@@ -383,11 +383,13 @@ class RunTest(unittest.TestCase):
         self.assertIn("run build-hooked.cmd accept-layouts, then rebuild every plugin", out)
         self.assertEqual(self.saved()[1], layouts.parse_report(report(UNIT, CITY)))
 
-    def test_a_changed_class_once_frozen_says_to_raise_the_number_past_the_last_release_and_put_it_back(self):
+    def test_a_changed_class_once_frozen_says_to_make_the_change_in_the_next_version_of_bazaar(self):
         self.freeze(UNIT)
         out = self.check(report(GROWN))[1]
-        self.assertIn("CIV_HOST_API_MAJOR in host\\CivPluginApi.h to 2, one more than the", out)
-        self.assertIn("Then set it back to the major number in VERSION", out)
+        self.assertIn(
+            "Make this change in the next version of Bazaar instead, on that version's own branch",
+            " ".join(out.split("\n")),
+        )
 
     def test_two_changes_for_the_next_major_version_are_both_accepted_with_the_number_put_back_between(self):
         self.freeze(UNIT, CITY)
@@ -420,12 +422,13 @@ class RunTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("changed: field types and virtual functions of CvUnit", out)
 
-    def test_a_gone_class_fails_and_says_the_release_without_it_is_a_new_major_version(self):
+    def test_a_gone_class_fails_and_says_the_removal_belongs_in_the_next_version_of_bazaar(self):
         self.freeze(UNIT, CITY)
         code, out = self.check(report(UNIT))
         self.assertEqual(code, 1)
         self.assertIn("gone: class CvCity", out)
-        self.assertIn("From 0.5 on, the release\nwithout it must be a new major version", out)
+        joined = " ".join(out.split("\n"))
+        self.assertIn("From Bazaar 0.5 on, a release can't remove a class or an enum value that plugins see", joined)
 
     def test_a_layout_the_host_sees_differently_fails_and_names_the_defines_that_differ(self):
         self.host_defines = self.host_defines + ["CVGAMECOREDLL_EXPORTS"]
@@ -470,18 +473,20 @@ class RunTest(unittest.TestCase):
         code, out = self.accept(report(GROWN))
         self.assertEqual(code, 1)
         self.assertIn("changed: class CvUnit", out)
-        self.assertIn("set CIV_HOST_API_MAJOR", out)
+        self.assertIn("Make this change in the next version of Bazaar instead", out)
         self.assertEqual(self.saved(), ((0, 3), layouts.parse_report(report(UNIT))))
 
     def test_without_a_release_tag_the_advice_says_to_fetch_the_tags(self):
         self.assertIn("git fetch --tags", "\n".join(layouts.frozen_advice(None)))
 
-    def test_until_the_freeze_is_tagged_a_change_is_made_under_0(self):
+    def test_until_the_freeze_is_tagged_a_change_is_made_under_0_and_after_it_on_the_next_version_s_branch(self):
         self.assertIn("CivPluginApi.h to 0 and run", "\n".join(layouts.frozen_advice("v0.4.1")))
-        for tag, major in (("v0.5.0", 1), ("v0.9.0", 1), ("v1.0.0", 2), ("v1-beta", 2)):
-            advice = "\n".join(layouts.frozen_advice(tag))
+        for tag in ("v0.5.0", "v0.9.0", "v1.0.0", "v1-beta"):
+            advice = " ".join(layouts.frozen_advice(tag))
             self.assertNotIn("to 0 and run", advice, tag)
-            self.assertIn("CivPluginApi.h to %d," % major, advice, tag)
+            self.assertIn(
+                "Make this change in the next version of Bazaar instead, on that version's own branch", advice, tag
+            )
 
     def test_accept_of_a_gone_class_is_allowed_once_frozen_and_keeps_the_version(self):
         self.freeze(UNIT, CITY)

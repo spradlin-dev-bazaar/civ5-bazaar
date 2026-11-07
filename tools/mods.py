@@ -31,6 +31,9 @@ STOPPED_POPUP = (
 )
 LICENSE_FILE = ("LICENSE.txt", common.LICENSE)
 NOTICE_FILE = ("NOTICE.txt", common.NOTICE)
+# Every version of Bazaar shares the one VMC Bootstrap, which no release may change, so it keeps its own copies.
+BOOTSTRAP_DIR = os.path.join(common.REPO, "mod", "vmc-bootstrap")
+BOOTSTRAP_LICENSE_FILES = tuple((name, os.path.join(BOOTSTRAP_DIR, name)) for name, _ in (LICENSE_FILE, NOTICE_FILE))
 
 HOST_ID = common.HOST_MOD_ID
 HOST_NAME = common.HOST_MOD_NAME
@@ -194,10 +197,10 @@ def copy_host_screens(folder):
     return files
 
 
-def copy_license_files(folder):
-    for name, source in (LICENSE_FILE, NOTICE_FILE):
+def copy_license_files(folder, sources=(LICENSE_FILE, NOTICE_FILE)):
+    for name, source in sources:
         shutil.copyfile(source, os.path.join(folder, name))
-    return [(name, 0) for name, _ in (LICENSE_FILE, NOTICE_FILE)]
+    return [(name, 0) for name, _ in sources]
 
 
 def write_vmc_data_mod(mods_folder):
@@ -209,7 +212,7 @@ def write_vmc_data_mod(mods_folder):
     for path, _ in vmc.files:
         os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
         shutil.copyfile(os.path.join(VMC_DIR, path), os.path.join(folder, path))
-    license_files = copy_license_files(folder)
+    license_files = copy_license_files(folder, BOOTSTRAP_LICENSE_FILES)
     teaser = "whoward69's Various Mod Components database files, for the %s, so mods made for VMC load after them." % (
         HOST_NAME
     )
