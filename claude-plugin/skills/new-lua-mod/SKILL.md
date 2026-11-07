@@ -41,7 +41,7 @@ powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CLAUDE_SK
 
 - **`-DisplayName`** is what players see in the Mods menu; it also names the `Build` folder and the package. Ask the user for it if they have not given one. The file name comes from it, so `Turn Logger` becomes `TurnLogger`; pass `-FileName` only when the user wants a different one.
 - **`-Options`** lists the VMC options to switch on, comma-separated and spelled exactly as the reference names them, or `none` when the mod uses only base-game events. The script requires it. It refuses a name VMC does not have, because a misspelled option fails silently and the event just never fires. It also refuses an option that holds a number; set one of those with its own `UPDATE` line, as the reference shows.
-- **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `release.cmd` refuses to make a release until it is changed.
+- **`-Author`** names the mod's author. Ask the user for it if they have not given one; left out, the template's placeholder `Your name` stays in the `.civ5proj`, and `build.cmd` warns about it on every build until it is changed.
 - **`-Destination`** is the folder to make the mod folder in; it defaults to the current folder. Keep the path short: ModBuddy's build fails once a path inside the mod folder passes 260 characters.
 
 The script copies the template, renames it, gives the mod a new ID in the `<Guid>` (`<ProjectGuid>` stays), sets the teaser, description and authors (the description also goes into `workshop-description.txt`), and writes the SQL. Do not redo or "fix" any of that by hand. If the script fails, read its message and fix the cause. If the mod turns out to need another option later, add an `UPDATE` line of the same form to the `.sql`, with the option's name exactly as the reference gives it.
@@ -62,15 +62,21 @@ The template's project file makes the mod depend on Bazaar, which also makes the
 ## 4. Build and report
 
 - Run `build.cmd` by its full path. It needs the Civilization V SDK's ModBuddy build steps, not Visual C++. From PowerShell: `& '<full path of the mod folder>\build.cmd'`. From Git Bash: `cmd //c '<full path of the mod folder>\build.cmd'`; write `//c`, because Git Bash turns `/c` into a drive path, and give the full path, because `cmd` does not find `build.cmd` by its bare name there.
-- If it stops early, it says why:
+- If `build.cmd` fails, look up the message in this table:
 
   | Message | What it means |
   |---|---|
-  | `No mod name was found in mod\<FileName>.civ5proj.` | The `.civ5proj` has no `<Name>` line. The build names the mod folder after it. |
-  | Civilization V was not found in the registry. | The script looked up where Steam installed Civilization V and found nothing. |
-  | Your Documents folder was not found. | Windows did not report the Documents folder, so the build cannot find `My Games\Sid Meier's Civilization 5`. |
-  | error MSB4019: The imported project "…\Firaxis\ModBuddy\Civ5Mod.targets" was not found. | ModBuddy's build steps are not installed yet. Start ModBuddy once from the Civilization V SDK, then build again. |
+  | `build: Windows' tar.exe, which checks the package, is not at ….` | The user's version of Windows is older than Windows 10 version 1803, which was the first version to include `tar.exe`. `build.cmd` uses `tar.exe` to check the package. |
+  | `build: Expected exactly one .civ5proj file in the mod folder, but found 2.` | The `mod` folder must hold exactly one `.civ5proj` file. |
+  | `build: mod\<FileName>.civ5proj is not valid XML, so build.cmd cannot read the file's settings. …` | The XML in the `.civ5proj` file has a mistake. The rest of the message gives the line and position of the mistake. |
+  | `build: No mod name was found in mod\<FileName>.civ5proj.` | The `<Name>` line in the `.civ5proj` file is missing or empty. `build.cmd` needs the mod's name to name the built mod's folder in `Build\`. |
+  | `build: mod\<FileName>.civ5proj has no <ModVersion> line with a whole number above 0.` | The mod's version, on the `<ModVersion>` line in the `.civ5proj` file, must be a whole number above 0, such as 1 or 2. |
+  | Civilization V was not found in the registry. | `build.cmd` looks for Civilization V's install folder in the Windows registry, in the entry that Steam writes when it installs the game, and that entry is missing. |
+  | Your Documents folder was not found. | Windows did not return the location of the user's Documents folder, so `build.cmd` cannot find the `My Games\Sid Meier's Civilization 5` folder inside the Documents folder. |
+  | error MSB4019: The imported project "…\Firaxis\ModBuddy\Civ5Mod.targets" was not found. | The file `Civ5Mod.targets`, which holds ModBuddy's build steps, is not installed yet. ModBuddy copies `Civ5Mod.targets` into `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy` the first time it starts. The user must start ModBuddy once from the Civilization V SDK, then build again. |
   | The "GenerateModInfo" task failed unexpectedly, with System.IO.PathTooLongException. | The mod folder's path is too long. Move the mod folder to a folder with a shorter path and build again. |
+  | `build: The build made N packages ending in '(v N).civ5mod' in Packages, not one.` | After building, `build.cmd` expects exactly one package for the mod's version in `Packages\`, but found no package or more than one. Build again. |
+  | `build: Packages\<Display Name> (v N).civ5mod has these problems:` | The package has mistakes, such as a change to the game's database in a mod that is not set to affect saved games. Each line after the message names one mistake. `build.cmd` deletes the package, so that nobody can upload a broken package by mistake. |
 
 - Report the files it made (`Build\<Display Name>\`, holding the `.modinfo`, `.lua` and `.sql`, and `Packages\<Display Name> (v N).civ5mod`). Then tell the user how to try it in the game: run `play.cmd` in the mod's folder. It builds the mod, starts Civilization V with it and the mods it needs switched on, and puts their files back when they close the game; saves they make themselves stay. It needs Python 3.11 or newer, DirectX 11 chosen in Steam, and `EnableTuner = 1` and `LoggingEnabled = 1` in `config.ini`, in `Documents\My Games\Sid Meier's Civilization 5`. Without Python, they can copy `Build\<Display Name>`, the built mod (not the folder the script made), into MODS and switch on Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and the mod. What the mod prints goes to `Logs\Lua.log`, which the game writes only with `LoggingEnabled = 1`.
 - Do not copy anything into MODS or start the game unless the user asks: installing mods is theirs to do.
@@ -78,7 +84,7 @@ The template's project file makes the mod depend on Bazaar, which also makes the
 
 ## 5. Releases
 
-When the user wants to publish, set the release in `VERSION`, add its notes to the top of `CHANGES.txt` in BBCode, and run `release.cmd` by its full path, as with `build.cmd`. Its `release` line is a whole number, which is also the mod's version, or a semantic version such as `1.2.0`, for which the script keeps a `mod` line itself. The `bazaar` line is the oldest Bazaar release the mod needs; the template's line already names the oldest release with all of VMC's events, so raise it only if the mod uses something newer, and change the "Requires Bazaar … or newer." sentence in `workshop-description.txt` with it. The script sets the version, builds, checks the package and keeps it in `Releases\<release>\`. If it refuses, read its message and fix the cause. Never delete or rename anything in `Releases\` to get past a check: it is the record of what was released. Uploading to the Steam Workshop is the user's step, in ModBuddy: select the package in `Releases\<release>\`, paste `workshop-description.txt` as the description and the `CHANGES.txt` section as the change note.
+When the user wants to publish, raise the mod version in the `.civ5proj`, add the release's notes to the top of `CHANGES.txt` in BBCode, and run `build.cmd` by its full path, as with the first build. If it stops, read its message and fix the cause. Keep the sentence "Runs on Bazaar 0.5.x." in `workshop-description.txt`: it tells players which Bazaar version the mod needs. Uploading to the Steam Workshop is the user's step, in ModBuddy: select the package in `Packages\`, paste `workshop-description.txt` as the description and the `CHANGES.txt` section as the change note.
 
 ## Mods made for VMC itself
 

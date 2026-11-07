@@ -26,7 +26,7 @@ Close Civilization V before each run, and FireTuner too: the tuner port takes on
 7. It closes the game and puts back everything it copied, even when a check failed or the game crashed. The mods it added to MODS go, the folders it replaced come back, and the saves it made go.
 8. It checks that no plugin stopped working, even as the game closed, and that `Lua.log` has no Lua errors.
 
-It does not put back the game's logs, which the game starts afresh each time, or what mods keep in `ModUserData` apart from Bazaar's plugin order.
+It does not put back the game's logs, which the game empties each time it starts, or what mods store in `ModUserData` apart from Bazaar's plugin order.
 
 Unless `checks.toml` sets `seed = 0`, every run starts the game with the same seed, and every `start_game` step sets up the same game: America against Rome, Prince difficulty, standard speed, ancient era, on a duel-sized Continents map. Other game options come from the game's own setup screen, as you last left them. So until your mod, Bazaar or those options change, every run of a checks file on your computer plays the same game, and the AI makes the same moves on the same turns.
 

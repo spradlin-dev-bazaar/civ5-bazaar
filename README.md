@@ -8,7 +8,7 @@ Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mo
 
 ## Status
 
-Bazaar 0.5.0 is the first public release. Plugins made for it will keep working with every later 0.x release, because until 1.0, new releases only add things for plugins to use and never change or remove what is already there. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). What's planned next is in [ROADMAP.md](ROADMAP.md).
+Bazaar 0.5.0 is the first public release. Releases that only fix things come out as 0.5.x on the Steam Workshop, and plugins made for 0.5 run on all of the 0.5 releases. 0.6, 0.7 and 0.8 come out on GitHub only, for people who want to try what's coming: each one needs plugins rebuilt for it, and doesn't load games saved with another version. 1.0 comes on a new Workshop item, and the 0.5 item stays up, so a game started on 0.5 can be played to the end. The first plugins are out: [MCP Server for Bazaar](https://steamcommunity.com/sharedfiles/filedetails/?id=3827230313), which lets AI models play the game with you, against you or for you ([source](https://github.com/spradlin-dev-bazaar/civ5-mcp-plugin)), and [Reduced Aggression (Bazaar)](https://steamcommunity.com/sharedfiles/filedetails/?id=3827446901), which adds two rules against sudden wars ([source](https://github.com/spradlin-dev-bazaar/civ5-reduced-agression)). What's planned next is in [ROADMAP.md](ROADMAP.md).
 
 ## Installing
 
@@ -52,7 +52,7 @@ If VMC's Lua events, or the game's own, do what you need, make a plain Lua mod: 
 - **The developer docs** have a page for each game function plugins can hook. The newest docs are at https://spradlin-dev-bazaar.github.io/civ5-bazaar/, and each release that changed them has them as `Bazaar-docs-<version>.zip`.
 - **With Claude Code**, add this repository's skills with `/plugin marketplace add spradlin-dev-bazaar/civ5-bazaar`, then `/plugin install civ5-bazaar@civ5-bazaar`. One skill makes DLL plugins, including from an existing DLL mod; the other makes Lua mods from its own template.
 
-A plugin runs only on Bazaar releases with the same major version as the one it was built for (the first number, such as the 1 in 1.2), from that release on: a plugin built for 1.2 runs on 1.5, but not on 1.1 or 2.0. Releases before 0.5 could also change what plugins use, so Bazaar 0.5 and later refuse a plugin built for one of them until it is rebuilt with a newer SDK.
+A plugin runs only on the Bazaar version it was made for, the first two numbers of a release, such as 0.5: a plugin made for 0.5 runs on every 0.5.x release, but not on 0.6 or 1.0. Each Bazaar version is a separate mod in the game, and a plugin depends on the one it was made for, so the game keeps the versions apart. The SDK's guide explains how to make a build of a plugin for a new version.
 
 ## Building and testing
 
@@ -65,7 +65,7 @@ You need Visual Studio 2008 (the free Express edition works) and Python 3.12.
 
 Other jobs:
 
-- `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then checks it by making a plugin from its template and releasing it, using only that folder. That check builds a plugin, so it also needs what a plugin author needs (see [What you need](sdk/README.md#what-you-need)).
+- `sdk\build_sdk.py` lays out the plugin SDK in `sdk\out\Bazaar SDK`, then checks the SDK by making a plugin from the SDK's template with the DLL skill's scaffold script and building that plugin with its `build.cmd`, using only the SDK folder. The check passes only when `build.cmd` succeeds and `build.cmd`'s package check prints its line `build: checked`. That check builds a plugin, so it also needs what a plugin author needs (see [What you need](sdk/README.md#what-you-need)).
 - `build-docs.cmd` writes the developer docs into `CvGameCoreSource\BuildTemp\docs`; open its `index.html` in a browser. `tests\docs\check_docs.py` checks the docs build against a small test engine. [tools/docs/README.md](tools/docs/README.md) explains how to write the docs' own pages.
 - The hook generator in `tools\generator`, which `build-hooked.cmd` runs, reads the game's source with Visual C++ 2008's own headers, from the folders Visual C++ 2008 Express installs them in. If they are somewhere else, such as on a Mac running Visual C++ 2008 under Wine, set `BAZAAR_VS2008_INCLUDE` to the compiler's include folder and the Windows SDK's, separated by `;` on Windows and `:` on a Mac or Linux. The rest of the build is Windows batch files, so this lets only the generator run elsewhere.
 - `tools\sync_checker.py` copies the in-game checker, `tools\bazaar_check`, into the plugin template and the Lua mod template after a change to it; the tests and `release.py check` refuse copies that differ.
