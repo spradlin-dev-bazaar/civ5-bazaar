@@ -6,7 +6,7 @@
 #include <vector>
 
 // Call from the exception filter, before the handler reuses the stack. A crash is not recorded while an earlier one
-// waits for its report.
+// waits for its report, or while another thread is recording or reporting one.
 void CivCrashRecord(unsigned int code, const EXCEPTION_POINTERS* info, const void* owner);
 
 // Every guarded call that caught a crash must ask for its report with the owner it recorded, or later crashes go
