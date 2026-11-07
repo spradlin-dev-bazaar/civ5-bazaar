@@ -226,7 +226,7 @@ void Load(const char* name)
 	CivHostLoadPlugins(std::vector<CivPluginFile>(1, CivPluginFile(OutFile(name), "")));
 }
 
-// Records are looked up afresh each time: loading more plugins can move them. A file listed twice finds the later record.
+// Records are looked up again each time: loading more plugins can move them. A file listed twice finds the later record.
 const CivPluginRecord* Find(const char* fileName)
 {
 	const std::vector<CivPluginRecord>& all = CivHostPlugins();

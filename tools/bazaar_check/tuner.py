@@ -171,7 +171,7 @@ class Tuner:
         return [sid for sid, n in self.states() if n == name]
 
     def state_id(self, name):
-        """The newest state of that name, since a loaded game makes its states afresh with higher ids."""
+        """The newest state of that name, since a loaded game makes its states again with higher ids."""
         ids = self.state_ids(name)
         if not ids:
             raise NoSuchState("the game has no Lua state named %s" % name)

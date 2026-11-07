@@ -10,7 +10,6 @@ import io
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import types
@@ -590,7 +589,7 @@ class HistoryTest(unittest.TestCase):
             at_tag.assert_called_once_with("v0.3.0", path)
             self.assertEqual(release.read_text(path), "release\t0.3.0\n")
 
-    def test_before_the_first_release_the_history_starts_afresh(self):
+    def test_before_the_first_release_there_is_no_history(self):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "function-history.txt")
             with open(path, "w") as f:
@@ -659,7 +658,6 @@ class PrepareTest(unittest.TestCase):
             (release.version, "write", steps.step("VERSION")),
             (release.layouts, "set_api_version", steps.step("API version")),
             (release.version, "set_plugin_version", steps.step("plugin version")),
-            (release.version, "set_template_bazaar", steps.step("template bazaar")),
             (release.version, "add_listed_version", steps.step("mod versions")),
             (release, "require_numbers_agree", steps.step("numbers agree")),
             (release, "restore_history", steps.step("restore history")),
@@ -675,7 +673,6 @@ class PrepareTest(unittest.TestCase):
         names = steps.names()
         self.assertEqual(names[: names.index("VERSION")].count("run"), 1)
         self.assertLess(names.index("plugin version"), names.index("numbers agree"))
-        self.assertLess(names.index("template bazaar"), names.index("numbers agree"))
         self.assertLess(names.index("mod versions"), names.index("numbers agree"))
         self.assertLess(names.index("restore history"), names.index("docs"))
         self.assertEqual(steps.arguments("git"), [(("switch", "-c", "release-0.4.0"), {})])
@@ -709,7 +706,6 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(steps.arguments("VERSION"), [((version.Version("0.4.0", 2),), {})])
         self.assertEqual(steps.arguments("API version"), [((0, 4), {})])
         self.assertEqual(steps.arguments("plugin version"), [(("0.4.0",), {})])
-        self.assertEqual(steps.arguments("template bazaar"), [(("0.4.0",), {})])
         self.assertEqual(steps.arguments("mod versions"), [((version.Version("0.4.0", 2),), {})])
         self.assertEqual(steps.arguments("restore history"), [(("v0.3.0",), {})])
         ((_, docs),) = steps.arguments("docs")
@@ -725,10 +721,6 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(steps.arguments("VERSION"), [((version.Version("0.4.1", 2),), {})])
         ((args, _),) = steps.arguments("plan")
         self.assertEqual(args[1:], (False, True))
-
-    def test_a_patch_release_leaves_the_plugin_template_at_the_first_release_of_its_api(self):
-        steps, _ = self.prepare(planned=version.Version("0.4.1", 3))
-        self.assertEqual(steps.arguments("template bazaar"), [(("0.4.0",), {})])
 
     def test_a_stop_part_way_says_how_to_start_again(self):
         for failing in ("docs", "git"):
@@ -1351,7 +1343,7 @@ class BuildTemplateTest(unittest.TestCase):
     """build_template on a small SDK zip, with the template's build.cmd replaced by one that makes the mod folders a
     test names."""
 
-    def build(self, made=("Template Plugin",), change_checker=False):
+    def build(self, made=("Template Plugin",), change_checker=False, passes=True):
         with tempfile.TemporaryDirectory() as folder:
             source = os.path.join(folder, "zip")
             template = os.path.join(source, os.path.basename(release.build_sdk.SDK), "plugin-template")
@@ -1370,16 +1362,18 @@ class BuildTemplateTest(unittest.TestCase):
                     for name in names:
                         z.write(os.path.join(path, name), os.path.relpath(os.path.join(path, name), source))
 
-            def build_cmd(command, cwd, env):
+            def build_cmd(path, sdk, cwd):
+                expected = os.path.join(check_folder, os.path.basename(release.build_sdk.SDK))
+                self.assertEqual((path, sdk), (os.path.join(expected, "plugin-template", "build.cmd"), expected))
                 for name in made:
                     os.makedirs(os.path.join(cwd, "Build", name))
                     release.mods.write_modinfo(os.path.join(cwd, "Build", name), name, "id-" + name, "x", [], [])
-                return subprocess.CompletedProcess(command, 0)
+                return passes
 
             check_folder = os.path.join(folder, "check")
             with (
                 mock.patch.object(release, "CHECK_FOLDER", check_folder),
-                mock.patch.object(release.subprocess, "run", side_effect=build_cmd),
+                mock.patch.object(release.build_sdk, "builds_and_passes_its_check", side_effect=build_cmd),
             ):
                 try:
                     checks = release.build_template(sdk_zip)
@@ -1391,6 +1385,10 @@ class BuildTemplateTest(unittest.TestCase):
         mods, _ = self.build()
         sdk = os.path.basename(release.build_sdk.SDK)
         self.assertEqual(mods, [os.path.join(sdk, "plugin-template", "Build", "Template Plugin")])
+
+    def test_a_build_that_fails_or_skips_its_package_check_stops(self):
+        _, stopped = self.build(passes=False)
+        self.assertIn('build.cmd did not print "build: checked" while building the SDK\'s template plugin', stopped)
 
     def test_a_build_that_makes_two_mods_stops(self):
         _, stopped = self.build(made=("Template Plugin", "Another"))
