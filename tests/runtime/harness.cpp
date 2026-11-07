@@ -1,6 +1,7 @@
 // Runs the host runtime outside the game, against the fixture hooked by the real generator.
 // harness.exe <toy folder> [reverse | list | section names, each at most once]
 #include "harness.h"
+#include "CivHostLock.h"
 #include "CivHostPath.h"
 #include "fake_engine.h"
 
@@ -11,11 +12,13 @@ void TestLoading();
 void TestHooks();
 void TestShapes();
 void TestQuarantine();
+void TestSamePluginCrashingOnTwoThreads();
 void TestStrings();
 void TestRegistration();
 void TestTurnedAwayAfterRegistering();
 void TestVetoAndReplace();
 void TestExceptions();
+void TestCrashesOnTwoThreads();
 void TestUnloading();
 void TestNoShutdown();
 void TestReload();
@@ -70,15 +73,18 @@ namespace
 	int s_faults = 0;
 	bool s_lastFaultShuttingDown = false;
 	std::string s_dir;
+	CivLock s_sinkLock;
 
 	void LogSink(const char* line)
 	{
+		const CivLockHold hold(s_sinkLock);
 		s_log.push_back(line);
 		printf("      log: %s\n", line);
 	}
 
 	void FaultSink(int, const char* name, bool shuttingDown, unsigned int code)
 	{
+		const CivLockHold hold(s_sinkLock);
 		++s_faults;
 		s_lastFaultShuttingDown = shuttingDown;
 		printf("      fault sink: %s%s, code 0x%08X\n", name, shuttingDown ? ", shutting down" : "", code);
@@ -95,11 +101,13 @@ namespace
 		{"hooks", &TestHooks},
 		{"shapes", &TestShapes},
 		{"quarantine", &TestQuarantine},
+		{"same plugin crashing on two threads", &TestSamePluginCrashingOnTwoThreads},
 		{"strings", &TestStrings},
 		{"registration", &TestRegistration},
 		{"declined or refused after registering", &TestTurnedAwayAfterRegistering},
 		{"veto and replace", &TestVetoAndReplace},
 		{"exceptions", &TestExceptions},
+		{"crashes on two threads", &TestCrashesOnTwoThreads},
 		{"unloading", &TestUnloading},
 		{"no shutdown", &TestNoShutdown},
 		{"reload", &TestReload},

@@ -2,13 +2,14 @@
 
 #include <windows.h>
 
-// The game writes one save from a thread of its own.
+// The game writes one save from a thread of its own, and runs hooked functions on two threads at the same time.
 class CivLock
 {
 public:
 	CivLock() { InitializeCriticalSection(&m_section); }
 	~CivLock() { DeleteCriticalSection(&m_section); }
 	void Enter() { EnterCriticalSection(&m_section); }
+	bool TryEnter() { return TryEnterCriticalSection(&m_section) != FALSE; }
 	void Leave() { LeaveCriticalSection(&m_section); }
 
 private:
