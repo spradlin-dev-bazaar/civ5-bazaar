@@ -38,6 +38,26 @@ namespace
 		bool carriedValues;
 	};
 
+	// The game can run hooked functions on two threads at the same time, so each thread keeps its own pointer.
+	class ThreadFlagSlot
+	{
+	public:
+		ThreadFlagSlot() : m_slot(TlsAlloc()) {}
+		~ThreadFlagSlot()
+		{
+			if (m_slot != TLS_OUT_OF_INDEXES)
+				TlsFree(m_slot);
+		}
+		bool* Get() const { return m_slot == TLS_OUT_OF_INDEXES ? 0 : static_cast<bool*>(TlsGetValue(m_slot)); }
+		bool Set(bool* flag) const { return m_slot != TLS_OUT_OF_INDEXES && TlsSetValue(m_slot, flag) != FALSE; }
+
+	private:
+		ThreadFlagSlot(const ThreadFlagSlot&);
+		ThreadFlagSlot& operator=(const ThreadFlagSlot&);
+
+		DWORD m_slot;
+	};
+
 	std::vector<CivPluginRecord> s_plugins;
 	std::vector<PendingHook> s_pending;
 	std::vector<PossibleConflict> s_possibleConflicts;
@@ -53,7 +73,7 @@ namespace
 	unsigned int s_saveToken = 0;
 	bool s_strayWriteLogged = false;
 	volatile LONG s_pluginCallDepth = 0;
-	bool* s_originalCalled = 0;
+	ThreadFlagSlot s_originalCalled;
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
 	volatile bool s_gameMayBeDamaged = false;
@@ -1160,19 +1180,19 @@ bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void*
 		return false;
 	// The original may run other replacements before this one returns, and an exception nobody here handles may pass
 	// through, so the outer replacement's flag is always put back.
-	bool* const outer = s_originalCalled;
+	bool* const outer = s_originalCalled.Get();
 	bool called = false;
 	bool ran = false;
-	s_originalCalled = &called;
+	const bool tracked = s_originalCalled.Set(&called);
 	__try
 	{
 		ran = CallPlugin(e, id, thunk, ctx);
 	}
 	__finally
 	{
-		s_originalCalled = outer;
+		s_originalCalled.Set(outer);
 	}
-	if (ran && !called && !e->loggedSkippedOriginal)
+	if (ran && tracked && !called && !e->loggedSkippedOriginal)
 	{
 		e->loggedSkippedOriginal = true;
 		LogSkippedOriginal(e->plugin, id);
@@ -1182,8 +1202,8 @@ bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void*
 
 void CivHookOriginalCalled()
 {
-	if (s_originalCalled)
-		*s_originalCalled = true;
+	if (bool* const called = s_originalCalled.Get())
+		*called = true;
 }
 
 void CivHookRunAfter(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)

@@ -15,6 +15,42 @@ namespace
 	{
 		return text.find(part) != std::string::npos;
 	}
+
+	HANDLE s_entered[2];
+	HANDLE s_go[2];
+
+	void WaitForGo(int caller)
+	{
+		SetEvent(s_entered[caller]);
+		WaitForSingleObject(s_go[caller], 5000);
+	}
+
+	struct AddCall
+	{
+		int caller;
+		int result;
+	};
+
+	DWORD WINAPI CallAdd(void* p)
+	{
+		AddCall* call = static_cast<AddCall*>(p);
+		const FakeUnit unit;
+		call->result = unit.add(call->caller, 10);
+		return 0;
+	}
+
+	bool Entered(int caller)
+	{
+		return WaitForSingleObject(s_entered[caller], 5000) == WAIT_OBJECT_0;
+	}
+
+	bool Finished(int caller, HANDLE thread)
+	{
+		SetEvent(s_go[caller]);
+		const bool finished = WaitForSingleObject(thread, 5000) == WAIT_OBJECT_0;
+		CloseHandle(thread);
+		return finished;
+	}
 }
 
 void TestHandHooks()
@@ -157,4 +193,37 @@ void TestSkippedOriginal()
 	Check(unit.Range() == 131, "a replacement's original runs the replacement of a function it calls");
 	Check(LogHas("its replacement of FakeUnit::Reach() const returned without") && !LogHas("its replacement of FakeUnit::Range() const returned without"),
 		"a replacement inside the original that skips its own original does not make the outer replacement look like it skipped");
+}
+
+void TestReplacementsOnTwoThreads()
+{
+	const char* const names[] = {"toy_overlap.dll"};
+	StartWith(names);
+	ToySetWaitFn* setWait = TOY_FUNCTION("toy_overlap.dll", ToySetWait);
+	Check(setWait != 0, "the overlap test plugin can be made to wait inside its replacement");
+	if (!setWait)
+		return;
+	for (int i = 0; i < 2; ++i)
+	{
+		s_entered[i] = CreateEvent(0, FALSE, FALSE, 0);
+		s_go[i] = CreateEvent(0, FALSE, FALSE, 0);
+	}
+	setWait(&WaitForGo);
+	AddCall first = {0, 0};
+	AddCall second = {1, 0};
+	HANDLE firstThread = CreateThread(0, 0, &CallAdd, &first, 0, 0);
+	const bool firstEntered = Entered(0);
+	HANDLE secondThread = CreateThread(0, 0, &CallAdd, &second, 0, 0);
+	const bool secondEntered = Entered(1);
+	const bool firstFinished = Finished(0, firstThread);
+	const bool secondFinished = Finished(1, secondThread);
+	setWait(0);
+	for (int i = 0; i < 2; ++i)
+	{
+		CloseHandle(s_entered[i]);
+		CloseHandle(s_go[i]);
+	}
+	Check(firstEntered && secondEntered && firstFinished && secondFinished && first.result == 10 && second.result == 11,
+		"two threads run a replacement at the same time, the first returning while the second still runs, and both get the original's result");
+	Check(!LogHas("returned without running the original"), "a replacement that runs its original while another thread runs a replacement is not logged as skipping it");
 }
