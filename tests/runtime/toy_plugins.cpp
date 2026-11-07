@@ -27,6 +27,7 @@ TOY_EXPORT ToyHostCallResultFn ToyHostCallResult;
 TOY_EXPORT ToyBreakOnNextCallFn ToyBreakOnNextCall;
 TOY_EXPORT ToyStartThreadFn ToyStartThread;
 TOY_EXPORT ToyLeaveThreadRunningFn ToyLeaveThreadRunning;
+TOY_EXPORT ToySetWaitFn ToySetWait;
 TOY_EXPORT ToyExplodeLineFn ToyExplodeLine;
 TOY_EXPORT ToySaveSetFn ToySaveSet;
 TOY_EXPORT ToySaveValueFn ToySaveValue;
@@ -582,6 +583,30 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	s_host = host;
 	Describe(info, "Toy Threads");
 	s_ownShutdown = &StopThread;
+	return true;
+}
+
+#elif defined(TOY_OVERLAP)
+
+static ToyWaitFn* s_wait = 0;
+
+static int ReplaceAdd(int (*original)(const FakeUnit*, int, int), const FakeUnit* self, int caller, int b)
+{
+	if (s_wait)
+		s_wait(caller);
+	return original(self, caller, b);
+}
+
+TOY_EXPORT void ToySetWait(ToyWaitFn* wait)
+{
+	s_wait = wait;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Overlap");
+	CivRegisterReplace<CivHooks::FakeUnit_add>(s_host, &ReplaceAdd);
 	return true;
 }
 
