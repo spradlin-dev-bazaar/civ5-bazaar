@@ -20,6 +20,8 @@ typedef int ToyHostCallResultFn();
 typedef void ToyBreakOnNextCallFn();
 typedef void ToyStartThreadFn(int throughRuntime);
 typedef void ToyLeaveThreadRunningFn();
+typedef void ToyWaitFn(int caller);
+typedef void ToySetWaitFn(ToyWaitFn* wait);
 typedef int ToyExplodeLineFn();
 typedef void ToySaveSetFn(int value);
 typedef int ToySaveValueFn();

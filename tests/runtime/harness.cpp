@@ -31,6 +31,7 @@ void TestHandHooks();
 void TestHandHookFaults();
 void TestPossibleConflicts();
 void TestSkippedOriginal();
+void TestReplacementsOnTwoThreads();
 void TestPaths();
 void TestActiveMods();
 void TestLuaFunctions();
@@ -115,6 +116,7 @@ namespace
 		{"hand-placed hook faults", &TestHandHookFaults},
 		{"possible conflicts", &TestPossibleConflicts},
 		{"skipped original", &TestSkippedOriginal},
+		{"replacements on two threads", &TestReplacementsOnTwoThreads},
 		{"paths", &TestPaths},
 		{"active mods", &TestActiveMods},
 		{"lua functions", &TestLuaFunctions},
