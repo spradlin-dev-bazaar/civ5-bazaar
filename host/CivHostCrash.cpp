@@ -1,4 +1,5 @@
 #include "CivHostCrash.h"
+#include "CivHostLock.h"
 #include "CivHostPath.h"
 
 #include <dbghelp.h>
@@ -27,6 +28,8 @@ namespace
 		BYTE stack[kStackCopyBytes];
 	};
 	Crash s_crash;
+	// Guards the crash record and every call into dbghelp, which is single-threaded.
+	CivLock s_lock;
 
 	HANDLE s_process = 0;
 	bool s_symbolsTried = false;
@@ -249,25 +252,31 @@ namespace
 
 void CivCrashRecord(unsigned int code, const EXCEPTION_POINTERS* info, const void* owner)
 {
-	if (s_crash.owner)
+	// Waiting here could hang the game, because the crashed thread may hold a lock that a report on another thread needs.
+	if (!s_lock.TryEnter())
 		return;
-	const EXCEPTION_RECORD* record = info->ExceptionRecord;
-	s_crash.address = (DWORD)(DWORD_PTR)record->ExceptionAddress;
-	s_crash.hasAccess = (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_IN_PAGE_ERROR) && record->NumberParameters >= 2;
-	s_crash.accessKind = s_crash.hasAccess ? record->ExceptionInformation[0] : 0;
-	s_crash.accessed = s_crash.hasAccess ? record->ExceptionInformation[1] : 0;
-	s_crash.context = *info->ContextRecord;
-	s_crash.stackStart = s_crash.context.Esp;
-	CopyStack(s_crash.stackStart);
-	s_crash.owner = owner;
+	if (!s_crash.owner)
+	{
+		const EXCEPTION_RECORD* record = info->ExceptionRecord;
+		s_crash.address = (DWORD)(DWORD_PTR)record->ExceptionAddress;
+		s_crash.hasAccess = (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_IN_PAGE_ERROR) && record->NumberParameters >= 2;
+		s_crash.accessKind = s_crash.hasAccess ? record->ExceptionInformation[0] : 0;
+		s_crash.accessed = s_crash.hasAccess ? record->ExceptionInformation[1] : 0;
+		s_crash.context = *info->ContextRecord;
+		s_crash.stackStart = s_crash.context.Esp;
+		CopyStack(s_crash.stackStart);
+		s_crash.owner = owner;
+	}
+	s_lock.Leave();
 }
 
 std::vector<std::string> CivCrashReport(const void* owner)
 {
+	const CivLockHold hold(s_lock);
 	std::vector<std::string> lines;
 	if (owner != s_crash.owner)
 	{
-		lines.push_back("  The call stack was not recorded, because another plugin's crash was still being reported.");
+		lines.push_back("  The call stack was not recorded, because another crash was still being reported.");
 		return lines;
 	}
 	s_crash.owner = 0;
@@ -298,6 +307,7 @@ std::vector<std::string> CivCrashReport(const void* owner)
 // No C++ objects may live in this frame, or __try is not allowed.
 void CivCrashForgetModule(HMODULE module)
 {
+	s_lock.Enter();
 	__try
 	{
 		if (s_process)
@@ -306,4 +316,5 @@ void CivCrashForgetModule(HMODULE module)
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
 	}
+	s_lock.Leave();
 }

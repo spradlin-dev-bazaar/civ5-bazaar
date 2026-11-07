@@ -74,6 +74,69 @@ namespace
 		{
 		}
 	}
+
+	struct CrashLoop
+	{
+		int* target;
+		int own;
+		int unrecorded;
+		int wrong;
+	};
+
+	int RecordFor(const EXCEPTION_POINTERS* info, const void* owner)
+	{
+		CivCrashRecord(EXCEPTION_ACCESS_VIOLATION, info, owner);
+		return EXCEPTION_EXECUTE_HANDLER;
+	}
+
+	void CrashAt(int* volatile target, const void* owner)
+	{
+		__try
+		{
+			*target = 1;
+		}
+		__except (RecordFor(GetExceptionInformation(), owner))
+		{
+		}
+	}
+
+	HANDLE s_crashTogether = 0;
+	volatile LONG s_readyToCrash = 0;
+
+	DWORD WINAPI CrashAndReport(void* p)
+	{
+		CrashLoop* loop = static_cast<CrashLoop*>(p);
+		char own[64];
+		_snprintf_s(own, sizeof(own), _TRUNCATE, "  It wrote to address 0x%08X,", (unsigned)(DWORD_PTR)loop->target);
+		WaitForSingleObject(s_crashTogether, 5000);
+		for (int i = 0; i < 200; ++i)
+		{
+			CrashAt(loop->target, loop);
+			const std::vector<std::string> lines = CivCrashReport(loop);
+			if (!lines.empty() && lines[0].find(own) == 0)
+				++loop->own;
+			else if (lines.size() == 1 && lines[0] == "  The call stack was not recorded, because another crash was still being reported.")
+				++loop->unrecorded;
+			else
+				++loop->wrong;
+		}
+		return 0;
+	}
+
+	bool CrashWithTheOtherThread()
+	{
+		InterlockedIncrement(&s_readyToCrash);
+		WaitForSingleObject(s_crashTogether, 5000);
+		int* volatile nowhere = 0;
+		*nowhere = 1;
+		return true;
+	}
+
+	DWORD WINAPI CallFakeUnitTwice(void*)
+	{
+		FakeUnit::Twice(1);
+		return 0;
+	}
 }
 
 void TestLoading()
@@ -273,6 +336,35 @@ void TestQuarantine()
 		"a plugin loaded where a DLL was freed behind Bazaar's back names no function, rather than that DLL's");
 }
 
+void TestSamePluginCrashingOnTwoThreads()
+{
+	const char* const names[] = {"toy_reentrant.dll"};
+	StartWith(names);
+	ToySetHostCallFn* setHostCall = TOY_FUNCTION("toy_reentrant.dll", ToySetHostCall);
+	Check(setHostCall != 0, "the reentrant test plugin can be made to call back into the test");
+	if (!setHostCall)
+		return;
+	s_crashTogether = CreateEvent(0, TRUE, FALSE, 0);
+	s_readyToCrash = 0;
+	setHostCall(&CrashWithTheOtherThread);
+	const int before = FaultCount();
+	HANDLE threads[2] = {CreateThread(0, 0, &CallFakeUnitTwice, 0, 0, 0), CreateThread(0, 0, &CallFakeUnitTwice, 0, 0, 0)};
+	for (int i = 0; i < 5000 && s_readyToCrash < 2; ++i)
+		Sleep(1);
+	const bool bothReady = s_readyToCrash == 2;
+	SetEvent(s_crashTogether);
+	const bool finished = WaitForMultipleObjects(2, threads, TRUE, 10000) == WAIT_OBJECT_0;
+	CloseHandle(threads[0]);
+	CloseHandle(threads[1]);
+	CloseHandle(s_crashTogether);
+	setHostCall(0);
+	Check(bothReady && finished && LogCount("Plugin Toy Reentrant: Faulted (code 0xC0000005)") == 2,
+		"when the same plugin's hooks crash on two threads at the same time, both crashes are logged");
+	const CivPluginRecord* record = Find("toy_reentrant.dll");
+	Check(FaultCount() == before + 1 && record && record->quarantined && record->problems.size() == 1,
+		"the plugin is shut off once, with the crash in its list of problems once");
+}
+
 void TestStrings()
 {
 	const char* const names[] = {"toy_basic.dll"};
@@ -383,6 +475,25 @@ void TestExceptions()
 	CrashRecordedTwice();
 	const std::vector<std::string> laterLines = CivCrashReport(&s_later);
 	const std::vector<std::string> waitingLines = CivCrashReport(&s_waiting);
-	Check(laterLines.size() == 1 && laterLines[0] == "  The call stack was not recorded, because another plugin's crash was still being reported.", "a crash during another crash's report says its stack was not recorded");
+	Check(laterLines.size() == 1 && laterLines[0] == "  The call stack was not recorded, because another crash was still being reported.", "a crash during another crash's report says its stack was not recorded");
 	Check(waitingLines.size() > 2 && waitingLines[1] == "  Call stack, innermost first, as file+offset:", "the first crash keeps its own record and call stack");
+}
+
+void TestCrashesOnTwoThreads()
+{
+	StartWithNone();
+	CrashLoop first = {reinterpret_cast<int*>(0x10), 0, 0, 0};
+	CrashLoop second = {reinterpret_cast<int*>(0x20), 0, 0, 0};
+	s_crashTogether = CreateEvent(0, TRUE, FALSE, 0);
+	HANDLE threads[2] = {CreateThread(0, 0, &CrashAndReport, &first, 0, 0), CreateThread(0, 0, &CrashAndReport, &second, 0, 0)};
+	SetEvent(s_crashTogether);
+	const bool finished = WaitForMultipleObjects(2, threads, TRUE, 60000) == WAIT_OBJECT_0;
+	CloseHandle(threads[0]);
+	CloseHandle(threads[1]);
+	CloseHandle(s_crashTogether);
+	printf("      reports with their own crash %d and %d, not recorded %d and %d, wrong %d and %d\n", first.own, second.own,
+		first.unrecorded, second.unrecorded, first.wrong, second.wrong);
+	Check(finished && first.wrong == 0 && second.wrong == 0,
+		"when two threads, started together, record and report crashes at the same time, each report describes its own thread's crash or says that the crash was not recorded");
+	Check(first.own + second.own > 0, "while both threads crash, crashes are still reported with their own call stack");
 }

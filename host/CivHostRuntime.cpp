@@ -1,6 +1,7 @@
 #include "CivHostCrash.h"
 #include "CivHostFunctions.h"
 #include "CivHostHooks.h"
+#include "CivHostLock.h"
 #include "CivHostPath.h"
 #include "CivHostRuntime.h"
 #include "CivHostValues.h"
@@ -77,6 +78,8 @@ namespace
 	CivHostLogSink s_logSink = 0;
 	CivHostFaultSink s_faultSink = 0;
 	volatile bool s_gameMayBeDamaged = false;
+	// Lets one thread at a time log a plugin's crash and turn the plugin off, so each crash's lines stay together in Bazaar.log.
+	CivLock s_quarantineLock;
 	CivHostLuaPusher s_luaPusher = 0;
 	unsigned int s_lastSerial = 0;
 
@@ -205,14 +208,17 @@ namespace
 		// The in-game checker that mod authors keep a copy of finds crashes by this line and the load fault's below, and
 		// a Bazaar update cannot change their copies, so changed words would let a crash pass their checks unseen.
 		_snprintf_s(problem, sizeof(problem), _TRUNCATE, "Faulted (code 0x%08X) in %s.", *code, where);
-		Log("Plugin %s: %s", rec.name.c_str(), problem);
-		LogCrash(code);
 		if (!shuttingDown)
 			s_gameMayBeDamaged = true;
-		if (rec.quarantined)
-			return;
-		rec.quarantined = true;
-		rec.problems.push_back(problem);
+		{
+			const CivLockHold hold(s_quarantineLock);
+			Log("Plugin %s: %s", rec.name.c_str(), problem);
+			LogCrash(code);
+			if (rec.quarantined)
+				return;
+			rec.quarantined = true;
+			rec.problems.push_back(problem);
+		}
 		if (s_faultSink)
 			s_faultSink(plugin, rec.name.c_str(), shuttingDown, *code);
 	}
