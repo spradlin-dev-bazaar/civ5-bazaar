@@ -18,11 +18,11 @@ import winreg
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "generator"))
+sys.path.insert(0, os.path.join(HERE, ".."))
 
 import common  # noqa: E402
+import version  # noqa: E402
 
-# By major version: a new major goes up as a new item, since games saved with the old one still need its mod.
-BAZAAR_ITEMS = {0: 3825428828}
 GAME_APP = 8930
 SDK_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 16830"
 STEAM_API = os.path.join("ModBuddy", "Extensions", "Application", "steam_api.dll")
@@ -54,13 +54,26 @@ def read_text(path):
 
 
 def bazaar_item(release):
-    major = int(release.split(".")[0])
-    if major not in BAZAAR_ITEMS:
+    listed = common.BAZAAR_VERSIONS.get(version.bazaar_version(release))
+    shown = common.shown(os.path.join(common.HERE, "common.py"))
+    if listed is None:
         stop(
-            "Bazaar %d.x has no Workshop item yet: publish its mod as a new item with ModBuddy, then add the item's"
-            " number to BAZAAR_ITEMS in %s" % (major, common.shown(os.path.join(HERE, "upload.py")))
+            "Bazaar %s is for a version that BAZAAR_VERSIONS, in %s, doesn't list. Add the version to BAZAAR_VERSIONS,"
+            " with its mod ID, whether it goes on the Steam Workshop, and its Workshop item as None until the"
+            " version's mod is first published on the Workshop" % (release, shown)
         )
-    return BAZAAR_ITEMS[major]
+    if not listed.on_workshop:
+        stop(
+            "Bazaar %s is not on the Workshop. BAZAAR_VERSIONS, in %s, lists its version as released on GitHub only."
+            " If the version goes on the Workshop, record that in BAZAAR_VERSIONS before the version's first release"
+            % (release, shown)
+        )
+    if listed.workshop_item is None:
+        stop(
+            "Bazaar %s's version goes on the Workshop but has no Workshop item yet. Publish its mod as a new Workshop"
+            " item with ModBuddy, then add the item's number to BAZAAR_VERSIONS, in %s" % (release, shown)
+        )
+    return listed.workshop_item
 
 
 def change_note(changes, release):

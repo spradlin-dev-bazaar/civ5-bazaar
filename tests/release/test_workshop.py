@@ -144,9 +144,20 @@ class UploadTest(unittest.TestCase):
         self.assertEqual(self.texts, [NOTE_0_5_1, "The description."])
         self.assertEqual(self.folders, [self.out])
 
-    def test_a_major_version_without_an_item_stops_before_building(self):
-        self.assertIn("Bazaar 1.x has no Workshop item yet", self.upload(release="1.0.0", changes="[b]1.0.0[/b]\n"))
-        self.assertEqual((self.checks, self.builds), (0, 0))
+    def test_a_version_without_a_workshop_item_stops_before_building(self):
+        cases = (
+            ({}, "Bazaar 1.0.0 is for a version that BAZAAR_VERSIONS"),
+            ({"1.0": upload.common.BazaarVersion("id", False, None)}, "Bazaar 1.0.0 is not on the Workshop"),
+            (
+                {"1.0": upload.common.BazaarVersion("id", True, None)},
+                "goes on the Workshop but has no Workshop item yet",
+            ),
+        )
+        for listed, words in cases:
+            with self.subTest(listed=listed), mock.patch.object(upload.common, "BAZAAR_VERSIONS", listed):
+                message = self.upload(release="1.0.0", changes="[b]1.0.0[/b]\n")
+                self.assertIn(words, message)
+                self.assertEqual((self.checks, self.builds), (0, 0))
 
     def test_a_description_over_steam_s_limit_stops_before_building(self):
         message = self.upload(description="x" * 8000)
@@ -228,7 +239,7 @@ class WorkshopTest(unittest.TestCase):
             with (
                 mock.patch.object(release, "DIST", folder),
                 mock.patch.object(release.version, "read", return_value=self.CURRENT),
-                mock.patch.object(release, "require_main") as self.require_main,
+                mock.patch.object(release, "require_version_branch") as self.require_version_branch,
                 mock.patch.object(release, "tagged_commit", return_value=tagged),
                 mock.patch.object(release, "on_github", return_value=on_github),
                 mock.patch.object(release.shutil, "which", return_value=gh),
@@ -243,7 +254,7 @@ class WorkshopTest(unittest.TestCase):
 
     def test_a_published_release_sends_its_package(self):
         self.assertIsNone(self.workshop())
-        self.require_main.assert_called_once_with()
+        self.require_version_branch.assert_called_once_with()
         ((sent_release, package),) = self.sent
         self.assertEqual(sent_release, "0.5.1")
         self.assertEqual(os.path.basename(package), "Bazaar-0.5.1.civ5mod")

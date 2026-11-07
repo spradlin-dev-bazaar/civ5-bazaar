@@ -60,8 +60,8 @@ def write(path, text):
         f.write(text)
 
 
-def branch_version():
-    return "%d.%d" % version.numbers(version.read().release)[:2]
+def bazaar_version():
+    return version.bazaar_version(version.read().release)
 
 
 def other_version(of):
@@ -111,7 +111,7 @@ class BuildScriptTest(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
-        self.version = branch_version()
+        self.version = bazaar_version()
         self.variable = sdk_variable(self.version)
         self.sdk = self.make_sdk(os.path.join(self.root, "Bazaar SDK"), self.version)
         self.temp = os.path.join(self.root, "temp")
@@ -541,10 +541,11 @@ class OnePlaceTest(unittest.TestCase):
     def test_both_templates_build_scripts_are_the_same(self):
         self.assertTrue(filecmp.cmp(os.path.join(PLUGIN_TEMPLATE, SCRIPT), os.path.join(LUA_TEMPLATE, SCRIPT), False))
 
-    def test_the_build_script_lists_this_version_with_bazaar_s_mod_id_as_its_newest(self):
+    def test_the_build_script_lists_the_versions_and_mod_ids_of_bazaar_s_tools(self):
         versions = known_versions(os.path.join(PLUGIN_TEMPLATE, SCRIPT))
-        self.assertEqual(versions.get(branch_version()), common.HOST_MOD_ID)
-        self.assertEqual(list(versions)[-1], branch_version())
+        listed = [(v, entry.mod_id) for v, entry in common.BAZAAR_VERSIONS.items()]
+        self.assertEqual(list(versions.items()), listed)
+        self.assertEqual(list(versions)[-1], bazaar_version())
 
     def test_the_guide_s_table_of_mod_ids_has_every_version_the_build_script_lists(self):
         guide = read(GUIDE)
@@ -577,7 +578,7 @@ class OnePlaceTest(unittest.TestCase):
         for pattern, paths in names.items():
             for path in paths:
                 found = {v.replace("_", ".") for v in re.findall(pattern, read(path))}
-                self.assertEqual(found, {branch_version()}, (pattern, path))
+                self.assertEqual(found, {bazaar_version()}, (pattern, path))
 
     def test_the_files_a_newer_sdk_replaces_name_no_template_so_they_can_be_copied_over_a_renamed_project(self):
         for template in (PLUGIN_TEMPLATE, LUA_TEMPLATE):

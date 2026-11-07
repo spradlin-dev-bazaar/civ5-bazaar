@@ -1,16 +1,21 @@
 """Make a Bazaar release.
 
-    python tools/release.py number [--major | --same-bazaar]
-                                                   after build-hooked.cmd: the next release's number, and what changed
-    python tools/release.py prepare [--major | --same-bazaar]
-                                                   on main: a release branch with the new numbers and saved lists
-    python tools/release.py build [--trial]        on main, once the release branch has merged: the release's files
+    python tools/release.py number [--same-bazaar] after build-hooked.cmd: the next release's number, and what changed
+    python tools/release.py prepare [--same-bazaar]
+                                                   on a version branch: a release branch with the new numbers and lists
+    python tools/release.py build [--trial]        on a version branch, once the release branch has merged into it: the
+                                                   release's files
     python tools/release.py check [--trial]        the release's files in the game, which this starts and plays
     python tools/release.py publish --notes FILE [--no-check]
                                                    tag the commit the files were built from and draft its GitHub release
     python tools/release.py workshop               once the GitHub release is published: Bazaar's mod to the Workshop
 
---major starts a new major version, such as 1.0.0. --same-bazaar makes a release that keeps the last release's Bazaar
+Each version of Bazaar, such as 0.5, has its own branch, named after the version, such as 0.5.x, and release.py makes
+the releases of the version in VERSION on that version's branch only. A release on that branch raises the last number.
+On 0.5.x, a release only fixes things, so release.py refuses a build that adds anything that plugins use, and on every
+branch release.py refuses a build that removes or changes anything that plugins use.
+
+--same-bazaar makes a release that keeps the last release's Bazaar
 and its mod version, and ships only the SDK and, if they changed, the docs; it stops if Bazaar's code changed in more
 than comments since that Bazaar, or if today's files would package it differently, and downloads that Bazaar's
 release files from GitHub into dist when they are not there. build --trial runs on any branch,
@@ -79,9 +84,10 @@ PREPARE_CHECKS = (
 CHECKS_STOPPED = (
     "the numbers are raised to %s on branch %s. Fix what failed on that branch and run all the checks again: "
     + ", ".join("%s (%s)" % (what, shown) for what, shown, _ in PREPARE_CHECKS)
-    + ". Then commit and open a pull request to main. If the fix changes Bazaar's own code, start again from main"
-    " instead, since the lists and the docs were made before it"
+    + ". Then commit and open a pull request to %s. If the fix changes Bazaar's own code, start again from %s"
+    " instead, since the lists and the docs were made before that change"
 )
+FIXES_ONLY = ("0.5",)
 
 BOOTSTRAP_PATTERN = "Bazaar-VMC-Bootstrap-*.civ5mod"
 DOCS_PATTERN = "Bazaar-docs-*.zip"
@@ -161,25 +167,40 @@ def last_release():
         stop("GitHub has release tags that are not here: run git fetch --tags")
     if tag is not None and not on_github(tag):
         stop(
-            "the tag %s is only on this machine, left by a publish that did not finish. If main has not changed since,"
-            " run publish again; otherwise delete the tag with git tag -d %s" % (tag, tag)
+            "the tag %s is only on this machine, left by a publish that did not finish. If %s has not changed since,"
+            " run publish again. Otherwise delete the tag with git tag -d %s" % (tag, bazaar_branch(), tag)
         )
     return tag
 
 
-def require_main():
-    if git("rev-parse", "--abbrev-ref", "HEAD") != "main":
-        stop("run this on main")
+def current_bazaar_version(current=None):
+    """The version of Bazaar that VERSION is for: its first two numbers, such as 0.5."""
+    return version.bazaar_version((current or version.read()).release)
+
+
+def bazaar_branch():
+    """The branch that makes the releases of VERSION's version, such as 0.5.x."""
+    return current_bazaar_version() + ".x"
+
+
+def require_version_branch():
+    branch = bazaar_branch()
+    if git("rev-parse", "--abbrev-ref", "HEAD") != branch:
+        stop(
+            "VERSION is for Bazaar %s, so run release.py on that version's branch, %s"
+            % (current_bazaar_version(), branch)
+        )
     changed = git("status", "--porcelain")
     if changed:
         stop("commit or put away these changes first:\n" + changed)
-    git("fetch", "--quiet", "origin", "main")
-    if git("rev-parse", "HEAD") != git("rev-parse", "origin/main"):
-        stop("main here differs from main on GitHub: pull or push first")
+    git("fetch", "--quiet", "origin", branch)
+    if git("rev-parse", "HEAD") != git("rev-parse", "origin/" + branch):
+        stop("%s here differs from %s on GitHub. Pull or push first" % (branch, branch))
 
 
 def require_no_release_branch():
-    branches = git("branch", "--list", BRANCH_PREFIX + "*", "--format=%(refname:short)").split()
+    pattern = BRANCH_PREFIX + current_bazaar_version() + ".*"
+    branches = git("branch", "--list", pattern, "--format=%(refname:short)").split()
     if branches:
         stop(
             "the release branch %s is still here: delete it with git branch -D %s once its pull request has merged, or"
@@ -325,18 +346,27 @@ def api_changed(diffs):
     return any(d.added or d.removed for d in diffs)
 
 
-def next_version(base, diffs, major=False, same_bazaar=False):
-    """The release after base, or None when only a new major version may follow it. A release with the same Bazaar keeps
-    base's mod version."""
+def next_version(base, diffs, for_version, same_bazaar=False):
+    """The release after base, for the version of Bazaar for_version, such as 0.5. Stops when this build may not be
+    released as one. A release with the same Bazaar keeps base's mod version."""
     numbers = version.numbers(base.release)
-    if major:
-        release = "%d.0.0" % (numbers[0] + 1)
-    elif common.frozen(numbers) and any(d.removed for d in diffs):
-        return None
-    elif api_changed(diffs):
-        release = "%d.%d.0" % (numbers[0], numbers[1] + 1)
-    else:
-        release = "%d.%d.%d" % (numbers[0], numbers[1], numbers[2] + 1)
+    if version.bazaar_version(base.release) != for_version:
+        stop(
+            "the last release in this branch's history, %s, is for Bazaar %d.%d, so the next release on this branch"
+            " would be the first release of Bazaar %s, a breaking release, which release.py cannot make yet"
+            % (base.release, numbers[0], numbers[1], for_version)
+        )
+    if any(d.removed for d in diffs):
+        stop(
+            "this build removes or changes what plugins use, which no release of Bazaar %s may do. That change must be"
+            " made in the next version of Bazaar, on its own branch" % for_version
+        )
+    if for_version in FIXES_ONLY and any(d.added for d in diffs):
+        stop(
+            "this build adds to what plugins use, but releases of Bazaar %s only fix things. Put the addition on the"
+            " branch of a later version" % for_version
+        )
+    release = "%d.%d.%d" % (numbers[0], numbers[1], numbers[2] + 1)
     return version.Version(release, base.mod if same_bazaar else base.mod + 1)
 
 
@@ -365,13 +395,9 @@ def report(tag, diffs):
     sys.stdout.flush()
 
 
-def require_options_allowed(tag, major, same_bazaar=False):
-    if major and tag is None:
-        stop("the first release keeps VERSION's numbers, so --major does not apply: set them in VERSION")
+def require_options_allowed(tag, same_bazaar=False):
     if same_bazaar and tag is None:
         stop("the first release makes the first Bazaar, so --same-bazaar does not apply")
-    if major and same_bazaar:
-        stop("--major and --same-bazaar do not go together: a new major version is a new Bazaar")
 
 
 def require_api_unchanged(diffs, remedy):
@@ -457,26 +483,19 @@ def build_settings_changes(kept):
     return [] if then == build_sdk.vsprops_bytes() else ["the SDK's build settings, in %s" % BUILD_SETTINGS]
 
 
-def plan(lists, major, same_bazaar=False):
+def plan(lists, same_bazaar=False):
     """The next release's numbers, after saying what they come from."""
     tag, base, diffs = choose(lists)
-    require_options_allowed(tag, major, same_bazaar)
+    require_options_allowed(tag, same_bazaar)
     if diffs is None:
         say("no release has been made yet, so the first one keeps VERSION's numbers: %s, mod version %d" % base)
         return base
     report(tag, diffs)
     if same_bazaar:
         require_api_unchanged(diffs, RUN_AGAIN)
-        require_same_bazaar(kept_release(base) or base.release, RUN_AGAIN)
-    new = next_version(base, diffs, major, same_bazaar)
-    if new is None:
-        stop(
-            "from %s on, removing or changing what plugins use needs a new major version: run it with --major"
-            % common.FREEZE_SHOWN
-        )
+        require_same_bazaar(version.bazaar_made_in(base, version.listed_versions()), RUN_AGAIN)
+    new = next_version(base, diffs, current_bazaar_version(), same_bazaar)
     say("the next release is %s, mod version %d" % new)
-    if any(d.removed for d in diffs):
-        say("every plugin must be rebuilt for it, and the release notes must say so")
     return new
 
 
@@ -572,18 +591,10 @@ def require_build_as_prepared(current):
             )
     _, base, diffs = choose((hooks, exports))
     if diffs is not None:
-        major = version.numbers(current.release)[0] > version.numbers(base.release)[0]
         same_bazaar = kept_release(current) is not None
         if same_bazaar:
-            if major:
-                stop("%s is a new major version, which needs a new Bazaar: %s" % (current.release, PREPARE_AGAIN))
             require_api_unchanged(diffs, PREPARE_AGAIN)
-        expected = next_version(base, diffs, major, same_bazaar)
-        if expected is None:
-            stop(
-                "this build removes or changes what plugins use, which from %s on needs a new major version: prepare"
-                " the release again with --major" % common.FREEZE_SHOWN
-            )
+        expected = next_version(base, diffs, current_bazaar_version(current), same_bazaar)
         if expected != current:
             stop(
                 "this build calls for release %s, mod version %d, but VERSION says %s, mod version %d: prepare the"
@@ -613,19 +624,20 @@ def restore_history(tag, path=build_docs.HISTORY):
         f.write(at_tag(tag, path))
 
 
-def number(major, same_bazaar=False):
-    plan(None, major, same_bazaar)
+def number(same_bazaar=False):
+    plan(None, same_bazaar)
     return 0
 
 
-def prepare(major, same_bazaar=False):
-    require_main()
+def prepare(same_bazaar=False):
+    require_version_branch()
+    target = bazaar_branch()
     require_no_release_branch()
     tag = last_release()
-    require_options_allowed(tag, major, same_bazaar)
+    require_options_allowed(tag, same_bazaar)
     run("building the host", ["cmd", "/c", BUILD_HOOKED])
     lists = current_lists()
-    new = plan(lists, major, same_bazaar)
+    new = plan(lists, same_bazaar)
     with stopping_says(PART_WAY):
         version.write(new)
         new_major, new_minor, _ = version.numbers(new.release)
@@ -641,15 +653,15 @@ def prepare(major, same_bazaar=False):
         branch = BRANCH_PREFIX + new.release
         git("switch", "-c", branch)
     # A test can depend on the release's own version.
-    with stopping_says(CHECKS_STOPPED % (new.release, branch)):
+    with stopping_says(CHECKS_STOPPED % (new.release, branch, target, target)):
         for what, _, cmd in PREPARE_CHECKS:
             run(what, cmd)
-    say("%s is ready on branch %s: commit it and open a pull request to main" % (new.release, branch))
+    say("%s is ready on branch %s. Commit it and open a pull request to %s" % (new.release, branch, target))
     return 0
 
 
 def require_releasable(current):
-    require_main()
+    require_version_branch()
     if saved_release() != current.release:
         stop(
             "the lists in %s were not saved at %s: prepare the release and merge it first"
@@ -662,9 +674,31 @@ def require_releasable(current):
 def require_unchanged_by_build():
     changed = git("status", "--porcelain")
     if changed:
+        branch = bazaar_branch()
         stop(
-            "building changed these files, so main does not hold the release as it was built. Put the changes on"
-            " main through a pull request, then run build again:\n" + changed
+            "building changed these files, so %s does not hold the release as it was built. Put the changes on %s"
+            " through a pull request, then run build again:\n%s" % (branch, branch, changed)
+        )
+
+
+def require_bootstrap_unchanged(package):
+    """Every version of Bazaar shares the one VMC Bootstrap on the Workshop, so no release may change its files."""
+    tag = last_release()
+    if tag is None:
+        return
+    base = version.parse(at_tag(tag, version.VERSION_FILE), "VERSION at " + tag)
+    made = version.bazaar_made_in(base, version.listed_versions())
+    then = released_file(made, BOOTSTRAP_PATTERN)
+    if then is None:
+        stop("the GitHub release %s has no VMC Bootstrap package" % made)
+    try:
+        changed = bazaar_compare.package_differences(then, package)
+    except files.CheckError as e:
+        stop("%s; if it is in dist, delete it and run this again, which downloads it again" % e)
+    if changed:
+        stop(
+            "this build would change the VMC Bootstrap, which every version of Bazaar shares, since %s. Undo the"
+            " changes to these files:%s" % (made, "".join("\n  " + rel for rel in changed))
         )
 
 
@@ -684,6 +718,8 @@ def build(trial):
         stop("the SDK did not build")
     out = TRIAL_FOLDER if trial else release_folder(current.release)
     written = write_release_files(current, out, trial, same_bazaar=kept is not None)
+    if not trial and not kept:
+        require_bootstrap_unchanged(os.path.join(out, release_files(current.release).bootstrap))
     if trial:
         say("the trial files of %s are in %s:" % (current.release, out))
     else:
@@ -709,8 +745,8 @@ def build_template(sdk_zip):
     if different:
         stop(
             "the SDK's copy of the checker differs from tools\\bazaar_check in %s. If tools\\bazaar_check changed"
-            " after the build, undo that; if not, run tools\\sync_checker.py, put the change on main and build again"
-            % ", ".join(different[:5])
+            " after the build, undo that change. Otherwise run tools\\sync_checker.py, put the change on %s, and build"
+            " again" % (", ".join(different[:5]), bazaar_branch())
         )
     if not build_sdk.builds_and_passes_its_check(os.path.join(template, "build.cmd"), sdk, cwd=template):
         stop('build.cmd did not print "build: checked" while building the SDK\'s template plugin from %s' % sdk_zip)
@@ -808,13 +844,13 @@ def publish(notes, no_check=False):
     current = version.read()
     tag = tag_of(current.release)
     out = release_folder(current.release)
-    require_main()
+    require_version_branch()
     built_from = os.path.join(out, BUILT_FROM)
     if not os.path.exists(built_from):
         stop("%s holds no release build: run release.py build first" % out)
     head = git("rev-parse", "HEAD")
     if read_text(built_from).strip() != head:
-        stop("the files in %s were not built from main as it is now: run release.py build again" % out)
+        stop("the files in %s were not built from %s as it is now. Run release.py build again" % (out, bazaar_branch()))
     checked = os.path.join(out, CHECKED)
     if not no_check and (not os.path.exists(checked) or read_text(checked).strip() != head):
         stop(
@@ -835,6 +871,14 @@ def publish(notes, no_check=False):
         stop("the release notes file %s is missing or empty" % notes)
     if kept and not re.search(r"(?<![\d.])%s(?!\.?\d)" % re.escape(kept), read_text(notes)):
         stop("this release keeps the Bazaar of %s: the release notes must say so, naming %s" % (kept, kept))
+    listed = common.BAZAAR_VERSIONS.get(current_bazaar_version(current))
+    if listed is None:
+        stop(
+            "VERSION is for Bazaar %s, which BAZAAR_VERSIONS, in %s, doesn't list. Add the version to BAZAAR_VERSIONS,"
+            " with its mod ID, whether it goes on the Steam Workshop, and its Workshop item as None until the version's"
+            " mod is first published on the Workshop"
+            % (current_bazaar_version(current), common.shown(os.path.join(common.HERE, "common.py")))
+        )
     gh = require_gh()
     title = "Bazaar " + current.release
     tagged = tagged_commit(tag)
@@ -844,7 +888,7 @@ def publish(notes, no_check=False):
         stop("%s already tags another commit: if it was never pushed, delete it with git tag -d %s" % (tag, tag))
     git("push", "origin", "refs/tags/" + tag)
     cmd = [gh, "release", "create", tag, "--verify-tag", "--draft", "--title", title, "--notes-file", notes]
-    if not common.frozen(version.numbers(current.release)):
+    if not listed.on_workshop:
         cmd.append("--prerelease")
     done = subprocess.run(cmd + paths, cwd=common.REPO, capture_output=True, text=True, errors="replace")
     if done.returncode != 0:
@@ -854,13 +898,36 @@ def publish(notes, no_check=False):
         )
     say("draft release created: %s" % done.stdout.strip())
     say("check it on GitHub, then publish it there")
+    if listed.on_workshop:
+        say_about_latest(gh, current)
     return 0
+
+
+def say_about_latest(gh, current):
+    cmd = [gh, "release", "view", "--json", "tagName"]
+    done = subprocess.run(cmd, cwd=common.REPO, capture_output=True, text=True, errors="replace")
+    if done.returncode != 0:
+        if "release not found" not in done.stderr.lower():
+            say(
+                'couldn\'t check which release GitHub shows as "Latest": %s. GitHub\'s "Latest" release must be the'
+                " newest release of the newest version of Bazaar on the Workshop. When you publish this draft on"
+                ' GitHub, check that this is still true, and uncheck "Set as the latest release" if a newer version\'s'
+                " release is Latest" % done.stderr.strip()
+            )
+        return
+    tag = json.loads(done.stdout)["tagName"]
+    found = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag)
+    if found and version.numbers(found.group(1))[:2] > version.numbers(current.release)[:2]:
+        say(
+            "GitHub's latest release, %s, is for a newer version of Bazaar, so when you publish this one, uncheck"
+            ' "Set as the latest release"' % tag
+        )
 
 
 def workshop():
     current = version.read()
     tag = tag_of(current.release)
-    require_main()
+    require_version_branch()
     tagged = tagged_commit(tag)
     if tagged is None or not on_github(tag):
         stop("%s is not tagged on GitHub: publish the release first" % current.release)
@@ -889,9 +956,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("number", "prepare"):
-        choice = commands.add_parser(name).add_mutually_exclusive_group()
-        choice.add_argument("--major", action="store_true")
-        choice.add_argument("--same-bazaar", action="store_true")
+        commands.add_parser(name).add_argument("--same-bazaar", action="store_true")
     commands.add_parser("build").add_argument("--trial", action="store_true")
     commands.add_parser("check").add_argument("--trial", action="store_true")
     publishing = commands.add_parser("publish")
@@ -900,9 +965,9 @@ def main():
     commands.add_parser("workshop")
     args = parser.parse_args()
     if args.command == "number":
-        return number(args.major, args.same_bazaar)
+        return number(args.same_bazaar)
     if args.command == "prepare":
-        return prepare(args.major, args.same_bazaar)
+        return prepare(args.same_bazaar)
     if args.command == "build":
         return build(args.trial)
     if args.command == "check":
