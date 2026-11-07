@@ -2,7 +2,6 @@
 
 #include "CivHooks.h"
 #include "CivPluginApi.h"
-#include "PluginVersion.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -81,7 +80,7 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 {
 	s_host = host;
 	plugin->name = "Template Plugin";
-	plugin->version = PLUGIN_VERSION;
+	plugin->version = "1";
 	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
 	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");

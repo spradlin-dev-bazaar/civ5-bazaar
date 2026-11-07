@@ -1,5 +1,5 @@
 """Lay out the plugin SDK from the hooked host build, then check it: make a plugin from its template with the DLL
-skill's scaffold script, and release that plugin with the template's release script, against the SDK alone.
+skill's scaffold script, and build that plugin, with the build's checks of its package, against the SDK alone.
 
 usage: build_sdk.py   (after build-hooked.cmd; the SDK goes to sdk/out/Bazaar SDK)
 """
@@ -127,6 +127,22 @@ def lay_out():
         shutil.copy(path, SDK)
 
 
+def build_command(*paths):
+    """With /s and the outer pair of quotes, cmd keeps the quotes around each path, which paths with spaces need."""
+    return 'cmd /d /s /c "%s"' % " ".join('"%s"' % path for path in paths)
+
+
+def builds_and_passes_its_check(build_cmd, sdk, cwd=None):
+    """Runs build.cmd, showing what it prints. A build.cmd that no longer runs the package check fails here too."""
+    checked = False
+    command = build_command(build_cmd, sdk)
+    with subprocess.Popen(command, stdout=subprocess.PIPE, text=True, errors="replace", cwd=cwd) as build:
+        for line in build.stdout:
+            print(line, end="", flush=True)
+            checked = checked or line.startswith("build: checked ")
+    return build.returncode == 0 and checked
+
+
 def files_naming_this_machine(folder):
     needles = [common.REPO, common.REPO.replace("\\", "/"), common.REPO.replace("\\", "\\\\")]
     needles = [n.lower().encode("cp1252") for n in needles]
@@ -159,12 +175,13 @@ def main(args):
     scaffold = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", NEW_DLL_PLUGIN]
     scaffold += ["-DisplayName", "Template Check", "-FileName", CHECK_NAME, "-Sdk", SDK, "-Destination", OUT]
     scaffold += ["-Author", "Bazaar"]
-    env = dict(os.environ, BAZAAR_SDK=SDK)
-    if (
-        subprocess.run(scaffold).returncode != 0
-        or subprocess.run(["cmd", "/c", os.path.join(TEMPLATE_CHECK, "release.cmd")], env=env).returncode != 0
+    if subprocess.run(scaffold).returncode != 0 or not builds_and_passes_its_check(
+        os.path.join(TEMPLATE_CHECK, "build.cmd"), SDK
     ):
-        print("The template plugin, made with the DLL skill's scaffold script, did not release against the SDK.")
+        print(
+            "Making a plugin from the SDK's template with the DLL skill's scaffold script and building it with its"
+            ' build.cmd against the SDK did not end with the line "build: checked".'
+        )
         return 1
     print(SDK)
     return 0

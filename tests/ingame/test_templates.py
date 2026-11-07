@@ -18,6 +18,10 @@ import sync_checker
 from bazaar_check import runner
 
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, os.path.join(REPO, "sdk"))
+
+import build_sdk  # noqa: E402
+
 SOURCE = os.path.join(REPO, "tools", "bazaar_check")
 TEMPLATES = [
     os.path.join(REPO, "sdk", "plugin-template"),
@@ -49,11 +53,13 @@ class TemplatesTest(unittest.TestCase):
                 first, second = (os.path.join(template, name) for template in TEMPLATES)
                 self.assertTrue(filecmp.cmp(first, second, shallow=False))
 
-    def check_cmd(self, build="echo built", python=True, script="check.cmd", shim='@"%s" %%*' % sys.executable):
-        """check.cmd run from a folder with brackets in its name, with a stub build.cmd and a checks.toml the checker
-        refuses at once, finding Python only as a .bat, as pyenv-win's python is."""
+    def check_cmd(
+        self, build="echo built", python=True, script="check.cmd", shim='@"%s" %%*' % sys.executable, args=()
+    ):
+        """check.cmd run from a folder with brackets and a ^ in its name, with a stub build.cmd and a checks.toml the
+        checker refuses at once, finding Python only as a .bat, as pyenv-win's python is."""
         with tempfile.TemporaryDirectory() as folder:
-            template = os.path.join(folder, "My Mod (x86)")
+            template = os.path.join(folder, "My ^Mod (x86)")
             shutil.copytree(TEMPLATES[0], template, ignore=shutil.ignore_patterns("__pycache__"))
             with open(os.path.join(template, "build.cmd"), "w") as f:
                 f.write("@echo off\n%s\n" % build)
@@ -66,7 +72,7 @@ class TemplatesTest(unittest.TestCase):
             path = [shims] if python else []
             env = dict(os.environ, PATH=os.pathsep.join(path + [os.path.join(os.environ["SystemRoot"], "System32")]))
             done = subprocess.run(
-                ["cmd", "/c", os.path.join(template, script)],
+                build_sdk.build_command(os.path.join(template, script), *args),
                 capture_output=True,
                 text=True,
                 env=env,
@@ -83,6 +89,12 @@ class TemplatesTest(unittest.TestCase):
     def test_play_cmd_builds_then_runs_the_checker_to_play(self):
         _, printed, _ = self.check_cmd(script="play.cmd", shim="@echo python %*\n@exit /b 0")
         self.assertEqual(printed, ["built", "python -m bazaar_check --play checks.toml"])
+
+    def test_a_folder_goes_to_build_cmd_whole_and_options_go_to_the_checker(self):
+        sdk = r"C:\Bazaar ^SDK (x86)"
+        shim = "@echo python %*\n@exit /b 0"
+        _, printed, _ = self.check_cmd(build='echo built with "%~1"', script="play.cmd", shim=shim, args=[sdk])
+        self.assertEqual(printed, ['built with "%s"' % sdk, "python -m bazaar_check --play checks.toml"])
 
     def test_play_cmd_waits_for_a_key_when_it_fails_so_its_window_stays_open(self):
         code, printed, _ = self.check_cmd(build="exit /b 3", script="play.cmd")

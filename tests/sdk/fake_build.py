@@ -1,25 +1,17 @@
-"""Stands in for a template's build.cmd in the release script's tests: packs what build.cmd would, from the project's
-.civ5proj and .sql files, with a stand-in DLL for each DllPlugins row.
+"""Stands in for the building part of a template's build.cmd in the build script's tests: packs what build.cmd would,
+from the project's .civ5proj and its .sql and .xml database updates, with a stand-in for each DLL it is told of."""
 
-usage: fake_build.py PROJECT_FOLDER
-
-Environment variables make it go wrong on purpose: FAKE_BUILD_FAIL, FAKE_NO_PACKAGE, FAKE_API ("major.minor", or
-"none" for no API version), FAKE_64BIT, FAKE_SKIP_DLL (a DLL name to leave out), FAKE_AFFECTS_SAVES ("0"),
-FAKE_COMMENTED_SAVES (the setting commented out), FAKE_BROKEN_MODINFO, FAKE_NO_ROW, FAKE_MODINFO_VERSION,
-FAKE_TWO_MODINFO, FAKE_UNLISTED_DLL (a DLL name to leave out of the mod's file list) and FAKE_PACKAGE_NAME.
-"""
-
+import dataclasses
 import glob
 import os
-import re
 import shutil
 import struct
 import subprocess
-import sys
 import tempfile
 from xml.etree import ElementTree
 
 TAR = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar.exe")
+SAVES = "<AffectsSavedGames>1</AffectsSavedGames>"
 
 
 def fake_dll(exports, magic=0x10B):
@@ -52,105 +44,86 @@ def fake_dll(exports, magic=0x10B):
     return bytes(headers + bytes(0x200) + body)
 
 
-def read(path):
-    with open(path, encoding="latin-1") as f:
-        return f.read()
-
-
-def write(path, text):
-    with open(path, "w", encoding="latin-1", newline="") as f:
-        f.write(text)
-
-
-def sdk_api():
-    header = read(os.path.join(os.environ["BAZAAR_SDK"], "include", "CivPluginApi.h"))
-    return "%s.%s" % tuple(re.search(r"#define CIV_HOST_API_%s (\d+)" % p, header).group(1) for p in ("MAJOR", "MINOR"))
-
-
-def dll_plugin_rows(sql):
-    code = re.sub(r"'[^']*'|--[^\r\n]*|/\*.*?\*/", lambda m: m[0] if m[0][0] == "'" else "", sql, flags=re.S)
-    for insert in re.findall(r"(?i)(?:INSERT\s+(?:OR\s+\w+\s+)?|REPLACE\s+)INTO\s+[\"`\[]?DllPlugins\b[^;]*", code):
-        yield from re.findall(r"'([^']+)'", insert)
-
-
-def write_dll(path):
-    api = os.environ.get("FAKE_API") or sdk_api()
+def write_dll(path, api, bits):
     exports = {"CivPluginEntry": b"code"}
-    if api != "none":
+    if api:
         exports["CivPluginApiVersion"] = struct.pack("<ii", *(int(n) for n in api.split(".")))
     with open(path, "wb") as f:
-        f.write(fake_dll(exports, 0x20B if os.environ.get("FAKE_64BIT") else 0x10B))
-
-
-def local_name(element):
-    return element.tag.rsplit("}", 1)[-1]
+        f.write(fake_dll(exports, 0x20B if bits == 64 else 0x10B))
 
 
 def project_property(civ5proj, name):
     for group in ElementTree.parse(civ5proj).getroot():
-        if local_name(group) == "PropertyGroup":
+        if group.tag.endswith("PropertyGroup"):
             for element in group:
-                if local_name(element) == name:
+                if element.tag.endswith("}" + name):
                     return element.text or ""
     return None
 
 
-def stage_mod(project, stage, mod):
-    updates = []
-    files = []
-    for sql in glob.glob(os.path.join(project, "mod", "*.sql")):
-        text = read(sql)
-        if os.environ.get("FAKE_NO_ROW"):
-            text = re.sub(r"(?i)INSERT\s+INTO\s+DllPlugins[^;]*;", "", text)
-        write(os.path.join(stage, os.path.basename(sql)), text)
-        updates.append(os.path.basename(sql))
-        files.append(os.path.basename(sql))
-        for dll in dll_plugin_rows(text):
-            if dll != os.environ.get("FAKE_SKIP_DLL"):
-                write_dll(os.path.join(stage, dll))
-            if dll != os.environ.get("FAKE_UNLISTED_DLL"):
-                files.append(dll)
-    saves = "<AffectsSavedGames>%s</AffectsSavedGames>" % os.environ.get("FAKE_AFFECTS_SAVES", "1")
-    if os.environ.get("FAKE_COMMENTED_SAVES"):
-        saves = "<!-- %s -->" % saves
-    modinfo = (
-        '<Mod id="x" version="%s"><Properties>%s</Properties><Files>%s</Files>'
-        "<Actions><OnModActivated>%s</OnModActivated></Actions></Mod>"
-        % (
-            os.environ.get("FAKE_MODINFO_VERSION", mod),
-            saves,
-            "".join('<File md5="0" import="0">%s</File>' % name for name in files),
-            "".join("<UpdateDatabase>%s</UpdateDatabase>" % u for u in updates),
+@dataclasses.dataclass
+class Build:
+    """What to pack: each DLL declares api, "major.minor", or no version when api is None, and sits in dll_folder, with
+    a second listed copy in copy_in when that is given. skip_dll is left out of the package and unlisted_dll out of the
+    mod's file list; saves is what the mod description's <Properties> holds."""
+
+    dlls: tuple = ()
+    dll_folder: str = ""
+    copy_in: str = ""
+    api: str | None = None
+    bits: int = 32
+    skip_dll: str | None = None
+    unlisted_dll: str | None = None
+    saves: str = SAVES
+    broken_modinfo: bool = False
+    two_modinfo: bool = False
+    package_name: str | None = None
+
+    def stage(self, project, stage, mod):
+        updates = []
+        for pattern in ("*.sql", "*.xml"):
+            for path in glob.glob(os.path.join(project, "mod", pattern)):
+                shutil.copy(path, stage)
+                updates.append(os.path.basename(path))
+        os.makedirs(os.path.join(stage, self.dll_folder), exist_ok=True)
+        for dll in self.dlls:
+            if dll != self.skip_dll:
+                write_dll(os.path.join(stage, self.dll_folder, dll), self.api, self.bits)
+        listed = [dll for dll in self.dlls if dll != self.unlisted_dll]
+        files = updates + [self.dll_folder + "\\" + dll if self.dll_folder else dll for dll in listed]
+        if self.copy_in:
+            os.makedirs(os.path.join(stage, self.copy_in))
+            for dll in self.dlls:
+                write_dll(os.path.join(stage, self.copy_in, dll), self.api, self.bits)
+            files += [self.copy_in + "\\" + dll for dll in self.dlls]
+        modinfo = (
+            '<Mod id="x" version="%s"><Properties>%s</Properties><Files>%s</Files>'
+            "<Actions><OnModActivated>%s</OnModActivated></Actions></Mod>"
+            % (
+                mod,
+                self.saves,
+                "".join('<File md5="0" import="0">%s</File>' % name for name in files),
+                "".join("<UpdateDatabase>%s</UpdateDatabase>" % u for u in updates),
+            )
         )
-    )
-    if os.environ.get("FAKE_BROKEN_MODINFO"):
-        modinfo = modinfo.replace("</Properties>", "", 1)
-    write(os.path.join(stage, "mod.modinfo"), modinfo)
-    if os.environ.get("FAKE_TWO_MODINFO"):
-        write(os.path.join(stage, "another.modinfo"), modinfo)
+        if self.broken_modinfo:
+            modinfo = modinfo.replace("</Properties>", "", 1)
+        with open(os.path.join(stage, "mod.modinfo"), "w") as f:
+            f.write(modinfo)
+        if self.two_modinfo:
+            shutil.copy(os.path.join(stage, "mod.modinfo"), os.path.join(stage, "another.modinfo"))
 
-
-def main(project):
-    if os.environ.get("FAKE_BUILD_FAIL"):
-        print("fake build: failing on purpose")
-        return 1
-    if os.environ.get("FAKE_NO_PACKAGE"):
-        return 0
-    (civ5proj,) = glob.glob(os.path.join(project, "mod", "*.civ5proj"))
-    name = os.environ.get("FAKE_PACKAGE_NAME") or project_property(civ5proj, "Name")
-    mod = project_property(civ5proj, "ModVersion").strip()
-    packages = os.path.join(project, "Packages")
-    os.makedirs(packages, exist_ok=True)
-    package = os.path.join(packages, "%s (v %s).civ5mod" % (name, mod))
-    stage = tempfile.mkdtemp()
-    try:
-        stage_mod(project, stage, mod)
-        subprocess.run([TAR, "-c", "--format", "7zip", "-f", package, "-C", stage] + os.listdir(stage), check=True)
-    finally:
-        shutil.rmtree(stage)
-    print("fake build: made " + os.path.basename(package))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    def pack(self, project):
+        (civ5proj,) = glob.glob(os.path.join(project, "mod", "*.civ5proj"))
+        name = self.package_name or project_property(civ5proj, "Name")
+        mod = project_property(civ5proj, "ModVersion").strip()
+        packages = os.path.join(project, "Packages")
+        os.makedirs(packages, exist_ok=True)
+        package = os.path.join(packages, "%s (v %s).civ5mod" % (name, mod))
+        stage = tempfile.mkdtemp()
+        try:
+            self.stage(project, stage, mod)
+            subprocess.run([TAR, "-c", "--format", "7zip", "-f", package, "-C", stage] + os.listdir(stage), check=True)
+        finally:
+            shutil.rmtree(stage)
+        return package
