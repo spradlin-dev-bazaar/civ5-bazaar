@@ -4,7 +4,7 @@
 # Mod IDs: c411a905 Toy Gold, b012c631 Toy Saves, bd4f6967 Toy Rival. The save is made with every mod below but Toy
 # Rival, so after a load, exactly four mods on, Toy Rival not among them, means the save's own mods are on.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
     "../out/MODS/Toy Gold Plugin (v 1)",
     "../out/MODS/Toy Saves Plugin (v 1)",

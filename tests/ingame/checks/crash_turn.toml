@@ -1,7 +1,7 @@
 # Toy Crash crashes as the human player's first turn starts. Bazaar's pop-up names it, the turn is not autosaved, and a
 # game saved anyway warns when it is loaded.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
     "../out/MODS/Toy Crash Plugin (v 1)",
 ]

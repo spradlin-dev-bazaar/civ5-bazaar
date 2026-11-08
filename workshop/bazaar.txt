@@ -1,4 +1,4 @@
-[h1]Bazaar Multi-DLL Mod Loader[/h1]
+[h1]Bazaar 0.5 - Multi-DLL Mod Loader[/h1]
 Civilization V loads only one game DLL, so normally only one DLL mod can run at a time. Bazaar replaces the game DLL with one that loads other DLL mods as plugins, so several can run in the same game.
 
 Bazaar also includes whoward69's Various Mod Components (VMC, version 97), so mods that need VMC work with Bazaar too.
