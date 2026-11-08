@@ -14,14 +14,14 @@ It builds the test plugins below against the last `build-hooked.cmd` build with 
 
 | Test plugin | What it does | Checked by |
 |---|---|---|
-| Toy Gold | Logs the start and end of the human player's turns, and replaces the score with 4242 without running the game's own function. | `plugins`, `rival_wins`, `saves` |
-| Toy Rival | Replaces the score too: turned away below Toy Gold, the winner above it, with a score of 1. | `plugins`, `rival_wins` |
+| Toy Gold | Logs the start and end of the human player's turns, and replaces the score with 4242 without running the game's own function. | `plugins`, `rival_wins`, `saves`, `mod_switch` |
+| Toy Rival | Replaces the score too: turned away below Toy Gold, the winner above it, with a score of 1. | `plugins`, `rival_wins`, `mod_switch` |
 | Toy Newer | Built for a newer Bazaar, so it is not loaded. | `plugins` |
 | Toy Hand | Uses the hand-placed hooks and adds two Lua functions, one of which raises a Lua error on purpose. | `plugins`, `use_both` |
 | Toy Hand Replace | Replaces a function whose hook Toy Hand uses: held back below Toy Hand, loaded with Use both anyway. | `plugins`, `use_both` |
 | Toy VMC Check | A Lua mod: switches on one of VMC's events and writes what it sees, and Toy Hand's Lua functions, to `Lua.log`. | `plugins` |
 | Toy Crash | Crashes as the human player's first turn starts, or in a Lua function. | `crash_turn`, `crash_lua` |
-| Toy Saves | Keeps data in saved games, publishes values that carry over when the game replaces a unit or city, and a function Toy Gold calls. | `saves` |
+| Toy Saves | Keeps data in saved games, publishes values that carry over when the game replaces a unit or city, and a function Toy Gold calls. | `saves`, `mod_switch` |
 
 ## The test DLC pack
 
