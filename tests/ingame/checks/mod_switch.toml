@@ -1,0 +1,69 @@
+# Loading a save with other mods switched on makes the game switch to exactly the save's mods.
+# The game's own code for that switch skips most mods after the first, and Bazaar fixes it,
+# so both loads below bring back all of the save's mods.
+# Mod IDs: c411a905 Toy Gold, b012c631 Toy Saves, bd4f6967 Toy Rival. The save is made with every mod below but Toy
+# Rival, so after a load, exactly four mods on, Toy Rival not among them, means the save's own mods are on.
+mods = [
+    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+    "../out/MODS/Toy Gold Plugin (v 1)",
+    "../out/MODS/Toy Saves Plugin (v 1)",
+    "../out/MODS/Toy Rival Plugin (v 1)",
+]
+plugin_order = ["ToyGold.dll", "ToySaves.dll", "ToyRival.dll"]
+
+[[steps]]
+log = "Bazaar.log"
+has = "^Bazaar fixed the game's bug"
+count = 1
+
+[[steps]]
+run = 'Modding.DisableMod("bd4f6967-e129-4de5-9ac5-58627909ed43", 1) Modding.DeactivateMods() Modding.ActivateEnabledMods()'
+state = "MainMenu"
+
+[[steps]]
+start_game = "duel"
+
+[[steps]]
+save = "mod_switch"
+
+[[steps]]
+main_menu = true
+
+[[steps]]
+run = 'Modding.DisableMod("c411a905-2f0d-471c-848b-357ccf98ab4b", 1) Modding.DisableMod("b012c631-4178-4d68-99af-7c2fcf5d3701", 1) Modding.DeactivateMods() Modding.ActivateEnabledMods()'
+state = "MainMenu"
+
+[[steps]]
+load = "mod_switch"
+
+[[steps]]
+lua = '(function() local on, count = {}, 0 for _, m in ipairs(Modding.GetActivatedMods()) do on[string.lower(m.ID)] = true count = count + 1 end return count == 4 and on["c411a905-2f0d-471c-848b-357ccf98ab4b"] == true and on["b012c631-4178-4d68-99af-7c2fcf5d3701"] == true and not on["bd4f6967-e129-4de5-9ac5-58627909ed43"] end)()'
+what = "with both of its plugins off, the save loads with both switched back on"
+
+[[steps]]
+lua = "Game.GetPluginValue ~= nil"
+what = "Bazaar's DLL runs the loaded game"
+
+[[steps]]
+main_menu = true
+
+[[steps]]
+run = 'Modding.EnableMod("bd4f6967-e129-4de5-9ac5-58627909ed43", 1) Modding.DeactivateMods() Modding.ActivateEnabledMods()'
+state = "MainMenu"
+
+[[steps]]
+load = "mod_switch"
+
+[[steps]]
+lua = '(function() local on, count = {}, 0 for _, m in ipairs(Modding.GetActivatedMods()) do on[string.lower(m.ID)] = true count = count + 1 end return count == 4 and on["c411a905-2f0d-471c-848b-357ccf98ab4b"] == true and on["b012c631-4178-4d68-99af-7c2fcf5d3701"] == true and not on["bd4f6967-e129-4de5-9ac5-58627909ed43"] end)()'
+what = "with a plugin it lacks switched on, the save loads with exactly its own mods"
+
+[[steps]]
+lua = "Game.GetPluginValue ~= nil"
+what = "Bazaar's DLL runs the loaded game"
+
+[[steps]]
+log = "Bazaar.log"
+lacks = "^Bazaar could not fix the game's bug"
+what = "the fix is tried once a run, not again each time the mods switch"
