@@ -4,56 +4,60 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: The release whose docs site to publish again, such as v0.3.0
-        required: true
-        type: string
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+permissions: {}
 
 jobs:
-  find:
+  # A release runs this file as it is at the release's tag, on any version's branch, so that run only starts the
+  # default branch's copy, the only copy that builds the site.
+  ask:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    outputs:
-      docs: ${{ steps.find.outputs.docs }}
+    permissions:
+      actions: write
     steps:
-      # A release that keeps an earlier Bazaar ships a docs zip only if the docs changed; without one the site stays.
-      - id: find
+      - name: Ask the default branch's copy of this Action to build the site again
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
+  # This check is a job of its own because, on any other branch, GitHub refuses the publish job's github-pages
+  # environment before any step of the publish job runs, and the check's message would never show.
+  check:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop unless this runs on the default branch
+        if: github.ref_name != github.event.repository.default_branch
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
-          if grep -qxF "Bazaar-docs-${TAG#v}.zip" <<<"$assets"; then
-            echo "docs=yes" >> "$GITHUB_OUTPUT"
-          else
-            echo "$TAG has no docs zip, so the docs site stays as it is."
-          fi
+          echo "::error::Run this Action on $BRANCH, the default branch, which builds the site for every version."
+          exit 1
 
   publish:
-    needs: find
-    if: needs.find.outputs.docs == 'yes'
+    needs: check
     runs-on: ubuntu-latest
-    # A release runs this from its tag, so the github-pages environment must let tags v* deploy as well as main.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Unpack the release's docs zip
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: tools/docs/gather_site.py
+          sparse-checkout-cone-mode: false
+      - name: Gather the site from the releases' docs zips
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: |
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "Bazaar-docs-${TAG#v}.zip"
-          unzip -q "Bazaar-docs-${TAG#v}.zip" -d site
+        run: python3 tools/docs/gather_site.py --repo "$GITHUB_REPOSITORY" site
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site

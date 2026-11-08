@@ -24,6 +24,7 @@ import model  # noqa: E402
 import pages  # noqa: E402
 import render  # noqa: E402
 import render_md  # noqa: E402
+import version  # noqa: E402
 from paths import LICENSE_FILE, NOTICE_FILE  # noqa: E402
 
 DEFAULT_OUT = os.path.join(common.SOURCE_ROOT, "BuildTemp", "docs")
@@ -92,6 +93,10 @@ def write(site, out):
     shutil.copyfile(common.LICENSE, os.path.join(out, LICENSE_FILE))
 
 
+def site_name(release):
+    return "Bazaar %s developer reference" % version.bazaar_version(release or version.read().release)
+
+
 def build(project, out, inputs=INPUTS, history_path=HISTORY, release=None):
     started = time.time()
     saved_release, entries = history.load(history_path)
@@ -106,7 +111,7 @@ def build(project, out, inputs=INPUTS, history_path=HISTORY, release=None):
             )
         entries = history.update(saved_release, entries, engine.history_now(), release)
     engine.apply_history(entries)
-    site = pages.Site(engine, inputs)
+    site = pages.Site(engine, inputs, site_name(release))
     broken = broken_links(site)
     if broken:
         for path, href in broken[:20]:
