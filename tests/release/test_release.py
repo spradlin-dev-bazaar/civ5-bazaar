@@ -297,7 +297,7 @@ class VersionBranchTest(unittest.TestCase):
             self.require("0.5.x", remote="def")
 
     def test_the_list_of_versions_ends_with_this_branch_s_version(self):
-        self.assertEqual(list(release.common.BAZAAR_VERSIONS)[-1], release.current_bazaar_version())
+        self.assertEqual(release.common.HOST_VERSION, release.current_bazaar_version())
 
     def test_only_a_release_branch_of_this_version_blocks_prepare(self):
         def git(*args, check=True):

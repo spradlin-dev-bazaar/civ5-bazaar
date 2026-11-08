@@ -1,6 +1,6 @@
 # Toy Hand Replace replaces a function whose hook Toy Hand uses; with Use both anyway, both load and both work.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
     "../out/MODS/Toy Hand Plugin (v 1)",
     "../out/MODS/Toy Hand Replace Plugin (v 1)",

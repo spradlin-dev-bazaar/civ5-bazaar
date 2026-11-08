@@ -1,7 +1,7 @@
 # Toy Crash crashes in a Lua function: Lua gets an error, not a crash, and Bazaar's pop-up says it will return the
 # player to the main menu.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
     "../out/MODS/Toy Crash Plugin (v 1)",
 ]

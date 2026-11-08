@@ -159,6 +159,7 @@ def wait_for_file(item, package, before):
 
 def upload(release, package):
     item = bazaar_item(release)
+    title = common.HOST_MOD_NAME
     note = change_note(read_text(CHANGES), release)
     description = read_text(DESCRIPTION)
     require_fits("the %s section of %s" % (release, common.shown(CHANGES)), note)
@@ -168,8 +169,9 @@ def upload(release, package):
     uploader = build_uploader()
     note_file = write_text("change-note.txt", note)
     description_file = write_text("description.txt", description)
-    say("uploading %s to item %d" % (os.path.basename(package), item))
-    command = [uploader, api, str(item), package, note_file, description_file]
+    title_file = write_text("title.txt", title)
+    say("uploading %s to item %d, titled %s" % (os.path.basename(package), item, title))
+    command = [uploader, api, str(item), package, note_file, description_file, title_file]
     if subprocess.run(command, cwd=OUT).returncode != 0:
         stop("the uploader stopped, as its message above says")
     if not wait_for_file(item, package, before):
