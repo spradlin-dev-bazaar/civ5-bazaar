@@ -10,6 +10,7 @@ The host's own code, compiled into the host DLL. Every `.cpp` file here is built
 - `CivHostOrder`: the plugin order the player sets on the Plugins screen: the text it is saved as, matching it to the listed plugins, and the screen's rows and notes.
 - `CivHostNotices`: the notices waiting for a game to show them, and naming a lasting problem only once a game.
 - `CivHostMods`: the mods the game has switched on, as its own mod database lists them: finding a plugin's DLL or a screen's file among their files, and refusing a plugin whose mod does not affect saved games.
+- `CivHostModSwitch`: the fix for the game's bug in switching mods when a save loads or a replay is viewed. Bazaar finds the game's four faulty loops by their machine code, runs the checks before it changes the four loops, and puts the fix into the game's code.
 - `CivHostSetup`: finding the Advanced Setup screen that the Plugins screen replaced, so Continue can open it, and checking that no other mod's Advanced Setup comes before the Plugins screen.
 - `CivHostDlc`: the UI skins of the DLC packs in the game's folder, whose files the game shows in place of its own, and which pack's file the game takes for a screen.
 - `CivHostPath`: file names and paths. Bazaar keeps them in UTF-8 and gives them to Windows as wide characters, so names in any language work.
