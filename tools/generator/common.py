@@ -80,8 +80,9 @@ BAZAAR_VERSIONS = {
     "0.5": BazaarVersion("b829cadb-b570-46c5-a0ba-419434eb6398", True, 3825428828),
 }
 # The host's mod in this branch's version, which the plugin and Lua mod templates depend on.
-HOST_MOD_ID = list(BAZAAR_VERSIONS.values())[-1].mod_id
-HOST_MOD_NAME = "Bazaar Multi-DLL Mod Loader"
+HOST_VERSION = list(BAZAAR_VERSIONS)[-1]
+HOST_MOD_ID = BAZAAR_VERSIONS[HOST_VERSION].mod_id
+HOST_MOD_NAME = "Bazaar %s - Multi-DLL Mod Loader" % HOST_VERSION
 
 
 class Project:

@@ -1,7 +1,7 @@
 # A DLC pack whose UI skin has its own Advanced Setup script, which run.py puts in the game's DLC folder for this run
 # only. Bazaar's Plugins screen still comes first, and its Continue opens the pack's script with the game's layout.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
 ]
 

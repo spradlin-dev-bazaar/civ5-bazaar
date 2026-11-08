@@ -1,7 +1,7 @@
 # Toy Saves keeps its data in saved games and publishes values and a function. Saving and loading brings its data
 # back, and values carry over when the game replaces a unit or a city.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
     "../out/MODS/Toy Saves Plugin (v 1)",
     "../out/MODS/Toy Gold Plugin (v 1)",
