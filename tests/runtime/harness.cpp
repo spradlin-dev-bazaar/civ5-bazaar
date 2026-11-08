@@ -36,6 +36,7 @@ void TestPossibleConflicts();
 void TestSkippedOriginal();
 void TestReplacementsOnTwoThreads();
 void TestPaths();
+void TestModSwitch();
 void TestActiveMods();
 void TestLuaFunctions();
 void TestSaveRegistration();
@@ -126,6 +127,7 @@ namespace
 		{"skipped original", &TestSkippedOriginal},
 		{"replacements on two threads", &TestReplacementsOnTwoThreads},
 		{"paths", &TestPaths},
+		{"mod switch fix", &TestModSwitch},
 		{"active mods", &TestActiveMods},
 		{"lua functions", &TestLuaFunctions},
 		{"save registration", &TestSaveRegistration},

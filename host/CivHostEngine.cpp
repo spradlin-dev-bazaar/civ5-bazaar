@@ -4,6 +4,7 @@
 #include "CivHostEngine.h"
 #include "CivHostLock.h"
 #include "CivHostMods.h"
+#include "CivHostModSwitch.h"
 #include "CivHostNotices.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
@@ -621,8 +622,43 @@ std::vector<int> CivHostTeamPlayers(int team)
 	return players;
 }
 
+namespace
+{
+	// Set at the first try in a run of the game, whether the fix goes in or not, since a fixed loop no longer matches the
+	// search when the game loads this DLL again. Every version of Bazaar must use this name, as two can load in one run.
+	const char* const kModSwitchTried = "BAZAAR_MOD_SWITCH_TRIED";
+
+	void FixModSwitch()
+	{
+		if (GetEnvironmentVariableA(kModSwitchTried, NULL, 0) != 0)
+			return;
+		SetEnvironmentVariableA(kModSwitchTried, "1");
+		const unsigned int exe = reinterpret_cast<unsigned int>(GetModuleHandleA(NULL));
+		std::vector<CivModSwitchLoop> loops;
+		unsigned int reset = 0;
+		std::string problem = CivFindModSwitch(reinterpret_cast<const void*>(exe), &loops, &reset);
+		if (problem.empty())
+			problem = CivPatchModSwitch(loops, reset);
+		if (!problem.empty())
+		{
+			LogLine(("Bazaar could not fix the game's bug in switching mods when a save loads or a replay is viewed, because " + problem
+				+ ". Loading a save with other mods switched on could crash the game or leave some of the save's mods out.").c_str());
+			return;
+		}
+		std::string places;
+		for (size_t i = 0; i < loops.size(); ++i)
+		{
+			char place[16];
+			sprintf_s(place, "+0x%X", loops[i].address - exe);
+			places += (i == 0 ? "" : i + 1 == loops.size() ? " and " : ", ") + std::string(place);
+		}
+		LogLine(("Bazaar fixed the game's bug in switching mods when a save loads or a replay is viewed, at " + places + ".").c_str());
+	}
+}
+
 void CivHostOnDatabaseReady()
 {
+	FixModSwitch();
 	UseListedPlugins(SavedOrder(), NULL);
 	if (GetEnvironmentVariableA(kReloading, NULL, 0) != 0)
 	{

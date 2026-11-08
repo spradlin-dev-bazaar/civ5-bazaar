@@ -31,6 +31,7 @@ To install by hand instead, download both packages from the newest release on th
 
 - Bazaar keeps each plugin's data in your saved games, so when you load a game, its plugins carry on where they left off.
 - A save made with a plugin's mod turned on loads only with that mod, as with any mod that affects saved games.
+- When you load a save with other mods switched on, the game switches to the save's mods that are set to affect saved games, so a plugin can't be added to a game you saved without it. Bazaar fixes the game's bug in that switch, which would otherwise crash the load or leave some of the save's mods out. The fix works once you have switched Bazaar on in that run of the game.
 - If you turn a plugin off for a while, Bazaar keeps its data in your saves, and the plugin gets it back when you turn it on again.
 - If Bazaar cannot read its part of a save, it tells you when the save loads, so you can keep a copy before saving over it.
 
