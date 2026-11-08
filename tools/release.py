@@ -91,6 +91,7 @@ FIXES_ONLY = ("0.5",)
 
 BOOTSTRAP_PATTERN = "Bazaar-VMC-Bootstrap-*.civ5mod"
 DOCS_PATTERN = "Bazaar-docs-*.zip"
+DOCS_SITE_FILES = (".github/workflows/docs.yml", "tools/docs/gather_site.py")
 BUILD_SETTINGS = "CivPlugin.vsprops"
 RUN_AGAIN = "run it without --same-bazaar"
 PREPARE_AGAIN = "prepare the release again without --same-bazaar"
@@ -633,6 +634,7 @@ def prepare(same_bazaar=False):
     require_version_branch()
     target = bazaar_branch()
     require_no_release_branch()
+    require_docs_site_files(require_gh(), "run release.py prepare again")
     tag = last_release()
     require_options_allowed(tag, same_bazaar)
     run("building the host", ["cmd", "/c", BUILD_HOOKED])
@@ -883,6 +885,12 @@ def publish(notes, no_check=False):
     title = "Bazaar " + current.release
     tagged = tagged_commit(tag)
     if tagged is None:
+        require_docs_site_files(
+            gh,
+            "build the release files again with release.py build, check them in the game again with release.py check "
+            "(unless the release only changes the docs and is published with --no-check), and run release.py publish "
+            "again",
+        )
         git("tag", "-a", tag, "-m", title)
     elif tagged != head:
         stop("%s already tags another commit: if it was never pushed, delete it with git tag -d %s" % (tag, tag))
@@ -901,6 +909,34 @@ def publish(notes, no_check=False):
     if listed.on_workshop:
         say_about_latest(gh, current)
     return 0
+
+
+def require_docs_site_files(gh, remedy):
+    """A release runs its own branch's copy of the docs Action, so a copy that differs from the default branch's can
+    publish the site wrongly."""
+    done = subprocess.run(
+        [gh, "repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+        cwd=common.REPO,
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    default = done.stdout.strip()
+    if done.returncode != 0 or not default:
+        stop(
+            "couldn't get the default branch's name from GitHub. Fix the problem and run the command again. %s"
+            % done.stderr.strip()
+        )
+    git("fetch", "--quiet", "origin", default)
+    # A clone that fetches only its own branch has no origin/<default>, and diffing that would read as a difference.
+    if git("diff", "--quiet", "HEAD", "FETCH_HEAD", "--", *DOCS_SITE_FILES, check=False) is None:
+        stop(
+            "%(files)s on this branch differ from the same files on the default branch %(default)s. Both files are "
+            "meant to be the same on every version's branch, and publishing a release runs this branch's docs.yml, so "
+            "a copy that differs could publish the site wrongly, for example with only this release's docs on it. Copy "
+            "both files from %(default)s into this branch through a pull request, then %(remedy)s."
+            % {"files": " and ".join(DOCS_SITE_FILES), "default": default, "remedy": remedy}
+        )
 
 
 def say_about_latest(gh, current):

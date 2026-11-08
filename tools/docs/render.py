@@ -13,7 +13,6 @@ from paths import HOME_PAGE, NOTICE_FILE, rel_link
 LEXER = CppLexer()
 LIGHT_STYLE = "vs"
 DARK_STYLE = "github-dark"
-SITE_NAME = "Bazaar developer reference"
 STYLE_FILE = "style.css"
 SCRIPT_FILE = "search.js"
 INDEX_FILE = "search-index.js"
@@ -158,13 +157,13 @@ def block(b, path):
     raise TypeError("no HTML for %r" % (b,))
 
 
-def page(outline):
+def page(outline, site_name):
     root = "../" * outline.path.count("/")
     trail = [
         (label, None if target == outline.path else rel_link(outline.path, target)) for label, target in outline.trail
     ]
     body = "<h1>%s</h1>" % esc(outline.heading) + "".join(block(b, outline.path) for b in outline.blocks)
-    title = outline.title if outline.title == SITE_NAME else "%s - %s" % (outline.title, SITE_NAME)
+    title = outline.title if outline.title == site_name else "%s - %s" % (outline.title, site_name)
     return (
         "<!doctype html>\n"
         '<html lang="en"><head><meta charset="utf-8">'
@@ -181,7 +180,7 @@ def page(outline):
         "</body></html>\n"
     ) % {
         "title": esc(title),
-        "site": esc(SITE_NAME),
+        "site": esc(site_name),
         "root": esc(root),
         "style": STYLE_FILE,
         "script": SCRIPT_FILE,

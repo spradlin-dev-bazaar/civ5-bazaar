@@ -17,9 +17,11 @@ import model  # noqa: E402
 import pages  # noqa: E402
 import render  # noqa: E402
 import render_md  # noqa: E402
+import version  # noqa: E402
 from outline import Entries  # noqa: E402
 
 OUT = os.path.join(HERE, "out")
+SITE_NAME = "Bazaar %s developer reference" % version.bazaar_version(version.read().release)
 SITE = os.path.join(OUT, "site")
 HAND_HOOKS = os.path.join(HERE, "hand-placed-hooks.md")
 NO_HISTORY = os.path.join(OUT, "no-history.txt")
@@ -403,7 +405,7 @@ def first_releases(releases):
     second = releases.run("release-2", "0.2.0", RELEASE_EDITS)
     if marked(second) != ["Added()", "Thing::Total()"]:
         problems.append("release 0.2.0 marked %s, not Added() and Thing::Total()" % marked(second))
-    problems += expect(second, "Added()", "<dt>Added in</dt><dd>0.2.0</dd>")
+    problems += expect(second, "Added()", "<dt>Added in</dt><dd>0.2.0</dd>", ">Bazaar 0.2 developer reference</a>")
     problems += unwanted(second, "Thing::Total()", "<dt>Added in</dt>")
     blame = "blame/v0.2.0/tests/docs/out/release-2/docs_engine.cpp#L%d-L%d" % lines_of(
         "release-2", "int Thing::Total()"
@@ -659,7 +661,8 @@ def markdown_writer_problems():
 def html_problems(site):
     wanted = {
         THING + "Score-bool-const.html": [
-            "<title>Thing::Score(bool) const - Bazaar developer reference</title>",
+            "<title>Thing::Score(bool) const - %s</title>" % SITE_NAME,
+            '<a class="site" href="../../../index.html">%s</a>' % SITE_NAME,
             '<span aria-current="page">Score</span>',
             '<section id="hooks"><h2>Hooks</h2>',
             '<section id="code"><h2>Code</h2>',
@@ -670,7 +673,7 @@ def html_problems(site):
         THING + "index.html": [
             '<a href="Inline.html" title="Thing::Inline() const">Inline() const</a> <span class="badge">'
         ],
-        "index.html": ["<title>Bazaar developer reference</title>"],
+        "index.html": ["<title>%s</title>" % SITE_NAME, "<h1>%s</h1>" % SITE_NAME],
     }
     problems = []
     for path, texts in wanted.items():
