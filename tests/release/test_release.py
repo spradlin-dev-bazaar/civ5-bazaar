@@ -23,6 +23,10 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
 import release  # noqa: E402
 import version  # noqa: E402
 
+sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "docs"))
+
+import gather_site  # noqa: E402
+
 sys.path.insert(0, os.path.join(HERE, "..", "..", "tools", "generator"))
 
 import generate  # noqa: E402
@@ -519,13 +523,15 @@ class PublishTest(unittest.TestCase):
         latest="v0.4.0",
         view_error=None,
         unlisted=False,
+        docs_site_files=None,
     ):
         """What publish stops with, or None, and the git commands it ran, with HEAD at self.HEAD and VERSION at current.
         gh_exit_codes are what gh auth status and gh release create return; self.gh_commands holds the gh commands it
         ran, and self.printed what it printed. checked is the commit release.py check last passed, or None. bazaar is
         the release whose Bazaar this one keeps, or None for a release with a new Bazaar. on_workshop is whether
         current's version goes on the Workshop, and unlisted leaves it out of BAZAAR_VERSIONS. latest is the tag of
-        GitHub's latest release, and view_error gh's error when it cannot tell."""
+        GitHub's latest release, and view_error gh's error when it cannot tell. docs_site_files stands in for
+        require_docs_site_files, which DocsSiteFilesTest checks."""
         names = release.release_files(current.release) if files is None else files
         calls = []
         self.gh_commands = []
@@ -573,6 +579,7 @@ class PublishTest(unittest.TestCase):
                 mock.patch.object(release.shutil, "which", return_value=gh),
                 mock.patch.object(release.subprocess, "run", run),
                 mock.patch.object(release.common, "BAZAAR_VERSIONS", versions),
+                mock.patch.object(release, "require_docs_site_files", docs_site_files or (lambda gh, remedy: None)),
                 contextlib.redirect_stdout(io.StringIO()) as printed,
             ):
                 try:
@@ -649,6 +656,16 @@ class PublishTest(unittest.TestCase):
         self.assertIn("VERSION is for Bazaar 0.4, which BAZAAR_VERSIONS", message)
         self.assertNotIn("tag", calls)
 
+    def test_docs_site_files_that_differ_from_the_default_branch_s_stop_before_tagging(self):
+        message, calls = self.publish(docs_site_files=docs_site_files_differ)
+        self.assertEqual(message, "the docs site files differ")
+        self.assertNotIn("tag", calls)
+
+    def test_a_tag_left_on_the_built_commit_is_pushed_again_without_the_docs_site_check(self):
+        message, calls = self.publish(tagged=self.HEAD, docs_site_files=docs_site_files_differ)
+        self.assertIsNone(message)
+        self.assertIn("push", calls)
+
     def test_a_release_of_an_older_version_says_to_leave_latest_where_it_is(self):
         for latest, says in (("v0.5.1", True), ("v1.0.0", True), ("v0.4.0", False), ("v0.3.9", False)):
             with self.subTest(latest=latest):
@@ -690,6 +707,52 @@ class PublishTest(unittest.TestCase):
                 self.assertNotIn("tag", calls)
 
 
+class DocsSiteFilesTest(unittest.TestCase):
+    def check(self, differ=False, branch="0.5.x\n", view_code=0):
+        calls = []
+
+        def run(cmd, **kwargs):
+            self.assertEqual(cmd[1:3], ["repo", "view"])
+            return types.SimpleNamespace(returncode=view_code, stdout=branch, stderr="gh: no network")
+
+        def git(*args, check=True):
+            calls.append(args)
+            if args[0] == "diff":
+                self.assertFalse(check)
+                return None if differ else ""
+            return ""
+
+        with mock.patch.object(release.subprocess, "run", run), mock.patch.object(release, "git", git):
+            try:
+                release.require_docs_site_files("gh", "run it again")
+                return None, calls
+            except SystemExit as stop:
+                return str(stop), calls
+
+    def test_files_that_match_the_default_branch_s_pass(self):
+        message, calls = self.check()
+        self.assertIsNone(message)
+        self.assertEqual(
+            calls,
+            [
+                ("fetch", "--quiet", "origin", "0.5.x"),
+                ("diff", "--quiet", "HEAD", "FETCH_HEAD", "--") + release.DOCS_SITE_FILES,
+            ],
+        )
+
+    def test_files_that_differ_stop_and_name_the_default_branch(self):
+        message, _ = self.check(differ=True)
+        for part in release.DOCS_SITE_FILES + ("0.5.x", "run it again"):
+            self.assertIn(part, message)
+
+    def test_a_default_branch_github_cannot_tell_stops(self):
+        for code, branch in ((1, ""), (0, "")):
+            with self.subTest(code=code):
+                message, calls = self.check(view_code=code, branch=branch)
+                self.assertIn("default branch", message)
+                self.assertEqual(calls, [])
+
+
 class HistoryTest(unittest.TestCase):
     def test_the_history_is_put_back_as_the_last_release_left_it(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -709,6 +772,10 @@ class HistoryTest(unittest.TestCase):
             release.restore_history(None, path)
             self.assertFalse(os.path.exists(path))
             release.restore_history(None, path)
+
+
+def docs_site_files_differ(gh, remedy):
+    raise SystemExit("the docs site files differ")
 
 
 class StepRecorder:
@@ -763,6 +830,8 @@ class PrepareTest(unittest.TestCase):
         replaced = [
             (release, "require_version_branch", steps.step("require_version_branch")),
             (release, "require_no_release_branch", steps.step("branch check")),
+            (release, "require_gh", steps.step("gh", "gh")),
+            (release, "require_docs_site_files", steps.step("docs site files")),
             (release, "last_release", steps.step("last_release", "v0.3.0")),
             (release, "run", run),
             (release, "current_lists", steps.step("lists", self.LISTS)),
@@ -790,6 +859,13 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(steps.arguments("git"), [(("switch", "-c", "release-0.4.0"), {})])
         self.assertEqual(names[names.index("git") + 1 :], ["run"] * len(self.CHECKS))
         self.assertEqual([args[0] for args, _ in steps.arguments("run")[1:]], self.CHECKS)
+
+    def test_docs_site_files_that_differ_stop_it_before_anything_is_built_or_changed(self):
+        steps, message = self.prepare(failing="docs site files")
+        self.assertIsNotNone(message)
+        self.assertEqual(steps.names()[-1], "docs site files")
+        self.assertNotIn("run", steps.names())
+        self.assertEqual(steps.arguments("docs site files")[0][0][0], "gh")
 
     def test_a_check_that_fails_leaves_the_raised_numbers_on_the_branch_for_a_fix(self):
         for check in self.CHECKS:
@@ -1054,14 +1130,10 @@ class FileTest(unittest.TestCase):
         self.assertRegex(names.bootstrap, r"^Bazaar-VMC-Bootstrap-\d+\.civ5mod$")
         self.assertEqual((names.sdk, names.docs), ("Bazaar-SDK-0.4.0.zip", "Bazaar-docs-0.4.0.zip"))
 
-    def test_the_docs_action_downloads_the_docs_zip_this_script_writes(self):
-        workflow = release.read_text(os.path.join(release.common.REPO, ".github", "workflows", "docs.yml"))
-        (pattern,) = re.findall(r'--pattern "([^"]+)"', workflow)
-        (looked_for,) = re.findall(r'grep -qxF "([^"]+)"', workflow)
+    def test_the_docs_site_takes_the_docs_zip_this_script_writes_from_the_release_s_tag(self):
         tag = release.tag_of("0.4.0")
-        self.assertTrue(tag.startswith("v"))
-        for name in (pattern, looked_for):
-            self.assertEqual(name.replace("${TAG#v}", tag[1:]), release.release_files("0.4.0").docs)
+        self.assertTrue(gather_site.TAG.fullmatch(tag))
+        self.assertEqual(gather_site.docs_zip(tag), release.release_files("0.4.0").docs)
 
     def test_a_zip_holds_the_folder_under_its_top(self):
         with tempfile.TemporaryDirectory() as folder:
