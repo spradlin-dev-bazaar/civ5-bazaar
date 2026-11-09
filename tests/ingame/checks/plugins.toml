@@ -1,6 +1,6 @@
 # The test plugins that load, and the ones Bazaar turns away, in one game.
 mods = [
-    "../out/MODS/Bazaar Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar 0.5 - Multi-DLL Mod Loader (v 900)",
     "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
     "../out/MODS/Toy Gold Plugin (v 1)",
     "../out/MODS/Toy Rival Plugin (v 1)",

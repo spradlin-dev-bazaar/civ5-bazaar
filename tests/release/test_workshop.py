@@ -136,12 +136,12 @@ class UploadTest(unittest.TestCase):
                 except SystemExit as stop:
                     return str(stop)
 
-    def test_the_uploader_gets_the_item_the_package_the_note_and_the_description(self):
+    def test_the_uploader_gets_the_item_the_package_the_note_the_description_and_the_title(self):
         self.assertIsNone(self.upload())
         self.assertEqual(len(self.uploads), 1)
         self.assertEqual(self.uploads[0][1:3], ["steam_api.dll", "3825428828"])
         self.assertTrue(self.uploads[0][3].endswith("Bazaar-0.5.1.civ5mod"))
-        self.assertEqual(self.texts, [NOTE_0_5_1, "The description."])
+        self.assertEqual(self.texts, [NOTE_0_5_1, "The description.", "Bazaar 0.5 - Multi-DLL Mod Loader"])
         self.assertEqual(self.folders, [self.out])
 
     def test_a_version_without_a_workshop_item_stops_before_building(self):

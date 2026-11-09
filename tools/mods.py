@@ -213,8 +213,10 @@ def write_vmc_data_mod(mods_folder):
         os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
         shutil.copyfile(os.path.join(VMC_DIR, path), os.path.join(folder, path))
     license_files = copy_license_files(folder, BOOTSTRAP_LICENSE_FILES)
-    teaser = "whoward69's Various Mod Components database files, for the %s, so mods made for VMC load after them." % (
-        HOST_NAME
+    # Every version of Bazaar ships this same Bootstrap, and release.py build fails when the Bootstrap's files change.
+    teaser = (
+        "whoward69's Various Mod Components database files, for the Bazaar Multi-DLL Mod Loader, so mods made for VMC"
+        " load after them."
     )
     write_modinfo(
         folder,

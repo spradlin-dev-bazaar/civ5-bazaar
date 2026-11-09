@@ -2,7 +2,7 @@
 // Civ 5's items are Steam's old kind, one file each, which only the old ISteamRemoteStorage functions update; this
 // calls them through the steam_api.dll that comes with ModBuddy, signed in as the Civilization V SDK.
 //
-// usage: upload <steam_api.dll> <item id> <package.civ5mod> <change note file> <description file>
+// usage: upload <steam_api.dll> <item id> <package.civ5mod> <change note file> <description file> <title file>
 #include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -151,11 +151,12 @@ namespace
 	}
 
 	SteamAPICall_t StartUpdate(ISteamRemoteStorage006* storage, PublishedFileId_t item, const std::string& file,
-		const std::string& note, const std::string& description)
+		const std::string& note, const std::string& description, const std::string& title)
 	{
 		const UpdateHandle_t update = storage->CreatePublishedFileUpdateRequest(item);
 		if (!storage->UpdatePublishedFileFile(update, file.c_str()) || !storage->UpdatePublishedFileSetChangeDescription(update, note.c_str())
-			|| !storage->UpdatePublishedFileDescription(update, description.c_str()))
+			|| !storage->UpdatePublishedFileDescription(update, description.c_str())
+			|| !storage->UpdatePublishedFileTitle(update, title.c_str()))
 			return 0;
 		return storage->CommitPublishedFileUpdate(update);
 	}
@@ -191,11 +192,12 @@ namespace
 	}
 
 	int Upload(ISteamRemoteStorage006* storage, ISteamUtils005* utils, VoidFn runCallbacks, PublishedFileId_t item,
-		const std::string& file, const std::vector<char>& package, const std::string& note, const std::string& description)
+		const std::string& file, const std::vector<char>& package, const std::string& note, const std::string& description,
+		const std::string& title)
 	{
 		if (!storage->FileWrite(file.c_str(), &package[0], (int32)package.size()))
 			return Fail("The package could not be written to Steam Cloud.");
-		const SteamAPICall_t call = StartUpdate(storage, item, file, note, description);
+		const SteamAPICall_t call = StartUpdate(storage, item, file, note, description, title);
 		if (call == 0)
 		{
 			storage->FileDelete(file.c_str());
@@ -212,18 +214,18 @@ namespace
 
 int main(int argc, char** argv)
 {
-	if (argc != 6)
+	if (argc != 7)
 	{
-		printf("usage: upload <steam_api.dll> <item id> <package.civ5mod> <change note file> <description file>\n");
+		printf("usage: upload <steam_api.dll> <item id> <package.civ5mod> <change note file> <description file> <title file>\n");
 		return 2;
 	}
 	const PublishedFileId_t item = _strtoui64(argv[2], NULL, 10);
 	std::vector<char> package;
-	std::string note, description;
+	std::string note, description, title;
 	if (!ReadBytes(argv[3], &package) || package.empty())
 		return Fail("The package could not be read.");
-	if (!ReadText(argv[4], &note) || !ReadText(argv[5], &description))
-		return Fail("The change note or description could not be read.");
+	if (!ReadText(argv[4], &note) || !ReadText(argv[5], &description) || !ReadText(argv[6], &title))
+		return Fail("The change note, description or title could not be read.");
 
 	// steam_api.dll reads the app it signs in as from here.
 	SetEnvironmentVariableA("SteamAppId", kSdkApp);
@@ -242,7 +244,7 @@ int main(int argc, char** argv)
 	ISteamRemoteStorage006* storage = (ISteamRemoteStorage006*)storageFn();
 	ISteamUtils005* utils = (ISteamUtils005*)utilsFn();
 	const int code = storage && utils
-		? Upload(storage, utils, runCallbacks, item, FileName(argv[3]), package, note, description)
+		? Upload(storage, utils, runCallbacks, item, FileName(argv[3]), package, note, description, title)
 		: Fail("Steam gave no Workshop functions.");
 	shutdown();
 	return code;

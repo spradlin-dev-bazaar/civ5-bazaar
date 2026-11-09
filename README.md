@@ -14,9 +14,9 @@ Bazaar 0.5.0 is the first public release. Releases that only fix things come out
 
 You need Brave New World, on Windows.
 
-1. On the Steam Workshop, subscribe to [Bazaar Multi-DLL Mod Loader](https://steamcommunity.com/sharedfiles/filedetails/?id=3825428828) and [Bazaar - VMC Bootstrap (required)](https://steamcommunity.com/sharedfiles/filedetails/?id=3825428468). The second one holds VMC's database files, and Bazaar needs it.
+1. On the Steam Workshop, subscribe to [Bazaar 0.5 - Multi-DLL Mod Loader](https://steamcommunity.com/sharedfiles/filedetails/?id=3825428828) and [Bazaar - VMC Bootstrap (required)](https://steamcommunity.com/sharedfiles/filedetails/?id=3825428468). The second one holds VMC's database files, and Bazaar needs it.
 2. Subscribe to the plugins you want.
-3. In the game's Mods menu, turn on Bazaar Multi-DLL Mod Loader, Bazaar - VMC Bootstrap (required) and your plugins.
+3. In the game's Mods menu, turn on Bazaar 0.5 - Multi-DLL Mod Loader, Bazaar - VMC Bootstrap (required) and your plugins.
 
 To install by hand instead, download both packages from the newest release on the [Releases page](https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases) that has them, and put them in your MODS folder, `Documents\My Games\Sid Meier's Civilization 5\MODS`. A release that only updates the tools for mod makers has no packages of its own.
 
