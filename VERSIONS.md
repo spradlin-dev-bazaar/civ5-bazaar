@@ -4,6 +4,7 @@ The game's Mods menu shows Bazaar's mod version, such as "v 5". Releases after 0
 
 | Mod version | Bazaar release |
 |---|---|
+| 7 | 0.5.4 |
 | 6 | 0.5.3 |
 | 5 | 0.5.1 |
 | 4 | 0.5.0 |
