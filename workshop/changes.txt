@@ -1,3 +1,27 @@
+[b]0.5.4[/b]
+Renames Bazaar's mod and fixes three problems for players: loading a save with other mods switched on, a crash at random, and two crashes of one plugin at the same moment. Plugins built for 0.5.0 or later work with it unchanged.
+
+For players:
+[list]
+[*]Bazaar's mod is now named "Bazaar 0.5 - Multi-DLL Mod Loader" in the game's Mods menu, in the MODS folder, and on Bazaar's Steam Workshop page. It was "Bazaar Multi-DLL Mod Loader". Each version of Bazaar — the first two numbers of a release, such as 0.5 or 1.0 — is a separate mod, and the new name says which version this one is. Bazaar 1.0 will come out later as a separate mod, on its own Workshop item, and a game saved with Bazaar 0.5 loads only with Bazaar 0.5. It is still the same mod, so a game saved with an earlier release of 0.5 loads with 0.5.4, and plugins made for Bazaar 0.5 still find it.
+[*]When you loaded a save while a mod was switched on that affects saved games but that the save doesn't list, the game switched to the save's own mods but left most of them switched off, all but the first. Without Bazaar, the save then loaded with some of its mods quietly missing. When Bazaar was one of the mods left off, the game crashed. Watching a Hall of Fame replay that was recorded with mods switched on went wrong the same way. Now the save loads with all of its own mods that affect saved games, with no crash. A mod that affects saved games but that the save doesn't list, a plugin's mod included, ends up switched off, which is how the game is meant to work, so a plugin can't be added to a game saved without it. This fix is in place once Bazaar has been switched on since the game started.
+[*]The game draws the screen and runs its turns at the same time. When plugins replaced parts of the game that run during both at the same time, the game could crash at random, in a different place each time. In one reported game it crashed every 10 to 25 minutes. Fixed.
+[*]When a plugin crashed while drawing the screen and while running the turn at nearly the same moment, Bazaar could mix the two crashes up in its report, and both crashes could be added to Bazaar's list of the plugin's problems at the same time, which can damage the game's memory. Now Bazaar reports each crash on its own, shuts the plugin off once, and shows its pop-up about the plugin once.
+[/list]
+For plugin authors:
+[list]
+[*]Nothing plugins use was added, removed or changed, so plugins built for 0.5.0 or later keep working without a rebuild. Bazaar's mod ID is the same.
+[*]The plugin template, in the SDK on the release's GitHub page, builds a plugin against a single version of Bazaar. Its build.cmd script finds the SDK made for the version of Bazaar that the mod depends on: the folder you give to build.cmd, otherwise the folder named in the BAZAAR_SDK_0_5 environment variable, otherwise the folder above the project. build.cmd fails when it finds the SDK of another version of Bazaar.
+[*]After building, build.cmd checks the finished package for mistakes that would keep Bazaar from loading the mod. When build.cmd finds any such mistakes, it deletes the package and the build fails. It also prints a warning when the project still has the template's mod ID, name, author, description or DLL name.
+[*]In the template, authors now set their mod's version in the mod's project file and their plugin's version in their own code.
+[*]The template now depends on Bazaar under its new name, and its workshop description says "Runs on Bazaar 0.5.x." and tells players to subscribe to Bazaar 0.5 - Multi-DLL Mod Loader.
+[*]The SDK guide has a new section, "A build for a new Bazaar version". When a new version of Bazaar comes out, you make a separate build of your plugin for it, from its own branch or checkout, with a new mod ID and a name that includes the version, such as "Score Doubler (Bazaar 1.0)". For a version that is on the Steam Workshop, the build goes up as a new Workshop item, and the old item stays up, so games started on the older version keep the plugin.
+[*]Lua mod authors get the same build.cmd and package check in the Claude Code plugin's Lua mod template.
+[*]The developer docs' pages now name their version in their header, such as "Bazaar 0.5 developer reference".
+[*]For those who build Bazaar itself from source: each version of Bazaar now has its own git branch, and 0.5.x is the branch of Bazaar 0.5.
+[/list]
+This is plugin API version 0.5.
+
 [b]0.5.3[/b]
 Fixes one problem for players: Continue on the Plugins screen passed over a DLC pack's own Advanced Setup. Plugins built for 0.5.0 or later work with it unchanged.
 
