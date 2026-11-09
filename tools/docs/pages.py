@@ -33,8 +33,9 @@ INTRO = (
 
 
 class Site:
-    def __init__(self, engine, inputs):
+    def __init__(self, engine, inputs, name):
         self.engine = engine
+        self.name = name
         self.homes = class_homes(engine.functions, engine.classes)
         self.listed_files = {fn["file"] for fn in engine.functions if not fn["owner"]} | set(self.homes.values())
         folders = collections.defaultdict(list)
@@ -56,7 +57,7 @@ class Site:
         self.folder_pages()
         self.hook_pages(*handwritten.hook_descriptions(inputs.hand_hooks, engine.hand_sites))
         self.home_page(handwritten.task_guide(inputs.task_guide, self.targets))
-        self.html = {o.path: render.page(o) for o in self.outlines}
+        self.html = {o.path: render.page(o, name) for o in self.outlines}
         self.markdown = {markdown_page(o.path): render_md.page(o) for o in self.outlines}
 
     def class_dir(self, owner):
@@ -265,7 +266,7 @@ class Site:
         if self.summaries:
             links.append(["Main classes: "] + joined([Link(self.class_page(c), c)] for c in self.summaries))
         blocks = [Paragraph([INTRO]), Entries(links), Prose(guide, first_heading=2)]
-        self.add(HOME_PAGE, render.SITE_NAME, [], blocks)
+        self.add(HOME_PAGE, self.name, [], blocks)
 
     def function_names(self):
         names = collections.defaultdict(list)
