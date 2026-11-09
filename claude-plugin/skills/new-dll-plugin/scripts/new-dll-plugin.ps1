@@ -21,7 +21,7 @@ param(
     [string] $FileName,
     # The folder to make the plugin folder in.
     [string] $Destination = (Get-Location).Path,
-    [string] $Sdk = $env:BAZAAR_SDK,
+    [string] $Sdk = $env:BAZAAR_SDK_0_5,
     [string] $Description,
     # Left out, the template's "Your name" stays.
     [string] $Author
@@ -35,7 +35,7 @@ try {
     Assert-PlainText @($Description, $Author)
 
     if (-not $Sdk) {
-        Fail 'Set BAZAAR_SDK to the Bazaar SDK folder, or pass -Sdk.'
+        Fail 'Pass -Sdk with the Bazaar SDK''s folder, or set BAZAAR_SDK_0_5 to it.'
     }
     $Sdk = Resolve-UserPath $Sdk
     $template = Join-Path $Sdk 'plugin-template'
@@ -66,4 +66,4 @@ Write-Output "Made $target"
 Write-Output "  Display name: $DisplayName"
 Write-Output "  File name:    $FileName ($FileName.dll)"
 Write-Output "  Mod ID:       $guid"
-Write-Output "Next: write the hooks in src\$FileName.cpp, then run build.cmd with BAZAAR_SDK set to $Sdk."
+Write-Output "Next: write the hooks in src\$FileName.cpp, then run build.cmd `"$Sdk`" in $target."

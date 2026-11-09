@@ -118,9 +118,8 @@ function Find-ElementTexts([string] $text, [string[]] $names, [string] $file) {
     return @{ Texts = $found; Guids = $guids }
 }
 
-# Changes only the text of each element named in $values, found with an XML reader as the templates' release.ps1 does,
-# so every other byte, a byte order mark included, stays as the template has it. Returns the new content and the
-# template's teaser.
+# Changes only the text of each element named in $values, found with an XML reader, so every other byte, a byte order
+# mark included, stays as the template has it. Returns the new content and the template's teaser.
 function Set-ProjectFields([string] $raw, [hashtable] $values, [string] $file) {
     $bom = if ($raw.StartsWith($script:utf8Bom)) { $script:utf8Bom } else { '' }
     $text = $raw.Substring($bom.Length)

@@ -1,6 +1,6 @@
 """The version of a Bazaar release, kept in VERSION at the top of the repository, and the numbers that must follow it:
-the plugin API version in CivPluginApi.h, the Claude plugin's version, the Bazaar release the SDK's plugin template
-says it needs, and the newest row of VERSIONS.md's list of mod versions.
+the plugin API version in CivPluginApi.h, the Claude plugin's version and the newest row of VERSIONS.md's list of
+mod versions.
 
     python tools/version.py
 """
@@ -19,15 +19,10 @@ import layouts  # noqa: E402
 
 VERSION_FILE = os.path.join(common.REPO, "VERSION")
 PLUGIN_JSON = os.path.join(common.REPO, "claude-plugin", ".claude-plugin", "plugin.json")
-TEMPLATE_VERSION = os.path.join(common.REPO, "sdk", "plugin-template", "VERSION")
-TEMPLATE_WORKSHOP = os.path.join(common.REPO, "sdk", "plugin-template", "workshop-description.txt")
 VERSIONS_LIST = os.path.join(common.REPO, "VERSIONS.md")
 NUMBER = "(?:0|[1-9][0-9]*)"
 FORMAT = re.compile(r"release (%s\.%s\.%s)\nmod ([1-9][0-9]*)\n?" % (NUMBER, NUMBER, NUMBER))
 VERSIONS_ROW = re.compile(r"^\| ([1-9][0-9]*) \| (%s\.%s\.%s) \|(\r?)$" % (NUMBER, NUMBER, NUMBER), re.M)
-TEMPLATE_BAZAAR = re.compile(r"^bazaar +(\S+)", re.M)
-REQUIRES_SENTENCE = "Requires Bazaar %s or newer."
-REQUIRES = re.compile(re.escape(REQUIRES_SENTENCE).replace(re.escape("%s"), r"(\S+)"))
 
 Version = collections.namedtuple("Version", "release mod")
 
@@ -71,37 +66,6 @@ def set_plugin_version(release, path=PLUGIN_JSON):
         f.write(text)
 
 
-def oldest_bazaar(release):
-    """The first release with this release's API version: what a plugin built with its SDK needs."""
-    major, minor, _ = numbers(release)
-    return "%d.%d.0" % (major, minor)
-
-
-def template_bazaar(version_path=TEMPLATE_VERSION, workshop_path=TEMPLATE_WORKSHOP):
-    """The Bazaar release the plugin template's VERSION names, and those its Workshop description requires."""
-    with open(version_path, encoding="utf-8") as f:
-        named = TEMPLATE_BAZAAR.search(f.read())
-    with open(workshop_path, encoding="utf-8") as f:
-        required = REQUIRES.findall(f.read())
-    return (named.group(1) if named else "missing"), required
-
-
-def set_template_bazaar(bazaar, version_path=TEMPLATE_VERSION, workshop_path=TEMPLATE_WORKSHOP):
-    changed = []
-    for path, pattern, sentence in (
-        (version_path, TEMPLATE_BAZAAR, "bazaar %s" % bazaar),
-        (workshop_path, REQUIRES, REQUIRES_SENTENCE % bazaar),
-    ):
-        with open(path, encoding="utf-8", newline="") as f:
-            text, count = pattern.subn(lambda _: sentence, f.read())
-        if not count:
-            raise SystemExit("version: %s does not name a Bazaar release to set" % common.shown(path))
-        changed.append((path, text))
-    for path, text in changed:
-        with open(path, "w", encoding="utf-8", newline="") as f:
-            f.write(text)
-
-
 def listed_versions(path=VERSIONS_LIST):
     """VERSIONS.md's rows, newest first, as Versions."""
     with open(path, encoding="utf-8") as f:
@@ -135,24 +99,6 @@ def disagreements(version, api, plugin):
     return found
 
 
-def template_disagreements(release, template):
-    """template is what template_bazaar returns."""
-    needed = oldest_bazaar(release)
-    named, required = template
-    found = []
-    if named != needed:
-        found.append(
-            "the Bazaar release the plugin template needs, in %s, is %s, not %s"
-            % (common.shown(TEMPLATE_VERSION), named, needed)
-        )
-    if not required:
-        found.append("%s does not say '%s'" % (common.shown(TEMPLATE_WORKSHOP), REQUIRES_SENTENCE % needed))
-    for each in required:
-        if each != needed:
-            found.append("%s says '%s', not %s" % (common.shown(TEMPLATE_WORKSHOP), REQUIRES_SENTENCE % each, needed))
-    return found
-
-
 def kept_bazaar(version, listed):
     """The earlier release whose Bazaar version keeps, or None. A release that keeps one keeps its mod version and adds
     no row to VERSIONS.md, so the newest row names an earlier release with the same mod version. listed is what
@@ -177,7 +123,6 @@ def listed_disagreements(version, listed):
 def check():
     version = read()
     found = disagreements(version, layouts.api_version(), plugin_version())
-    found += template_disagreements(version.release, template_bazaar())
     return version, found + listed_disagreements(version, listed_versions())
 
 

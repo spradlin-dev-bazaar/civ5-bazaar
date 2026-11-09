@@ -429,7 +429,7 @@ def require_same_bazaar(kept, remedy):
     try:
         found += bazaar_compare.package_changes(*packages)
     except files.CheckError as e:
-        stop("%s; if it is in dist, delete it and run this again, which downloads it afresh" % e)
+        stop("%s; if it is in dist, delete it and run this again, which downloads it again" % e)
     found += build_settings_changes(kept)
     if found:
         listed = "".join("\n  " + item for item in found[:MAX_LISTED])
@@ -453,7 +453,7 @@ def build_settings_changes(kept):
     except KeyError:
         return ["the SDK's build settings: the SDK of %s has no %s" % (kept, BUILD_SETTINGS)]
     except zipfile.BadZipFile:
-        stop("%s is damaged: delete it and run this again, which downloads it afresh" % sdk_zip)
+        stop("%s is damaged: delete it and run this again, which downloads it again" % sdk_zip)
     return [] if then == build_sdk.vsprops_bytes() else ["the SDK's build settings, in %s" % BUILD_SETTINGS]
 
 
@@ -518,7 +518,7 @@ def docs_changed(docs, release):
             with zipfile.ZipFile(last) as z:
                 z.extractall(folder)
         except zipfile.BadZipFile:
-            stop("%s is damaged: delete it and run this again, which downloads it afresh" % last)
+            stop("%s is damaged: delete it and run this again, which downloads it again" % last)
         if bazaar_compare.folder_differences(folder, docs):
             return True
     say("the docs are the same as in %s, so this release has no docs zip" % os.path.basename(last))
@@ -603,7 +603,8 @@ def stopping_says(message):
 
 
 def restore_history(tag, path=build_docs.HISTORY):
-    """The docs' function history as the last release left it, so that this release's marks are made afresh."""
+    """The docs' function history as the last release left it, so that this release's marks are made again, starting
+    from it."""
     if tag is None:
         if os.path.exists(path):
             os.remove(path)
@@ -630,7 +631,6 @@ def prepare(major, same_bazaar=False):
         new_major, new_minor, _ = version.numbers(new.release)
         layouts.set_api_version(new_major, new_minor)
         version.set_plugin_version(new.release)
-        version.set_template_bazaar(version.oldest_bazaar(new.release))
         if not same_bazaar:
             version.add_listed_version(new)
         require_numbers_agree()
@@ -697,9 +697,8 @@ def build(trial):
 
 
 def build_template(sdk_zip):
-    """Built outside the repository from the SDK zip alone, so the check fails on anything the SDK left out. The
-    template's build uses BAZAAR_SDK when it is set, so it is pointed at the unzipped SDK. Returns the template's own
-    checks, from its checks.toml."""
+    """Built outside the repository from the SDK zip alone, so the check fails on anything the SDK left out. Returns
+    the template's own checks, from its checks.toml."""
     if os.path.isdir(CHECK_FOLDER):
         files.remove_tree(CHECK_FOLDER)
     with zipfile.ZipFile(sdk_zip) as z:
@@ -713,9 +712,8 @@ def build_template(sdk_zip):
             " after the build, undo that; if not, run tools\\sync_checker.py, put the change on main and build again"
             % ", ".join(different[:5])
         )
-    env = dict(os.environ, BAZAAR_SDK=sdk)
-    if subprocess.run(["cmd", "/c", os.path.join(template, "build.cmd")], cwd=template, env=env).returncode != 0:
-        stop("the template plugin did not build from %s" % sdk_zip)
+    if not build_sdk.builds_and_passes_its_check(os.path.join(template, "build.cmd"), sdk, cwd=template):
+        stop('build.cmd did not print "build: checked" while building the SDK\'s template plugin from %s' % sdk_zip)
     out = os.path.join(template, "Build")
     built = [os.path.join(out, name) for name in sorted(os.listdir(out))] if os.path.isdir(out) else []
     built = [folder for folder in built if os.path.isdir(folder) and files.mod_key(folder)]

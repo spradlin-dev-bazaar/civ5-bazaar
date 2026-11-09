@@ -125,7 +125,7 @@ class ScaffoldTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder)
         self.out = os.path.join(self.folder, "out")
         os.makedirs(self.out)
-        self.env = {k: v for k, v in os.environ.items() if k.upper() != "BAZAAR_SDK"}
+        self.env = {k: v for k, v in os.environ.items() if not k.upper().startswith("BAZAAR_SDK")}
 
     def run_script(self, script, *args, cwd=None, env=None):
         return subprocess.run(
@@ -366,10 +366,10 @@ class ScaffoldTest(unittest.TestCase):
         self.assertEqual(named.returncode, 0, named.stderr)
         self.assertTrue(os.path.isdir(os.path.join(self.out, "ThreeDMaps")))
 
-    def test_the_sdk_comes_from_sdk_or_bazaar_sdk_and_must_be_one(self):
+    def test_the_sdk_comes_from_sdk_or_its_version_s_variable_and_must_be_one(self):
         sdk = self.make_sdk(os.path.join(self.folder, "Bazaar SDK"))
         done = self.run_script(NEW_DLL_PLUGIN, "-DisplayName", "Score Doubler", "-Destination", self.out)
-        self.assertIn("Set BAZAAR_SDK", done.stderr)
+        self.assertIn("or set BAZAAR_SDK_0_5 to it", done.stderr)
         empty, half = os.path.join(self.folder, "Empty"), os.path.join(self.folder, "Half SDK")
         os.makedirs(empty)
         os.makedirs(half)
@@ -378,7 +378,7 @@ class ScaffoldTest(unittest.TestCase):
             done = self.make_plugin(folder)
             self.assertIn("is not a Bazaar SDK folder", done.stderr, folder)
         self.assertEqual(os.listdir(self.out), [])
-        env = dict(self.env, BAZAAR_SDK=sdk)
+        env = dict(self.env, BAZAAR_SDK_0_5=sdk)
         done = self.run_script(
             NEW_DLL_PLUGIN, "-DisplayName", "Score Doubler", "-Destination", "out", cwd=self.folder, env=env
         )
@@ -413,19 +413,6 @@ class ScaffoldTest(unittest.TestCase):
             )
             self.assertEqual(done.returncode, 1, option)
             self.assertIn(message, done.stderr)
-
-
-class SharedCodeTest(unittest.TestCase):
-    def test_the_scaffold_script_finds_positions_in_a_project_as_the_templates_release_script_does(self):
-        def function(path, name):
-            with open(path, encoding="ascii") as f:
-                text = f.read()
-            start = text.index("function %s(" % name)
-            return text[start : text.index("\n}\n", start)]
-
-        scaffold = os.path.join(REPO, "claude-plugin", "scripts", "scaffold.ps1")
-        release = os.path.join(PLUGIN_TEMPLATE, "release.ps1")
-        self.assertEqual(function(scaffold, "Get-TextOffset"), function(release, "Get-TextOffset"))
 
 
 class GraderTest(unittest.TestCase):

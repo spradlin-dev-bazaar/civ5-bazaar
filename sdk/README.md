@@ -8,7 +8,7 @@ It assumes you can program, but not that you know C++. The first time a piece of
 
 Civilization V's rules live in its core DLL, `CvGameCore_Expansion2.dll`, written in C++. This guide calls it **the game's code**. Its classes are named after what they handle, such as `CvPlayer`, `CvCity` and `CvUnit`. `CvPlayer::GetScore` (the `GetScore` method of the `CvPlayer` class) works out a player's score.
 
-A mod can replace the core DLL, but the game uses only one, so normally two DLL mods cannot be combined. **Bazaar** (the Bazaar Multi-DLL Mod Loader, in the Mods menu) is a replacement core DLL that also loads other DLLs, called **plugins**, so several of them can change the game at once.
+A mod can replace the core DLL, but the game uses only one, so normally two DLL mods cannot be combined. **Bazaar** (the Bazaar Multi-DLL Mod Loader, in the Mods menu) is a replacement core DLL that also loads other DLLs, called **plugins**, so several of them can change the game at the same time.
 
 A **plugin** is a DLL you write in C++. It ships inside an ordinary mod: a folder holding your DLL, an SQL file, and a `.modinfo` file that describes the mod. The build makes that folder from the template's `.civ5proj` project file. The player turns your mod on in the Mods menu, and Bazaar loads the DLL inside it.
 
@@ -43,7 +43,7 @@ For example, to make every player's score count double, you add an after-hook to
 
 | In the SDK | What it is |
 |---|---|
-| `plugin-template\` | A small working plugin to start from, with the script that makes its releases, `play.cmd`, which starts it in the game for you to try, and `check.cmd`, which checks it there with nobody at the keyboard. |
+| `plugin-template\` | A small working plugin to start from, along with a `build.cmd` script, which builds and checks the plugin, `play.cmd`, which starts the game with the plugin loaded so that you can test it, and `check.cmd`, which runs automated tests against your plugin in the game. |
 | `include\CivHooks.h` | Every game function you can hook, with its hook ID and the types of its hooks. |
 | `include\CivPluginApi.h` | The interface between Bazaar and a plugin: the structs, function types and constants both sides use. |
 | the rest of `include\` | The game's headers, in the versions Bazaar was built from. |
@@ -53,17 +53,31 @@ For example, to make every player's score count double, you add an after-hook to
 
 ## Step 1: build and try the template
 
-1. Run `build.cmd` in the `plugin-template` folder, from a Command Prompt. It builds `TemplatePlugin.dll`, then the mod folder `Build\Template Plugin` with the DLL inside, and a package for the Steam Workshop in `Packages\`. If it stops early, it says why:
+1. Run `build.cmd` in the `plugin-template` folder, from a Command Prompt. It builds `TemplatePlugin.dll`, then the mod folder `Build\Template Plugin` with the DLL inside, and a package for the Steam Workshop in `Packages\`. Then it checks the package (see [What build.cmd checks](#what-buildcmd-checks)). For the template, the check prints five warnings, about the template's mod ID, name, author, description and DLL name, which Step 2 changes. If the build fails, here is a list of potential causes:
 
    | Message | What it means |
    |---|---|
-   | Set BAZAAR_SDK to the Bazaar SDK folder. | There is no `CivPlugin.vsprops` in the folder the `BAZAAR_SDK` environment variable names or, when that is not set, in the folder directly above the template. See [Step 2](#step-2-make-it-your-own). |
-   | Visual C++ 2008 was not found. | Visual C++ 2008 is not installed; see [What you need](#what-you-need). |
-   | No mod name was found in mod\TemplatePlugin.civ5proj. | The `.civ5proj` has no `<Name>` line. The build names the mod folder after it. |
-   | Civilization V was not found in the registry. | The script looked up where Steam installed Civilization V and found nothing. |
-   | Your Documents folder was not found. | Windows did not report your Documents folder, so the build cannot find `My Games\Sid Meier's Civilization 5`. |
-   | error MSB4019: The imported project "…\Firaxis\ModBuddy\Civ5Mod.targets" was not found. | ModBuddy's build steps are not installed yet. Start ModBuddy once from the Civilization V SDK, then build again. |
-   | error PRJ0020 : Tool 'Linker', Property 'Manifest File' contains invalid file name '…', or project file '…' was not found or not a valid project file. | The plugin folder's path is too long: Visual C++ 2008 fails once a path inside it, such as `src\out\obj\<file name>.dll.intermediate.manifest`, passes 260 characters. Move the plugin folder to a folder with a shorter path and build again. |
+   | build: Windows' tar.exe, which checks the package, is not at C:\Windows\System32\tar.exe. … | Your version of Windows is older than Windows 10 version 1803, which was the first version to include `tar.exe`. `build.cmd` uses `tar.exe` to check the package. |
+   | build: Expected exactly one .civ5proj file in the mod folder, but found 2. | The `mod` folder must hold exactly one `.civ5proj` file, which is the mod's ModBuddy project. |
+   | build: mod\….civ5proj is not valid XML, so build.cmd cannot read the file's settings. … | The XML in the `.civ5proj` file has a mistake, such as a missing closing tag. The rest of the message gives the line and position of the mistake. |
+   | build: No mod name was found in mod\….civ5proj. | The `<Name>` line in the `.civ5proj` file is missing or empty. `build.cmd` needs the mod's name to name the mod's folder in `Build\`. |
+   | build: mod\….civ5proj has no <ModVersion> line with a whole number above 0. | The mod's version, on the `<ModVersion>` line in the `.civ5proj` file, must be a whole number above 0, such as 1 or 2. |
+   | build: mod\….civ5proj does not depend on a Bazaar version that this build script can build for (Bazaar 0.5). … | The `.civ5proj` file has no dependency on Bazaar, or the dependency is on a Bazaar version newer than the version that this SDK is for. |
+   | build: No Bazaar SDK was found for Bazaar 0.5, which the mod depends on. … | No SDK folder was given to `build.cmd`, `BAZAAR_SDK_0_5` is not set, and the folder directly above the plugin's folder is not an SDK. [Step 2](#step-2-make-it-your-own) explains the two ways to tell `build.cmd` where the SDK is. |
+   | build: The folder given to build.cmd, '…', is not a Bazaar SDK: … | The folder named in the message has no `CivPlugin.vsprops` file or no `include\CivPluginApi.h` file. When no folder was given to `build.cmd`, the message starts with "The folder in BAZAAR_SDK_0_5" instead. |
+   | build: The SDK's include\CivPluginApi.h, in '…', names no API version. | The `CivPluginApi.h` file in the SDK folder named in the message has no `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR` lines, and every Bazaar SDK's copy of that file has those two lines. Download the SDK again. |
+   | build: The SDK …, '…', is for Bazaar 0.6, but the mod depends on Bazaar 0.5. … | Each SDK builds plugins for a single Bazaar version. Build with the SDK for the Bazaar version that your mod depends on. |
+   | build: Expected exactly one .vcproj file in the src folder, but found 0. | The `src` folder must hold exactly one `.vcproj` file, which is the plugin's Visual C++ project. |
+   | build: src\….vcproj is not valid XML, so build.cmd cannot read the file's settings. … | The XML in the `.vcproj` file has a mistake. The rest of the message gives the line and position of the mistake. |
+   | build: src\….vcproj does not give the file name of the DLL that the project's Release\|Win32 configuration builds. … | In the `.vcproj` file's linker settings for Release\|Win32, Output File must be `$(OutDir)\` followed by the DLL's file name, as in the template's `$(OutDir)\TemplatePlugin.dll`. `build.cmd` reads the DLL's file name from Output File to copy the DLL into the `mod` folder. |
+   | build: src\….vcproj does not set the Output Directory of the project's Release\|Win32 configuration to src\out. … | In the `.vcproj` file's General settings for Release\|Win32, Output Directory must be `$(ProjectDir)out`, the folder `src\out`. `build.cmd` copies the DLL from `src\out` into the `mod` folder. If the Output Directory is different, Visual C++ writes the new DLL elsewhere, so `build.cmd` would copy an older DLL from `src\out`, or find no DLL to copy. |
+   | Visual C++ 2008 was not found. | Visual C++ 2008 is not installed. [What you need](#what-you-need) explains where to get Visual C++ 2008 and how to install it. |
+   | error PRJ0020 : Tool 'Linker', Property 'Manifest File' contains invalid file name '…', or project file '…' was not found or not a valid project file. | The plugin folder's path is too long. Visual C++ 2008 fails when the path of a file inside the plugin folder, such as `src\out\obj\<file name>.dll.intermediate.manifest`, is longer than 260 characters. Move the plugin folder to a folder with a shorter path and build again. |
+   | Civilization V was not found in the registry. | `build.cmd` looks for Civilization V's install folder in the Windows registry, in the entry that Steam writes when it installs the game, and that entry is missing. |
+   | Your Documents folder was not found. | Windows did not return the location of your Documents folder, so `build.cmd` cannot find the `My Games\Sid Meier's Civilization 5` folder inside the Documents folder. |
+   | error MSB4019: The imported project "…\Firaxis\ModBuddy\Civ5Mod.targets" was not found. | The file `Civ5Mod.targets`, which holds ModBuddy's build steps, is not installed yet. ModBuddy copies `Civ5Mod.targets` into `C:\Program Files (x86)\MSBuild\Firaxis\ModBuddy` the first time it starts. Start ModBuddy once from the Civilization V SDK, then build again. |
+   | build: The build made 2 packages ending in '(v 1).civ5mod' in Packages, not one. | After building, `build.cmd` expects exactly one package for the mod's version in `Packages\`, but found no package or more than one. Build again. |
+   | build: Packages\… has these problems: | The package has mistakes that would keep Bazaar from loading the plugin. Each line after the message names one mistake, and [What build.cmd checks](#what-buildcmd-checks) describes each check. `build.cmd` deletes the package, so that nobody can upload a broken package by mistake. |
 
 2. Run `play.cmd` in the same folder. It builds the plugin again, starts Civilization V through Steam with Bazaar, its VMC Bootstrap and Template Plugin switched on, and leaves the game to you: start a game. When you close the game, your files go back as they were, MODS included; saves you make yourself stay. It needs Python, two settings in the game's `config.ini` and DirectX 11 chosen in Steam: see [Checking your plugin in the game](#checking-your-plugin-in-the-game). Without Python, copy `Build\Template Plugin` into MODS and switch on Bazaar - VMC Bootstrap (required), the Bazaar Multi-DLL Mod Loader and Template Plugin in the Mods menu.
 3. In `Documents\My Games\Sid Meier's Civilization 5\Logs\Bazaar.log`, look for a line that starts with `Plugin Template Plugin 1 loaded`. From then on, the template logs a line at the start of each of your turns and one for each notification you receive. It also adds `Game.TemplateHello()` to Lua, which returns a greeting, and keeps two counts in your saved games: the turns each player has started, and the notifications it has seen.
@@ -71,12 +85,16 @@ For example, to make every player's score count double, you add an after-hook to
 ## Step 2: make it your own
 
 1. Copy `plugin-template` to a folder of your own. If you built it in Step 1, leave out `Build\`, `Packages\`, `src\out\` and `mod\TemplatePlugin.dll`: those are the template's build output.
-2. Unless that folder sits directly inside the Bazaar SDK folder, set the environment variable `BAZAAR_SDK` to the SDK folder: without it, the build looks for the SDK in the folder above yours. Open a new Command Prompt afterwards, so that it sees the variable, or set it for one Command Prompt with `set BAZAAR_SDK=<the SDK folder>` before running `build.cmd`.
-3. Choose a file name without spaces, such as `ScoreDoubler`, and a display name, such as `Score Doubler`, without commas: the build passes the display name to MSBuild, which splits it at a comma. Rename the four files with `TemplatePlugin` in their names (`src\TemplatePlugin.cpp`, `src\TemplatePlugin.vcproj`, `mod\TemplatePlugin.sql` and `mod\TemplatePlugin.civ5proj`). Then, in every text file in the folder (the `.cpp`, `.vcproj`, `.sql`, `.civ5proj`, `build.cmd`, `checks.toml` and `workshop-description.txt`), replace `TemplatePlugin` with the file name and `Template Plugin` with the display name.
+2. Unless that folder sits directly inside the Bazaar SDK folder, tell the build where the SDK is, in one of two ways:
+   - give the SDK's folder to `build.cmd` each time, such as `build.cmd "C:\Bazaar 0.5 SDK"`. `play.cmd` and `check.cmd` take it the same way;
+   - or set the environment variable `BAZAAR_SDK_0_5` to the SDK's folder, then open a new Command Prompt, so that it sees the variable.
+
+   The variable's name holds the Bazaar version your mod depends on (see [Bazaar versions](#bazaar-versions)), so you can set up the SDKs of several versions side by side, and `build.cmd` uses the one for your mod's version. With neither, the build looks for the SDK in the folder above yours. To build in Visual C++ itself, rather than with `build.cmd`, set the environment variable `BAZAAR_SDK` to the SDK's folder, because the plugin's Visual C++ project reads `BAZAAR_SDK`.
+3. Choose a file name without spaces, such as `ScoreDoubler`, and a display name, such as `Score Doubler`, without commas: the build passes the display name to MSBuild, which splits it at a comma. Rename the four files with `TemplatePlugin` in their names (`src\TemplatePlugin.cpp`, `src\TemplatePlugin.vcproj`, `mod\TemplatePlugin.sql` and `mod\TemplatePlugin.civ5proj`). Then, in every text file in the folder (the `.cpp`, `.vcproj`, `.sql`, `.civ5proj`, `checks.toml`, and `workshop-description.txt`), replace `TemplatePlugin` with the file name and `Template Plugin` with the display name.
 
    No other mod may ship a DLL with the same name as yours: Bazaar finds each plugin by its file name, among the files of the mods that are turned on. So keep the DLL's `<Content>` entry in the `.civ5proj`: it makes the DLL one of the mod's files.
 4. Give your mod its own ID: replace the GUID on the `.civ5proj`'s `<Guid>` line with a new one (PowerShell's `New-Guid` makes one). It becomes the mod's ID in the `.modinfo`. Leave the `<ProjectGuid>` line above it alone: that one is ModBuddy's ID for the project. Every mod needs its own ID, so the game can tell yours apart from the template.
-5. In the `.civ5proj`, set the teaser, description and authors. In `workshop-description.txt`, replace the template's sentence with a description of your plugin for its Steam Workshop page. Leave the version in the `.civ5proj` and in `src\PluginVersion.h` alone: `release.cmd` writes both from `VERSION` for each release (see [Publishing](#publishing)).
+5. In the `.civ5proj`, set the teaser, description and authors. In `workshop-description.txt`, replace the template's sentence with a description of your plugin for its Steam Workshop page. Your mod's version is the `.civ5proj`'s `<ModVersion>`, and your plugin's version is the text `CivPluginEntry` sets. [Publishing](#publishing) explains when to change them.
 6. Delete the template's examples you do not want, with their `Check(...)` lines in `CivPluginEntry`:
    - `BeforeDoTurn` logs the start of each of your turns;
    - `NotificationAdded` logs each notification;
@@ -86,7 +104,7 @@ For example, to make every player's score count double, you add an after-hook to
    `checks.toml` checks the first and third, so remove its steps for any you delete.
 7. Run `build.cmd` again. The `Build` folder now holds a folder with your display name.
 
-Your code goes in the `.cpp` file. Its first `#include`, `CvGameCoreDLLPCH.h`, brings in most of the game's headers; the next two are Bazaar's, and the fourth, `PluginVersion.h`, holds your plugin's version. A new `.cpp` file needs the first three, and an entry in the `.vcproj`'s file list (copy the existing `<File>` entry).
+Your code goes in the `.cpp` file. Its first `#include`, `CvGameCoreDLLPCH.h`, brings in most of the game's headers, and the next two are Bazaar's. A new `.cpp` file needs all three, and an entry in the `.vcproj`'s file list (copy the existing `<File>` entry).
 
 ## How Bazaar loads your plugin
 
@@ -114,7 +132,7 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 {
 	s_host = host;
 	plugin->name = "Template Plugin";
-	plugin->version = PLUGIN_VERSION;
+	plugin->version = "1";
 	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
 	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
@@ -127,7 +145,7 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 
 - **`PLUGIN_EXPORT`** is defined at the top of the template as `extern "C" __declspec(dllexport)`. It exports the function from your DLL under its plain name, `CivPluginEntry`, which is the name Bazaar looks up.
 - **`host`** (`const CivHostInfo* host`, a pointer to a read-only struct) is what Bazaar gives you: your plugin's index, `host->pluginIndex`, and function pointers for calling Bazaar: `host->RegisterHook`, `host->RegisterHandHook`, `host->PushLuaFunction` (see [Adding a Lua function](#adding-a-lua-function)), `host->Log`, the functions for saved games (see [Keeping data in saved games](#keeping-data-in-saved-games)), and the functions for calling other plugins (see [Calling another plugin's functions](#calling-another-plugins-functions)). (`host->Log` is the `Log` member of the struct that `host` points to.) The template saves `host` in `s_host` for its other functions.
-- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version, and a plugin ID if your mod has more than one plugin that keeps data or publishes functions (see [Keeping data in saved games](#keeping-data-in-saved-games)). Bazaar copies them when `CivPluginEntry` returns, so point each at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `PLUGIN_VERSION`, which `src\PluginVersion.h` defines and `release.cmd` sets for each release.
+- **`plugin`** (`CivPluginInfo* plugin`, a pointer to a struct) is yours to fill in: the plugin's name and version, and a plugin ID if your mod has more than one plugin that keeps data or publishes functions (see [Keeping data in saved games](#keeping-data-in-saved-games)). Bazaar copies them when `CivPluginEntry` returns, so point each at text that still exists then, such as a string in quotes, not a local buffer. The template's version is `"1"`. Change it for each release of your plugin.
 - **The version of Bazaar's plugin API** that the plugin was built against is not set here. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;`, near the top of the file, exports it, and Bazaar reads it from the DLL file before running any of the plugin's code. See [Bazaar versions](#bazaar-versions).
 - **The `Check(...)` lines** register the hooks. `Check` is a helper in the template that logs a failed registration. `CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn)` registers `BeforeDoTurn` as a before-hook on `CvPlayer::doTurn`; [Registering a hook](#registering-a-hook) explains it. Hooks can only be registered from `CivPluginEntry`.
 - **The last three lines** keep the template's data in saved games; [Keeping data in saved games](#keeping-data-in-saved-games) explains them.
@@ -544,6 +562,21 @@ Your plugin can call any function the game's headers declare, use the game's glo
 
 Windows does not let you replace a DLL while the game has it loaded. So each time you try a new build, close the game, then run `play.cmd` again: it builds the new version and starts the game with it.
 
+## What build.cmd checks
+
+After building, `build.cmd` checks the package in `Packages\` for mistakes that would keep Bazaar from loading the plugin. If it finds any problems, it deletes the package so it can't be uploaded by mistake, and stops:
+- Windows' `tar.exe` must be able to unpack the package.
+- The package must hold exactly one mod description (a `.modinfo` file).
+- The mod description must be valid XML and have a `<Mod>` element.
+- A mod that changes the game's database must be set to affect saved games (see [Publishing](#publishing)).
+- The mod's database updates, in SQL or XML, must add the plugin's DLL to `DllPlugins`, and the DLL must be among the mod's files. The plugin's DLL may sit in a subfolder of the mod, because Bazaar finds the DLL by its file name among the mod's files. Only a single file in the mod may have the DLL's file name, because Bazaar loads the last file that has that name in the mod description's list of files. Every database update that is written in XML must be valid XML.
+- Every DLL that a `DllPlugins` row names must be a 32-bit DLL.
+- Each of those DLLs must store the version of Bazaar's plugin API that it was built for, and the stored version must be the same as the API version of the SDK that `build.cmd` used. The line `CIV_PLUGIN_EXPORT_API_VERSION;` in the plugin's code stores the version in the DLL.
+
+`build.cmd` also issues a warning, but will still build, when the project still has the template's mod ID, name, author, description, or DLL name. Two mods with the template's mod ID would be treated as a single mod by the game, and Bazaar would mix their saved data.
+
+A mod can be a plugin and a Lua mod at the same time, with Lua files living beside the plugin's DLL. Build such a mod from the plugin template, because only the plugin template's `build.cmd` builds the DLL and checks which plugin API version the DLL stores.
+
 ## Checking your plugin in the game
 
 `check.cmd`, in your plugin's folder, builds the plugin and then plays `checks.toml` in Civilization V with nobody at the keyboard. It starts the game through Steam, switches on your mod and the mods it needs, and plays the steps `checks.toml` lists. The template's steps start a small game, end a turn, and check that the plugin loaded, logged the start of the turn, and answers `Game.TemplateHello()`. Every run also fails if a plugin stops working or `Lua.log` has a Lua error. Afterwards it closes the game and puts back everything it changed, MODS included. Run it from a Command Prompt; for the template, a run takes two or three minutes.
@@ -552,7 +585,7 @@ Change `checks.toml` to check what your plugin does. `bazaar_check\README.md`, b
 
 ## When something goes wrong
 
-- **`Bazaar.log`**, in `Documents\My Games\Sid Meier's Civilization 5\Logs`, lists each plugin Bazaar loaded or did not load, with the reason, and every crash. The template's `Check` also logs there any hook that could not be registered. It starts afresh each time Civilization V starts, so copy it before restarting the game if you need the old lines.
+- **`Bazaar.log`**, in `Documents\My Games\Sid Meier's Civilization 5\Logs`, lists each plugin Bazaar loaded or did not load, with the reason, and every crash. The template's `Check` also logs there any hook that could not be registered. Bazaar empties the file each time Civilization V starts, so copy the file before you restart the game if you need the old lines.
 - **The Plugins screen** shows each plugin's status:
   - Loaded;
   - Not loaded, with the reason: for example "Declined to load.", a newer Bazaar is needed, no mod that is turned on lists the DLL among its files, the mod does not affect saved games (see [Publishing](#publishing)), or a clash with another plugin;
@@ -564,15 +597,14 @@ Change `checks.toml` to check what your plugin does. `bazaar_check\README.md`, b
 
 ## Publishing
 
-Make each release with `release.cmd`, in your plugin's folder. Besides what building needs, it needs only Windows 10 version 1803 or later, for the `tar` that comes with it: no git and no website.
+1. Raise your mod's version, the `.civ5proj`'s `<ModVersion>`, to a whole number above the one in your last release. The game tells two versions of a mod apart only by this number, and the package's name includes it, such as `(v 2)`. Set your plugin's version, the text `CivPluginEntry` gives `plugin->version`, to what you call the release, such as `1.2.0`.
+2. Add a section for the release to the top of `CHANGES.txt`, saying what changed. It is written in the Steam Workshop's BBCode, ready to paste as the change note.
+3. Keep the sentence "Runs on Bazaar 0.5.x." in `workshop-description.txt`: it tells players which Bazaar version your plugin needs.
+4. Run `build.cmd`. The package is in `Packages\`, such as `Packages\Score Doubler (v 2).civ5mod`.
+5. In ModBuddy, choose **Tools > Upload to Steam Workshop > Upload new Mod...**, and accept the terms. Click **[...]** and select the package. Paste `workshop-description.txt` as the description, and your `CHANGES.txt` section as the change note. For a later release, update your existing Workshop item with the new package instead of uploading a new mod.
+6. On your plugin's Steam Workshop page, list Bazaar under Required Items: Steam then offers Bazaar to anyone who subscribes to your plugin.
 
-1. In `VERSION`, set the release. Its `release` line is a whole number, such as `2`, or a semantic version, such as `1.2.0`. A whole number is also the mod's version, which the game and the package's name use (`(v 2)`), so raise it for each release. With a semantic version, the script keeps a `mod` line for the mod's version and raises it itself. The `bazaar` line names the oldest Bazaar release your plugin needs; the template already names the oldest one that can run a plugin built with this SDK. `workshop-description.txt` must say the same, in its "Requires Bazaar … or newer." sentence. A new major version of Bazaar, such as 1.0, needs your plugin rebuilt (see [Bazaar versions](#bazaar-versions)); when one comes out, rebuild your plugin with its SDK and make a new release.
-2. Add a section for the release to the top of `CHANGES.txt`, starting with the line `[b]<release>[/b]` and saying what changed. It is written in the Steam Workshop's BBCode, ready to paste. Without one, the script warns.
-3. Run `release.cmd` from a Command Prompt. It writes the version into the `.civ5proj` and `src\PluginVersion.h`, builds the plugin, checks the package and copies it into `Releases\<release>\`. If something is wrong, it stops before releasing anything and says what to fix. Keep `Releases\`: it is how the script knows which mod versions are already out, so that none is used twice.
-4. In ModBuddy, choose **Tools > Upload to Steam Workshop > Upload new Mod...**, and accept the terms. Click **[...]** and select the package in `Releases\<release>\`, such as `Releases\1\Score Doubler (v 1).civ5mod`. Paste `workshop-description.txt` as the description, and your `CHANGES.txt` section as the change note. For a later release, update your existing Workshop item with the new package instead of uploading a new mod.
-5. On your plugin's Steam Workshop page, list Bazaar under Required Items: Steam then offers Bazaar to anyone who subscribes to your plugin.
-
-The template marks the mod as affecting saved games (`<AffectsSavedGames>` in the `.civ5proj`). Keep it that way. A save lists the mods marked this way, and when someone loads it, the game applies the database changes of those mods only. Your plugin's SQL is a database change, so without the mark, a loaded save would have no `DllPlugins` row for your DLL and Bazaar would not load your plugin. Mods that change nothing in the database, such as ones that only add keyboard shortcuts, are not affected and can be added or removed freely. `release.cmd` refuses a release without it, and Bazaar refuses to load a plugin whose mod lacks it, even in a new game, so the problem shows at once.
+The template marks the mod as affecting saved games (`<AffectsSavedGames>` in the `.civ5proj`). Keep it that way. A save lists the mods marked this way, and when someone loads it, the game applies the database changes of those mods only. Your plugin's SQL is a database change, so without the mark, a loaded save would have no `DllPlugins` row for your DLL and Bazaar would not load your plugin. Mods that change nothing in the database, such as ones that only add keyboard shortcuts, are not affected and can be added or removed freely. `build.cmd` stops on a package that changes the game's database without being marked as affecting saved games, and Bazaar refuses to load a plugin whose mod lacks that setting.
 
 To keep your plugin's own data in saved games, see [Keeping data in saved games](#keeping-data-in-saved-games).
 
@@ -582,11 +614,28 @@ Most plugins can leave this part until one of these comes up.
 
 ### Bazaar versions
 
-Bazaar's plugin API has a version in two parts, major and minor: `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR` in `CivPluginApi.h`. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;` exports the version your plugin was built against. Every plugin needs it, written once, outside any function, in one of its `.cpp` files.
+A Bazaar version is the first two numbers of a release, such as 0.5 or 1.0. The releases of one version, such as 0.5.0 to 0.5.3, only fix things, and a plugin made for one of them runs on all of them. A new version, such as 0.6, may change or remove what plugins use, so a plugin needs a new build for each version it runs on. 0.6, 0.7 and 0.8 come out on GitHub only, for people who want to try what's coming. The Steam Workshop gets 0.5.x, and then 1.0.
 
-Bazaar runs a plugin built for its own version or an older one. It refuses a plugin built for a newer version, or for a different major version, and says so in its log, on the Plugins screen and in a notice in the game. From 0.5 on, the API only grows within a major version. Releases before 0.5 could also change it, so Bazaar 0.5 and later refuse a plugin built for one of them until it is rebuilt with a newer SDK.
+Each Bazaar version is a separate mod in the game, with its own mod ID, and it blocks the earlier versions, so only one can be on. Your mod's dependency on Bazaar, in its `.civ5proj`, names the mod ID of the version your mod is made for, and the game turns your mod on only when that Bazaar is on. So a plugin made for 0.5 can't be turned on with Bazaar 0.6, and a game saved with Bazaar 0.5 loads only with Bazaar 0.5. The template already depends on its own version. Each version's mod ID:
 
-Bazaar reads the version from your DLL file before running any of your plugin's code, so a plugin it refuses never runs. That includes a plugin that uses functions an older Bazaar lacks, which Windows could not load: Bazaar refuses it with a message naming both versions instead. A DLL without the line is refused as built for an older Bazaar.
+| Bazaar version | Mod ID |
+|---|---|
+| 0.5 | `b829cadb-b570-46c5-a0ba-419434eb6398` |
+
+Bazaar's plugin API has a version in two parts, major and minor: `CIV_HOST_API_MAJOR` and `CIV_HOST_API_MINOR` in `CivPluginApi.h`, which match the Bazaar version the SDK is for. The template's line `CIV_PLUGIN_EXPORT_API_VERSION;` exports the version your plugin was built against. Every plugin needs it, written once, outside any function, in one of its `.cpp` files.
+
+Bazaar reads that version from your DLL file before running any of your plugin's code, and refuses a plugin built for another Bazaar version. Its log, the Plugins screen and a notice in the game name both versions. Because Bazaar reads the version first, a plugin that uses functions an older Bazaar lacks, which Windows could not load, is refused the same way. A DLL without the line is refused as built for an older Bazaar. Releases before 0.5 could also change the API, so Bazaar 0.5 refuses a plugin built for one of them until it is rebuilt with a newer SDK.
+
+### A build for a new Bazaar version
+
+When a new Bazaar version comes out, your plugin needs a build for it, and players who stay on the older version keep the build they have. Make each build from its own branch or checkout:
+
+1. Make a branch or checkout for the new version, get that version's SDK, and copy its template's `build.cmd`, `bazaar-build.ps1`, `play.cmd`, `check.cmd` and `bazaar_check` folder into your project.
+2. In the `.civ5proj`, change the dependency on Bazaar to the new version's mod ID, from that SDK's guide. Give the mod a new mod ID, on the `<Guid>` line, and a name that includes the version, such as "Score Doubler (Bazaar 1.0)". The game keeps each mod in a folder named after its name and mod version, so with the same name, the two builds could land in the same folder. In `workshop-description.txt`, put the new version in the sentence "Runs on Bazaar 0.5.x.".
+3. Fix whatever no longer compiles, then build and test. The new build's mod versions can start wherever you like.
+4. For a version on the Steam Workshop, upload the build as a new Workshop item, list that version's Bazaar under Required Items, and leave the old item up, so games started on the older version keep your plugin. For a version that isn't on the Workshop, such as 0.6, share the package wherever you share files, such as your project's GitHub releases.
+
+Other plugins that find yours by its mod ID, to call your functions or read your values, need your new mod ID in their builds for that version.
 
 ### Cleaning up: CivPluginShutdown
 
