@@ -137,7 +137,9 @@ class UploadTest(unittest.TestCase):
                     return str(stop)
 
     def test_the_uploader_gets_the_item_the_package_the_note_the_description_and_the_title(self):
-        self.assertIsNone(self.upload())
+        # The title names the release's own version, even on another version's branch.
+        with mock.patch.object(upload.common, "HOST_MOD_NAME", "Bazaar 0.6 - Multi-DLL Mod Loader"):
+            self.assertIsNone(self.upload())
         self.assertEqual(len(self.uploads), 1)
         self.assertEqual(self.uploads[0][1:3], ["steam_api.dll", "3825428828"])
         self.assertTrue(self.uploads[0][3].endswith("Bazaar-0.5.1.civ5mod"))

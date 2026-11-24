@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from xml.etree import ElementTree
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools"))
@@ -108,6 +109,25 @@ class LayoutTest(unittest.TestCase):
 
     def test_the_host_description_ends_by_naming_the_release(self):
         self.assertEqual(mods.host_description("0.5.2"), mods.HOST_TEASER + " This is Bazaar 0.5.2.")
+
+    def test_bazaar_s_mod_blocks_the_mods_of_every_earlier_version(self):
+        versions = {v: mods.common.BazaarVersion(mod_id, False, None) for v, mod_id in (("0.5", "a"), ("0.6", "b"))}
+        versions["0.7"] = mods.common.BazaarVersion("c", False, None)
+        blocks = mods.host_blocks(versions, "0.7")
+        self.assertEqual(
+            blocks, [("a", "Bazaar 0.5 - Multi-DLL Mod Loader"), ("b", "Bazaar 0.6 - Multi-DLL Mod Loader")]
+        )
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(mods, "HOST_BLOCKS", blocks):
+            dll = os.path.join(folder, "fake.dll")
+            with open(dll, "wb") as f:
+                f.write(b"MZ")
+            host, bootstrap = mods.write_host_mod(os.path.join(folder, "MODS"), "Teaser.", dll)
+            blocked = [(m.get("id"), m.get("title"), m.get("minversion")) for m in modinfo(host).find("Blocks")]
+            self.assertEqual(blocked, [(mod_id, title, "0") for mod_id, title in blocks])
+            self.assertEqual(list(modinfo(bootstrap).find("Blocks")), [])
+
+    def test_the_first_version_s_bazaar_blocks_nothing(self):
+        self.assertEqual(mods.host_blocks({"0.5": mods.common.BazaarVersion("a", True, 1)}, "0.5"), [])
 
     def test_the_bootstrap_keeps_vmcs_credits_and_save_setting(self):
         vmc = mods.vmc_mod_parts()

@@ -23,6 +23,8 @@ VERSIONS_LIST = os.path.join(common.REPO, "VERSIONS.md")
 NUMBER = "(?:0|[1-9][0-9]*)"
 FORMAT = re.compile(r"release (%s\.%s\.%s)\nmod ([1-9][0-9]*)\n?" % (NUMBER, NUMBER, NUMBER))
 VERSIONS_ROW = re.compile(r"^\| ([1-9][0-9]*) \| (%s\.%s\.%s) \|(\r?)$" % (NUMBER, NUMBER, NUMBER), re.M)
+VERSIONS_TABLE = re.compile(r"^## Bazaar %s\.%s(\r?)$" % (NUMBER, NUMBER), re.M)
+TABLE = "## Bazaar %s\n\n| Mod version | Bazaar release |\n|---|---|\n| %d | %s |\n\n"
 
 Version = collections.namedtuple("Version", "release mod")
 
@@ -37,7 +39,8 @@ def parse(text, name):
     return Version(found.group(1), int(found.group(2)))
 
 
-def read(path=VERSION_FILE):
+def read(path=None):
+    path = path or VERSION_FILE
     with open(path, encoding="utf-8-sig") as f:
         return parse(f.read(), common.shown(path))
 
@@ -46,17 +49,18 @@ def numbers(release):
     return tuple(int(n) for n in release.split("."))
 
 
-def write(version, path=VERSION_FILE):
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+def write(version, path=None):
+    with open(path or VERSION_FILE, "w", encoding="utf-8", newline="\n") as f:
         f.write("release %s\nmod %d\n" % version)
 
 
-def plugin_version(path=PLUGIN_JSON):
-    with open(path, encoding="utf-8") as f:
+def plugin_version(path=None):
+    with open(path or PLUGIN_JSON, encoding="utf-8") as f:
         return json.load(f).get("version", "missing")
 
 
-def set_plugin_version(release, path=PLUGIN_JSON):
+def set_plugin_version(release, path=None):
+    path = path or PLUGIN_JSON
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
     text, count = re.subn(r'("version"\s*:\s*")[^"]*"', r'\g<1>%s"' % release, text)
@@ -66,13 +70,15 @@ def set_plugin_version(release, path=PLUGIN_JSON):
         f.write(text)
 
 
-def listed_versions(path=VERSIONS_LIST):
-    """VERSIONS.md's rows, newest first, as Versions."""
-    with open(path, encoding="utf-8") as f:
+def listed_versions(path=None):
+    """VERSIONS.md's rows as Versions: its tables, one for each version of Bazaar, newest version first, and their rows
+    newest first."""
+    with open(path or VERSIONS_LIST, encoding="utf-8") as f:
         return [Version(release, int(mod)) for mod, release, _ in VERSIONS_ROW.findall(f.read())]
 
 
-def add_listed_version(version, path=VERSIONS_LIST):
+def add_listed_version(version, path=None):
+    path = path or VERSIONS_LIST
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
     newest = VERSIONS_ROW.search(text)
@@ -81,6 +87,19 @@ def add_listed_version(version, path=VERSIONS_LIST):
     row = "| %d | %s |%s\n" % (version.mod, version.release, newest.group(3))
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(text[: newest.start()] + row + text[newest.start() :])
+
+
+def add_version_table(version, path=None):
+    """A table on top of VERSIONS.md's tables for version's Bazaar, whose first row is version."""
+    path = path or VERSIONS_LIST
+    with open(path, encoding="utf-8", newline="") as f:
+        text = f.read()
+    newest = VERSIONS_TABLE.search(text)
+    if not newest:
+        raise SystemExit("version: %s has no '## Bazaar <version>' heading to add a table above" % common.shown(path))
+    table = TABLE % (bazaar_version(version.release), version.mod, version.release)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text[: newest.start()] + table.replace("\n", newest.group(1) + "\n") + text[newest.start() :])
 
 
 def disagreements(version, api, plugin):
@@ -114,17 +133,33 @@ def bazaar_version(release):
     return "%d.%d" % numbers(release)[:2]
 
 
+def next_bazaar_version(release, major=False):
+    """The version of Bazaar after release's, such as 0.6 after 0.5.3, or with major 1.0."""
+    first, second = numbers(release)[:2]
+    return "%d.0" % (first + 1) if major else "%d.%d" % (first, second + 1)
+
+
 def bazaar_made_in(version, listed):
-    """The release that made the Bazaar that version has: the listed release with version's mod version, or version
-    itself. listed may already hold rows for releases after version."""
-    return next((row.release for row in listed if row.mod == version.mod), version.release)
+    """The release that made the Bazaar that version has: the listed release of the same version of Bazaar with
+    version's mod version, or version itself. listed may already hold rows for releases after version, and each version
+    of Bazaar numbers its mod versions from 1."""
+    same = bazaar_version(version.release)
+    return next(
+        (row.release for row in listed if row.mod == version.mod and bazaar_version(row.release) == same),
+        version.release,
+    )
 
 
 def kept_bazaar(version, listed):
     """The earlier release whose Bazaar version keeps, or None. A release that keeps one keeps its mod version and adds
-    no row to VERSIONS.md, so the newest row names an earlier release with the same mod version. listed is what
-    listed_versions returns."""
-    if listed and listed[0].mod == version.mod and numbers(listed[0].release) < numbers(version.release):
+    no row to VERSIONS.md, so the newest row names an earlier release of the same version of Bazaar with the same mod
+    version. listed is what listed_versions returns."""
+    if (
+        listed
+        and listed[0].mod == version.mod
+        and bazaar_version(listed[0].release) == bazaar_version(version.release)
+        and numbers(listed[0].release) < numbers(version.release)
+    ):
         return listed[0].release
     return None
 

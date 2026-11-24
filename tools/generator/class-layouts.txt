@@ -1,5 +1,3 @@
-api 0.4
-
 ?$CLLNode@H::$vftable@:
 	| &?$CLLNode@H_meta
 	|  0

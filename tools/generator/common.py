@@ -6,6 +6,7 @@ import re
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+COMMON_PY = os.path.abspath(__file__)
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 SOURCE_ROOT = os.path.join(REPO, "CvGameCoreSource")
 ENGINE_DIR = os.path.join(SOURCE_ROOT, "CvGameCoreDLL_Expansion2")
@@ -15,10 +16,6 @@ HOST_DIR = os.path.join(REPO, "host")
 HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
 HOST_DLL = os.path.join(HOST_OUTPUT, "CvGameCore_Expansion2.dll")
 LICENSE = os.path.join(REPO, "LICENSE")
-# From this release on, what plugins use is frozen: removing or changing any of it needs the next version of Bazaar, on
-# its own branch.
-FREEZE = (0, 5)
-FREEZE_SHOWN = "%d.%d" % FREEZE
 NOTICE = os.path.join(REPO, "NOTICE")
 
 
@@ -79,10 +76,16 @@ BazaarVersion = collections.namedtuple("BazaarVersion", "mod_id on_workshop work
 BAZAAR_VERSIONS = {
     "0.5": BazaarVersion("b829cadb-b570-46c5-a0ba-419434eb6398", True, 3825428828),
 }
+
+
+def host_mod_name(bazaar_version):
+    return "Bazaar %s - Multi-DLL Mod Loader" % bazaar_version
+
+
 # The host's mod in this branch's version, which the plugin and Lua mod templates depend on.
 HOST_VERSION = list(BAZAAR_VERSIONS)[-1]
 HOST_MOD_ID = BAZAAR_VERSIONS[HOST_VERSION].mod_id
-HOST_MOD_NAME = "Bazaar %s - Multi-DLL Mod Loader" % HOST_VERSION
+HOST_MOD_NAME = host_mod_name(HOST_VERSION)
 
 
 class Project:
@@ -219,8 +222,3 @@ def engine_project():
         "CvGameCoreDLLPCH.h",
         VCPROJ,
     )
-
-
-def frozen(numbers):
-    """Whether a version, as (major, minor) or longer, is at or past the freeze."""
-    return tuple(numbers[:2]) >= FREEZE

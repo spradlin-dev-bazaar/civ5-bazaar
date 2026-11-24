@@ -12,7 +12,7 @@ A plugin compiled against the SDK's headers and linked to Bazaar's exports break
 - the function or signature behind a hook number in `tools/generator/hook-ids.txt`;
 - the name of anything Bazaar exported in a release.
 
-Additions are fine. New state Bazaar keeps on an engine object goes in a side table keyed by the object, never in the class, and a structure a plugin creates and hands to Bazaar starts with its own size, so a newer Bazaar can tell an older, shorter one apart. Before 0.5, such a change is allowed when there is no other way, and the reviewer's finding says that every plugin must be rebuilt. From 0.5 on, such a change belongs in the next version of Bazaar, on its own branch.
+Additions are fine. New state Bazaar keeps on an engine object goes in a side table keyed by the object, never in the class, and a structure a plugin creates and hands to Bazaar starts with its own size, so a newer Bazaar can tell an older, shorter one apart. Such a change is allowed in a version of Bazaar that has no release yet, when there is no other way, and the reviewer's finding says that every plugin built for that version must then be rebuilt. A version of Bazaar has no release yet while the version in `host/CivPluginApi.h` comes after the version of the last release tag in the branch's history, such as 0.6 on the `0.6.x` branch before 0.6.0 is tagged. Once a version of Bazaar has a release, such a change belongs in the next version of Bazaar, on its own branch, before that version's first release.
 
 ## Build settings shared with plugins
 

@@ -1,6 +1,7 @@
 #pragma once
 
-// The contract between the host and plugin DLLs. From 0.5 on, structures here only grow at the end, except CivApiVersion, which never changes.
+// The contract between the host and plugin DLLs. After a version's first release, structures here only grow at the
+// end. CivApiVersion never changes.
 
 #ifdef _UNICODE
 #error Set your project's Character Set to Use Multi-Byte Character Set, as Bazaar's is.
@@ -206,7 +207,7 @@ struct CivPluginInfo
 	const char* id;
 };
 
-// Saves hold what these write, so how they lay out a number or a text never changes, not even in a new major version.
+// Saves hold what these write, so how they lay out a number or a text never changes, not even in a new version of Bazaar.
 class CivSaveWriter
 {
 public:

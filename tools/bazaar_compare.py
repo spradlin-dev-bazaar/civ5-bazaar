@@ -107,13 +107,10 @@ def package_changes(host_package, bootstrap_package):
             raise files.CheckError("%s holds no mod description that can be read" % host_package)
         if root.get("id") != mods.HOST_ID:
             raise files.CheckError("%s does not hold Bazaar's mod" % host_package)
-        now_host, now_bootstrap = mods.write_dll_mod(
+        now_host, now_bootstrap = mods.write_host_mod(
             os.path.join(folder, "now"),
-            mods.HOST_NAME,
-            mods.HOST_ID,
             mods.HOST_TEASER,
             os.path.join(then_host, "CvGameCore_Expansion2.dll"),
-            host_screens=True,
             version=mod_version,
             description=root.findtext("Properties/Description"),
         )
