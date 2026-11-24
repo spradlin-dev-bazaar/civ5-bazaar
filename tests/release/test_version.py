@@ -108,6 +108,21 @@ class DisagreementTest(unittest.TestCase):
             with self.subTest(current=current):
                 self.assertIsNone(version.kept_bazaar(current, listed))
         self.assertIsNone(version.kept_bazaar(version.Version("0.5.2", 5), []))
+        self.assertIsNone(version.kept_bazaar(version.Version("0.6.0", 1), [version.Version("0.5.3", 1)]))
+
+    def test_the_bazaar_a_release_has_is_looked_up_among_the_releases_of_its_own_version(self):
+        listed = [version.Version("0.7.0", 1), version.Version("0.6.0", 1)]
+        self.assertEqual(version.bazaar_made_in(version.Version("0.6.1", 1), listed), "0.6.0")
+        self.assertEqual(version.bazaar_made_in(version.Version("0.7.1", 1), listed), "0.7.0")
+
+    def test_an_earlier_version_s_kept_bazaar_is_found_in_that_version_s_table(self):
+        listed = [version.Version("0.6.0", 1), version.Version("0.5.3", 6), version.Version("0.5.1", 5)]
+        self.assertEqual(version.bazaar_made_in(version.Version("0.5.2", 5), listed), "0.5.1")
+
+    def test_the_next_version_raises_the_middle_number_or_with_major_the_first(self):
+        self.assertEqual(version.next_bazaar_version("0.5.3"), "0.6")
+        self.assertEqual(version.next_bazaar_version("1.0.4"), "1.1")
+        self.assertEqual(version.next_bazaar_version("0.9.2", major=True), "1.0")
 
     def test_a_release_that_keeps_bazaar_leaves_the_newest_row_at_the_release_that_made_it(self):
         self.assertEqual(version.listed_disagreements(version.Version("0.5.2", 5), [version.Version("0.5.1", 5)]), [])
@@ -152,6 +167,33 @@ class EditTest(unittest.TestCase):
                     expected = text.replace("| 5 |", "| 6 | 0.5.2 |\n| 5 |").replace("\n", newline)
                     self.assertEqual(f.read(), expected)
                 self.assertEqual(version.listed_versions(path)[:2], [("0.5.2", 6), ("0.5.1", 5)])
+
+    TABLES = (
+        "# Versions\n\nA list.\n\n## Bazaar 0.5\n\n| Mod version | Bazaar release |\n|---|---|\n"
+        "| 6 | 0.5.3 |\n| 5 | 0.5.1 |\n"
+    )
+
+    def test_a_new_version_s_table_goes_above_the_others_and_its_rows_are_listed_first(self):
+        table = "## Bazaar 0.6\n\n| Mod version | Bazaar release |\n|---|---|\n| 1 | 0.6.0 |\n\n"
+        older = [("0.5.3", 6), ("0.5.1", 5)]
+        for newline in ("\n", "\r\n"):
+            with tempfile.TemporaryDirectory() as folder, self.subTest(newline=newline):
+                path = write(folder, self.TABLES, newline)
+                self.assertEqual(version.listed_versions(path), older)
+                version.add_version_table(version.Version("0.6.0", 1), path)
+                with open(path, newline="") as f:
+                    expected = self.TABLES.replace("## Bazaar 0.5", table + "## Bazaar 0.5").replace("\n", newline)
+                    self.assertEqual(f.read(), expected)
+                self.assertEqual(version.listed_versions(path), [("0.6.0", 1)] + older)
+                version.add_listed_version(version.Version("0.6.1", 2), path)
+                self.assertEqual(version.listed_versions(path), [("0.6.1", 2), ("0.6.0", 1)] + older)
+
+    def test_a_list_without_a_version_s_heading_gets_no_table(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write(folder, self.TABLES.replace("## Bazaar 0.5\n\n", ""))
+            with self.assertRaises(SystemExit) as stop:
+                version.add_version_table(version.Version("0.6.0", 1), path)
+            self.assertIn("has no '## Bazaar <version>' heading", str(stop.exception))
 
     def test_a_mod_versions_list_without_rows_stops(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -117,7 +117,7 @@ class ReadTest(unittest.TestCase):
 
     def test_the_blocks_read_back_from_the_record_as_libclang_wrote_them(self):
         blocks = sorted(self.read("struct Arg { union { int i; }; enum { K = 3 } m_kind; virtual int Go(); };").items())
-        self.assertEqual(layouts.parse_record(layouts.format_record((0, 1), blocks)), ((0, 1), blocks))
+        self.assertEqual(layouts.parse_record(layouts.format_record(blocks)), blocks)
 
     def test_headers_outside_the_folders_are_left_out(self):
         self.assertEqual(self.read("struct Unit { int m_x; };", folders=[os.path.join(self.folder, "other")]), {})

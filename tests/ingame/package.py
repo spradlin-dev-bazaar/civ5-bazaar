@@ -168,15 +168,7 @@ def main(args):
             print(p.stdout[-4000:], p.stderr[-2000:])
             return 1
         print("built", toy.dll_name + ".dll")
-    mods.write_dll_mod(
-        MODS,
-        mods.HOST_NAME,
-        mods.HOST_ID,
-        "Test build of the %s." % mods.HOST_NAME,
-        common.HOST_DLL,
-        host_screens=True,
-        version=files.TEST_VERSION,
-    )
+    mods.write_host_mod(MODS, "Test build of the %s." % mods.HOST_NAME, common.HOST_DLL, version=files.TEST_VERSION)
     for toy in TOYS:
         write_toy_mod(toy.dll_name, toy.mod_name, toy.mod_id)
     write_vmc_check_mod()

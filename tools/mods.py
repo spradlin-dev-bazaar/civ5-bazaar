@@ -57,6 +57,15 @@ def md5(path):
         return hashlib.md5(f.read()).hexdigest().upper()
 
 
+def host_blocks(versions, own):
+    """Bazaar's mods of every version in versions but own."""
+    return [(entry.mod_id, common.host_mod_name(bazaar)) for bazaar, entry in versions.items() if bazaar != own]
+
+
+# The game won't turn on two mods when either one blocks the other, so only one version of Bazaar can be on.
+HOST_BLOCKS = host_blocks(common.BAZAAR_VERSIONS, common.HOST_VERSION)
+
+
 PROPERTIES = """  <Properties>
     <Name>{name}</Name>
     <Stability>Experimental</Stability>
@@ -141,10 +150,11 @@ def write_modinfo(
     credits=(),
     affects_saves=None,
     description=None,
+    blocks=(),
 ):
-    """Write a mod's description file; files are (path, import flag) pairs inside folder, references and dependencies
-    (id, title) or (id, title, version), credits extra (property, text) pairs. A mod affects saved games if it has a
-    DLL or changes the database, unless affects_saves says otherwise: a loaded save switches on only the database
+    """Write a mod's description file; files are (path, import flag) pairs inside folder, references, dependencies and
+    blocks (id, title) or (id, title, version), credits extra (property, text) pairs. A mod affects saved games if it
+    has a DLL or changes the database, unless affects_saves says otherwise: a loaded save switches on only the database
     changes of the mods it lists. The description the Mods menu shows is the teaser unless one is given."""
     dependencies = ['    <Dlc id=%s minversion="0" maxversion="999" />\n' % quoteattr(BNW_DLC)] + [
         mod_line(*d) for d in dependencies
@@ -166,7 +176,11 @@ def write_modinfo(
         )
         f.write("  <Dependencies>\n" + "".join(dependencies) + "  </Dependencies>\n")
         f.write("  <References>\n" + "".join(mod_line(*r) for r in references) + "  </References>\n")
-        f.write("  <Blocks />\n  <Files>\n")
+        if blocks:
+            f.write("  <Blocks>\n" + "".join(mod_line(*b) for b in blocks) + "  </Blocks>\n")
+        else:
+            f.write("  <Blocks />\n")
+        f.write("  <Files>\n")
         for path, vfs in files:
             digest = md5(os.path.join(folder, path))
             f.write("    <File md5=%s import=%s>%s</File>\n" % (quoteattr(digest), quoteattr(str(vfs)), escape(path)))
@@ -234,7 +248,7 @@ def write_vmc_data_mod(mods_folder):
     return folder, vmc.version
 
 
-def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1, description=None):
+def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1, description=None, blocks=()):
     """A build of the game core, with VMC's data mod beside it. The DLL reads tables and columns VMC's files add, so it
     depends on that mod, which makes the game switch it on first. Returns its folder, then the VMC data mod's folder."""
     folder = new_mod_folder(mods_folder, name, version)
@@ -260,8 +274,24 @@ def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, ve
         dependencies=[(VMC_MOD_ID, VMC_DATA_NAME, vmc_version)],
         version=version,
         description=description,
+        blocks=blocks,
     )
     return folder, vmc_folder
+
+
+def write_host_mod(mods_folder, teaser, dll, version=1, description=None):
+    """Returns the folder of Bazaar's mod, then the VMC data mod's folder."""
+    return write_dll_mod(
+        mods_folder,
+        HOST_NAME,
+        HOST_ID,
+        teaser,
+        dll,
+        host_screens=True,
+        version=version,
+        description=description,
+        blocks=HOST_BLOCKS,
+    )
 
 
 def pack(folder, package):

@@ -55,18 +55,18 @@ def read_text(path):
 
 def bazaar_item(release):
     listed = common.BAZAAR_VERSIONS.get(version.bazaar_version(release))
-    shown = common.shown(os.path.join(common.HERE, "common.py"))
+    shown = common.shown(common.COMMON_PY)
     if listed is None:
         stop(
-            "Bazaar %s is for a version that BAZAAR_VERSIONS, in %s, doesn't list. Add the version to BAZAAR_VERSIONS,"
-            " with its mod ID, whether it goes on the Steam Workshop, and its Workshop item as None until the"
-            " version's mod is first published on the Workshop" % (release, shown)
+            "Bazaar %s is for a version that BAZAAR_VERSIONS, in %s, doesn't list, so VERSION was changed by hand."
+            " Put VERSION back to the last release of the version before, then run release.py start on this branch"
+            % (release, shown)
         )
     if not listed.on_workshop:
         stop(
             "Bazaar %s is not on the Workshop. BAZAAR_VERSIONS, in %s, lists its version as released on GitHub only."
-            " If the version goes on the Workshop, record that in BAZAAR_VERSIONS before the version's first release"
-            % (release, shown)
+            " If the version goes on the Workshop, record that in BAZAAR_VERSIONS before the version's first release,"
+            " as release.py start --workshop does" % (release, shown)
         )
     if listed.workshop_item is None:
         stop(
@@ -159,7 +159,7 @@ def wait_for_file(item, package, before):
 
 def upload(release, package):
     item = bazaar_item(release)
-    title = common.HOST_MOD_NAME
+    title = common.host_mod_name(version.bazaar_version(release))
     note = change_note(read_text(CHANGES), release)
     description = read_text(DESCRIPTION)
     require_fits("the %s section of %s" % (release, common.shown(CHANGES)), note)

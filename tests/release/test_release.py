@@ -5,6 +5,7 @@ python -m unittest discover -s tests/release
 """
 
 import contextlib
+import filecmp
 import fnmatch
 import io
 import os
@@ -68,7 +69,7 @@ def layout_record(*classes):
     blocks = [
         ("class " + name, "class %s\tsize(%d):\n\t+---\n 0\t| x\n\t+---" % (name, size)) for name, size in classes
     ]
-    return release.layouts.format_record((0, 3), blocks)
+    return release.layouts.format_record(blocks)
 
 
 def changes(added=(), removed=()):
@@ -177,17 +178,15 @@ class DifferenceTest(unittest.TestCase):
     def test_bazaar_s_host_info_grown_at_its_end_is_added_not_removed(self):
         host = "class CivHostInfo\tsize(4):\n\t+---\n 0\t| pluginIndex\n\t+---"
         types = "types CivHostInfo:\n field pluginIndex: int"
-        then = release.layouts.format_record((0, 5), [("class CivHostInfo", host), ("types CivHostInfo", types)])
+        then = release.layouts.format_record([("class CivHostInfo", host), ("types CivHostInfo", types)])
         grown_host = host.replace("size(4)", "size(8)").replace("pluginIndex\n", "pluginIndex\n 4\t| Log\n")
         grown_types = types + "\n field Log: void (*)(int)"
-        now = release.layouts.format_record(
-            (0, 5), [("class CivHostInfo", grown_host), ("types CivHostInfo", grown_types)]
-        )
+        now = release.layouts.format_record([("class CivHostInfo", grown_host), ("types CivHostInfo", grown_types)])
         found = release.layout_difference(then, now)
         self.assertEqual((found.added, found.removed), (["class CivHostInfo", "types CivHostInfo"], []))
 
     def test_an_enum_value_that_moved_is_removed_and_one_added_at_the_end_is_added(self):
-        then = release.layouts.format_record((0, 3), [("enum E::A", "enum E::A = 0"), ("enum E::B", "enum E::B = 1")])
+        then = release.layouts.format_record([("enum E::A", "enum E::A = 0"), ("enum E::B", "enum E::B = 1")])
         now = then.replace("E::B = 1", "E::B = 2") + "enum E::C = 3\n\n"
         found = release.layout_difference(then, now)
         self.assertEqual((found.added, found.removed), (["enum E::C"], ["enum E::B"]))
@@ -224,11 +223,19 @@ class NumberTest(unittest.TestCase):
             ):
                 release.next_version(version.Version(branch + ".1", 2), changes(removed=["x"]), branch)
 
-    def test_the_first_release_of_a_version_is_a_breaking_release_that_is_not_made_yet(self):
-        with self.assertRaisesRegex(
-            SystemExit, "is for Bazaar 0.5, so the next release .* first release of Bazaar 0.6"
-        ):
-            release.next_version(version.Version("0.5.3", 4), changes(), "0.6")
+    def test_a_version_s_first_release_is_x_y_0_with_mod_version_1_and_may_remove_or_change_what_plugins_use(self):
+        for diffs in (changes(), changes(added=["x"], removed=["y"])):
+            with self.subTest(diffs=diffs):
+                self.assertEqual(release.next_version(version.Version("0.5.3", 6), diffs, "0.6"), ("0.6.0", 1))
+        self.assertEqual(release.next_version(version.Version("0.9.2", 4), changes(), "1.0"), ("1.0.0", 1))
+
+    def test_a_version_s_first_release_makes_its_first_bazaar(self):
+        with self.assertRaisesRegex(SystemExit, "first release of Bazaar 0.6 makes its first Bazaar"):
+            release.next_version(version.Version("0.5.3", 6), changes(), "0.6", same_bazaar=True)
+
+    def test_a_branch_whose_history_has_a_later_version_s_release_stops(self):
+        with self.assertRaisesRegex(SystemExit, "0.7.1, is for a later version of Bazaar than 0.6"):
+            release.next_version(version.Version("0.7.1", 2), changes(), "0.6")
 
     def test_the_same_bazaar_keeps_the_mod_version(self):
         new = release.next_version(version.Version("0.5.1", 5), changes(), "0.5", same_bazaar=True)
@@ -238,10 +245,14 @@ class NumberTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "first release makes the first Bazaar"):
             release.require_options_allowed(None, same_bazaar=True)
 
-    def plan_same_bazaar(self, diffs, changed=(), base=version.Version("0.5.1", 5), listed=None):
-        """plan with --same-bazaar after base; self.compared is the tag the code was compared with."""
+    def plan_same_bazaar(self, diffs, changed=(), base=version.Version("0.5.1", 5), listed=None, branch_version=None):
+        """plan with --same-bazaar after base, on the branch of branch_version, by default base's version;
+        self.compared is the tag the code was compared with."""
         with (
             mock.patch.object(release, "choose", return_value=("v" + base.release, base, diffs)),
+            mock.patch.object(
+                release, "current_bazaar_version", return_value=branch_version or version.bazaar_version(base.release)
+            ),
             mock.patch.object(release.version, "listed_versions", return_value=listed or [base]),
             mock.patch.object(release, "bazaar_packages", return_value=["host", "bootstrap"]),
             mock.patch.object(release, "code_changes", return_value=list(changed)) as code,
@@ -254,15 +265,17 @@ class NumberTest(unittest.TestCase):
         self.compared = code.call_args[0][0]
         return new
 
-    def plan(self, base, diffs, tagged_release=2, api_release=5):
-        """plan's numbers after base, on base's version's branch, with CIV_HOST_API_RELEASE at tagged_release in base's
-        CivPluginApi.h and at api_release in today's; self.said is what plan printed."""
+    def plan(self, base, diffs, tagged_release=2, api_release=5, branch_version=None):
+        """plan's numbers after base, on the branch of branch_version, by default base's version, with
+        CIV_HOST_API_RELEASE at tagged_release in base's CivPluginApi.h and at api_release in today's; self.said is
+        what plan printed."""
         tag = None if diffs is None else "v" + base.release
         tagged_header = API_HEADER.replace("RELEASE 0", "RELEASE %d" % tagged_release)
+        branch_version = branch_version or version.bazaar_version(base.release)
         out = io.StringIO()
         with (
             mock.patch.object(release, "choose", return_value=(tag, base, diffs)),
-            mock.patch.object(release, "current_bazaar_version", return_value=version.bazaar_version(base.release)),
+            mock.patch.object(release, "current_bazaar_version", return_value=branch_version),
             mock.patch.object(release, "at_tag", return_value=tagged_header),
             mock.patch.object(release.layouts, "api_release", return_value=api_release),
             contextlib.redirect_stdout(out),
@@ -281,6 +294,16 @@ class NumberTest(unittest.TestCase):
 
     def test_the_first_release_keeps_the_release_plugins_need(self):
         self.assertEqual(self.plan(version.Version("0.6.0", 1), None, api_release=0), (("0.6.0", 1), 0))
+
+    def test_a_version_s_first_release_is_planned_as_one_and_its_plugins_need_it(self):
+        planned = self.plan(version.Version("0.5.3", 6), changes(removed=["x"]), branch_version="0.6")
+        self.assertEqual(planned, (("0.6.0", 1), 0))
+        self.assertIn("first release of Bazaar 0.6, so it may remove or change what plugins use", self.said)
+        self.assertIn("will run on Bazaar 0.6.0 and later releases of Bazaar 0.6", self.said)
+
+    def test_a_version_s_first_release_can_t_keep_the_last_release_s_bazaar(self):
+        with self.assertRaisesRegex(SystemExit, "makes its first Bazaar, so --same-bazaar does not apply"):
+            self.plan_same_bazaar(changes(), base=version.Version("0.5.3", 6), branch_version="0.6")
 
     def test_the_same_bazaar_is_checked_against_the_release_that_made_it(self):
         self.assertEqual(self.plan_same_bazaar(changes()), ("0.5.2", 5))
@@ -387,6 +410,19 @@ class BootstrapTest(unittest.TestCase):
         listed = [version.Version("0.5.3", 5), version.Version("0.5.1", 4)]
         self.assertEqual(self.require(last="0.5.2", mod=4, listed=listed), "0.5.1")
 
+    def test_a_version_s_first_release_compares_with_the_release_that_made_the_last_bazaar_of_the_version_before(self):
+        tables = (
+            "## Bazaar 0.6\n\n| Mod version | Bazaar release |\n|---|---|\n| 1 | 0.6.0 |\n\n"
+            "## Bazaar 0.5\n\n| Mod version | Bazaar release |\n|---|---|\n| 6 | 0.5.3 |\n| 5 | 0.5.1 |\n"
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "VERSIONS.md")
+            with open(path, "w") as f:
+                f.write(tables)
+            with mock.patch.object(release.version, "VERSIONS_LIST", path):
+                listed = release.version.listed_versions()
+        self.assertEqual(self.require(last="0.5.2", mod=5, tag="v0.5.2", listed=listed), "0.5.1")
+
     def test_a_release_without_a_bootstrap_package_or_with_a_damaged_one_stops(self):
         with self.assertRaisesRegex(SystemExit, "the GitHub release 0.5.2 has no VMC Bootstrap package"):
             self.require(package=None)
@@ -471,15 +507,15 @@ class ChooseTest(unittest.TestCase):
                     release.require_build_as_prepared(version.Version("0.3.2", 2))
                 self.assertIn("calls for release 0.3.1", str(stop.exception))
 
-    def build_as_prepared(self, lists, written_release):
-        """require_build_as_prepared for 0.3.1 after 0.3.0, whose CivPluginApi.h says CIV_HOST_API_RELEASE 0, with
-        written_release in today's."""
-        self.SAVED = dict(self.SAVED, **{"CivPluginApi.h": API_HEADER})
+    def build_as_prepared(self, lists, written_release, current=version.Version("0.3.1", 2), tagged=API_HEADER):
+        """require_build_as_prepared for current after 0.3.0, whose CivPluginApi.h is tagged, by default one that says
+        CIV_HOST_API_RELEASE 0, with written_release in today's."""
+        self.SAVED = dict(self.SAVED, **{"CivPluginApi.h": tagged})
         with tempfile.TemporaryDirectory() as folder:
             names = ("hooks.txt", "exports.txt", "CivPluginApi.h")
             hooks, exports, header = (os.path.join(folder, name) for name in names)
-            release.write_list(hooks, "0.3.1", lists[0])
-            release.write_list(exports, "0.3.1", lists[1])
+            release.write_list(hooks, current.release, lists[0])
+            release.write_list(exports, current.release, lists[1])
             with open(header, "w") as f:
                 f.write(API_HEADER.replace("RELEASE 0", "RELEASE %d" % written_release))
             with (
@@ -490,7 +526,16 @@ class ChooseTest(unittest.TestCase):
                 mock.patch.object(release, "last_release", return_value="v0.3.0"),
                 mock.patch.object(release, "at_tag", self.at_tag),
             ):
-                release.require_build_as_prepared(version.Version("0.3.1", 2))
+                release.require_build_as_prepared(current)
+
+    def test_a_version_s_first_release_may_remove_what_plugins_use_and_calls_for_release_0(self):
+        shrunk = ([], ["DllGetGameContext"])
+        first = version.Version("0.4.0", 1)
+        # Like the headers of 0.5's releases, the tag's has no release number to read.
+        tagged = API_HEADER.replace("#define CIV_HOST_API_RELEASE 0\n", "")
+        self.build_as_prepared(shrunk, 0, first, tagged)
+        with self.assertRaisesRegex(SystemExit, "calls for CIV_HOST_API_RELEASE 0, but .* says 1"):
+            self.build_as_prepared(shrunk, 1, first, tagged)
 
     def test_a_build_whose_api_release_is_not_the_one_it_calls_for_stops(self):
         same = (["0\tCvCity_init"], ["DllGetGameContext"])
@@ -515,7 +560,7 @@ class ChooseTest(unittest.TestCase):
                 mock.patch.object(release, "at_tag", self.at_tag),
                 mock.patch.object(release.version, "listed_versions", return_value=[version.Version("0.3.0", 1)]),
             ):
-                for lists, current, stops in ((same, ("0.3.1", 1), False), (grown, ("0.4.0", 1), True)):
+                for lists, current, stops in ((same, ("0.3.1", 1), False), (grown, ("0.3.2", 1), True)):
                     release.write_list(hooks, current[0], lists[0])
                     release.write_list(exports, current[0], lists[1])
                     with self.subTest(current=current), mock.patch.object(release, "current_lists", return_value=lists):
@@ -882,7 +927,10 @@ class PrepareTest(unittest.TestCase):
 
     CHECKS = ["the tests", "the docs checks", "the lint", "the format check"]
 
-    def prepare(self, failing=None, planned=version.Version("0.4.0", 2), same_bazaar=False, failing_check=None):
+    def prepare(
+        self, failing=None, planned=version.Version("0.4.0", 2), same_bazaar=False, failing_check=None, listed=None
+    ):
+        """listed is VERSIONS.md's rows, by default the last release's row only."""
         steps = StepRecorder(failing)
         record_run = steps.step("run")
 
@@ -903,6 +951,7 @@ class PrepareTest(unittest.TestCase):
             (release.version, "write", steps.step("VERSION")),
             (release.layouts, "set_api_version", steps.step("API version")),
             (release.version, "set_plugin_version", steps.step("plugin version")),
+            (release.version, "listed_versions", lambda: list(listed or [version.Version("0.3.0", 1)])),
             (release.version, "add_listed_version", steps.step("mod versions")),
             (release, "require_numbers_agree", steps.step("numbers agree")),
             (release, "restore_history", steps.step("restore history")),
@@ -911,6 +960,13 @@ class PrepareTest(unittest.TestCase):
             (release, "git", steps.step("git")),
         ]
         return steps, steps.run(lambda: release.prepare(same_bazaar), replaced)
+
+    def test_a_version_s_first_release_is_already_listed_by_start(self):
+        first = version.Version("0.6.0", 1)
+        steps, message = self.prepare(planned=first, listed=[first])
+        self.assertIsNone(message)
+        self.assertNotIn("mod versions", steps.names())
+        self.assertEqual(steps.arguments("VERSION"), [((first,), {})])
 
     def test_the_checks_run_last_on_the_branch_at_the_raised_numbers(self):
         steps, message = self.prepare()
@@ -981,6 +1037,147 @@ class PrepareTest(unittest.TestCase):
                 self.assertIn("docs: broken", message)
                 self.assertIn("git restore :/", message)
                 self.assertEqual(steps.names().count("run"), 1)
+
+
+class StartTest(unittest.TestCase):
+    def start(
+        self,
+        current="0.5.3",
+        head="0.6.x",
+        tag="v0.5.3",
+        major=False,
+        workshop=False,
+        failing=None,
+        branches="",
+        listed=None,
+    ):
+        """release.py start with VERSION at current, on branch head, after the release tag, with branches what git
+        branch --list prints for the branch that start makes, and listed as BAZAAR_VERSIONS, by default 0.5 only."""
+        steps = StepRecorder(failing)
+        record_git = steps.step("git")
+
+        def git(*args, check=True):
+            record_git(*args)
+            if args[:2] == ("branch", "--list"):
+                return branches
+            return {("rev-parse", "--abbrev-ref", "HEAD"): head}.get(args, "")
+
+        edits = release.new_version
+        replaced = [
+            (release.version, "read", lambda: version.Version(current, 6)),
+            (release.common, "BAZAAR_VERSIONS", listed or {"0.5": release.common.BAZAAR_VERSIONS["0.5"]}),
+            (release, "git", git),
+            (release, "require_same_as_github", steps.step("same as GitHub")),
+            (release, "last_release", lambda: tag),
+            (release.uuid, "uuid4", lambda: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"),
+            (edits, "add_to_bazaar_versions", steps.step("versions")),
+            (release.version, "write", steps.step("VERSION")),
+            (release.version, "add_version_table", steps.step("mod versions")),
+            (release.layouts, "set_api_version", steps.step("API version")),
+            (release.version, "set_plugin_version", steps.step("plugin version")),
+            (edits, "set_template_dependency", steps.step("dependency")),
+            (edits, "add_to_build_script", steps.step("build script")),
+            (edits, "add_to_guide_table", steps.step("guide")),
+            (release, "require_numbers_agree", steps.step("numbers agree")),
+        ]
+        return steps, steps.run(lambda: release.start(major, workshop), replaced)
+
+    def test_each_file_gets_the_new_version_and_its_new_mod_id_on_a_branch_of_its_own(self):
+        steps, message = self.start()
+        self.assertIsNone(message)
+        mod_id, first = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", version.Version("0.6.0", 1)
+        name = "Bazaar 0.6 - Multi-DLL Mod Loader"
+        self.assertEqual(steps.arguments("same as GitHub"), [(("0.6.x",), {})])
+        self.assertEqual(steps.arguments("versions"), [(("0.6", mod_id, False), {})])
+        self.assertEqual(steps.arguments("VERSION"), [((first,), {})])
+        self.assertEqual(steps.arguments("mod versions"), [((first,), {})])
+        self.assertEqual(steps.arguments("API version"), [((0, 6, 0), {})])
+        self.assertEqual(steps.arguments("plugin version"), [(("0.6.0",), {})])
+        projects = [args for args, _ in steps.arguments("dependency")]
+        self.assertEqual(projects, [(mod_id, name, p) for p in release.new_version.TEMPLATE_PROJECTS])
+        scripts = [args for args, _ in steps.arguments("build script")]
+        self.assertEqual(scripts, [("0.6", mod_id, s) for s in release.new_version.BUILD_SCRIPTS])
+        self.assertEqual(steps.arguments("guide"), [(("0.6", mod_id), {})])
+        names = steps.names()
+        self.assertLess(names.index("guide"), names.index("numbers agree"))
+        self.assertEqual(steps.arguments("git")[-1], (("switch", "-c", "start-0.6"), {}))
+
+    def test_major_starts_the_next_major_version_and_workshop_records_that_it_goes_on_the_workshop(self):
+        steps, message = self.start(current="0.9.2", head="1.0.x", tag="v0.9.2", major=True, workshop=True)
+        self.assertIsNone(message)
+        self.assertEqual(steps.arguments("versions")[0][0][::2], ("1.0", True))
+        self.assertEqual(steps.arguments("API version"), [((1, 0, 0), {})])
+
+    def test_it_runs_only_on_the_next_version_s_branch(self):
+        for head in ("0.5.x", "0.7.x", "start-0.6"):
+            with self.subTest(head=head):
+                steps, message = self.start(head=head)
+                self.assertIn(
+                    "so the next version is 0.6: run release.py start on that version's branch, 0.6.x", message
+                )
+                self.assertNotIn("versions", steps.names())
+
+    def test_the_version_before_must_have_a_release(self):
+        for tag in (None, "v0.4.1"):
+            with self.subTest(tag=tag):
+                steps, message = self.start(tag=tag)
+                self.assertIn("Bazaar 0.5 has no release yet, so the next version can't start", message)
+                self.assertNotIn("versions", steps.names())
+
+    def test_a_start_branch_left_from_before_stops_it_and_says_to_go_on_with_it_or_delete_it(self):
+        steps, message = self.start(branches="  start-0.6")
+        self.assertIn("the branch start-0.6 is already here", message)
+        self.assertIn("switch to it to go on with that start, or delete it with git branch -D start-0.6", message)
+        self.assertNotIn("versions", steps.names())
+
+    def test_a_version_that_bazaar_versions_already_lists_stops_it(self):
+        listed = {"0.5": release.common.BAZAAR_VERSIONS["0.5"], "0.6": release.common.BazaarVersion("x", False, None)}
+        steps, message = self.start(listed=listed)
+        self.assertIn("already lists Bazaar 0.6", message)
+        self.assertNotIn("versions", steps.names())
+
+    def test_start_s_edits_of_copies_of_the_real_files_leave_every_number_agreeing(self):
+        current = version.read()
+        started = version.next_bazaar_version(current.release)
+        edits = release.new_version
+        with tempfile.TemporaryDirectory() as folder:
+            copied = []
+
+            def copy(path):
+                copied.append(os.path.join(folder, "%d-%s" % (len(copied), os.path.basename(path))))
+                shutil.copyfile(path, copied[-1])
+                return copied[-1]
+
+            files = [
+                (edits, "COMMON_PY", copy(edits.COMMON_PY)),
+                (edits, "TEMPLATE_PROJECTS", tuple(copy(p) for p in edits.TEMPLATE_PROJECTS)),
+                (edits, "BUILD_SCRIPTS", tuple(copy(p) for p in edits.BUILD_SCRIPTS)),
+                (edits, "GUIDE", copy(edits.GUIDE)),
+                (release.version, "VERSION_FILE", copy(release.version.VERSION_FILE)),
+                (release.version, "PLUGIN_JSON", copy(release.version.PLUGIN_JSON)),
+                (release.version, "VERSIONS_LIST", copy(release.version.VERSIONS_LIST)),
+                (release.layouts, "API_HEADER", copy(release.layouts.API_HEADER)),
+            ]
+            with contextlib.ExitStack() as stack:
+                for owner, name, value in files:
+                    stack.enter_context(mock.patch.object(owner, name, value))
+                on_branch = {("rev-parse", "--abbrev-ref", "HEAD"): started + ".x"}
+                stack.enter_context(
+                    mock.patch.object(release, "git", lambda *args, check=True: on_branch.get(args, ""))
+                )
+                stack.enter_context(mock.patch.object(release, "require_same_as_github", lambda branch: None))
+                stack.enter_context(mock.patch.object(release, "last_release", lambda: "v" + current.release))
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                release.start()
+                self.assertEqual(release.version.check(), (version.Version(started + ".0", 1), []))
+                self.assertTrue(filecmp.cmp(*edits.BUILD_SCRIPTS, shallow=False))
+            with open(files[0][2], encoding="utf-8") as f:
+                self.assertIn('    "%s": BazaarVersion(' % started, f.read())
+
+    def test_a_stop_part_way_says_how_to_put_the_files_back(self):
+        _, message = self.start(failing="dependency")
+        self.assertIn("start stopped part way", message)
+        self.assertIn("git restore :/", message)
 
 
 class BuildTest(unittest.TestCase):
@@ -1097,9 +1294,12 @@ class WriteFilesTest(unittest.TestCase):
                 with open(os.path.join(out, name), "w") as f:
                     f.write("x")
 
-        def write_dll_mod(mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1, description=None):
+        def write_dll_mod(
+            mods_folder, name, mod_id, teaser, dll, host_screens=False, version=1, description=None, blocks=()
+        ):
             given["mod"] = (name, mod_id, teaser, dll, host_screens, version)
             given["description"] = description
+            given["blocks"] = blocks
             folders = os.path.join(mods_folder, "host"), os.path.join(mods_folder, "bootstrap")
             for path in folders:
                 os.makedirs(path)
@@ -1147,6 +1347,7 @@ class WriteFilesTest(unittest.TestCase):
         expected_mod = (release.mods.HOST_NAME, release.mods.HOST_ID, release.mods.HOST_TEASER, release.common.HOST_DLL)
         self.assertEqual(given["mod"], expected_mod + (True, 2))
         self.assertEqual(given["description"], release.mods.host_description("0.4.0"))
+        self.assertEqual(given["blocks"], release.mods.HOST_BLOCKS)
 
     def test_a_release_that_keeps_bazaar_writes_the_sdk_and_only_docs_that_changed(self):
         names = release.release_files("0.4.0")
@@ -1528,9 +1729,7 @@ class SameBazaarTest(unittest.TestCase):
             with open(dll, "wb") as f:
                 f.write(b"the 0.5.1 DLL")
             mods = release.mods
-            made = mods.write_dll_mod(
-                os.path.join(folder, "MODS"), mods.HOST_NAME, mods.HOST_ID, mods.HOST_TEASER, dll, True, 5
-            )
+            made = mods.write_host_mod(os.path.join(folder, "MODS"), mods.HOST_TEASER, dll, version=5)
             packages = [os.path.join(folder, "host.civ5mod"), os.path.join(folder, "bootstrap.civ5mod")]
             for source, package in zip(made, packages):
                 self.assertIsNone(mods.pack(source, package))

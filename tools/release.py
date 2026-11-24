@@ -9,11 +9,16 @@
     python tools/release.py publish --notes FILE [--no-check]
                                                    tag the commit the files were built from and draft its GitHub release
     python tools/release.py workshop               once the GitHub release is published: Bazaar's mod to the Workshop
+    python tools/release.py start [--major] [--workshop]
+                                                   once, on the next version's branch: that version's mod ID, numbers
+                                                   and templates
 
 Each version of Bazaar, such as 0.5, has its own branch, named after the version, such as 0.5.x, and release.py makes
-the releases of the version in VERSION on that version's branch only. A release on that branch raises the last number.
-On 0.5.x, a release only fixes things, so release.py refuses a build that adds anything that plugins use, and on every
-branch release.py refuses a build that removes or changes anything that plugins use.
+the releases of the version in VERSION on that version's branch only. start makes the branch of the version after
+VERSION's, or with --major of the next major version, into that version: its first release, such as 0.6.0, may remove
+or change what plugins use. --workshop records that the version goes on the Steam Workshop. Each later release raises
+the last number. On 0.5.x, a release only fixes things, so release.py refuses a build that adds anything that plugins
+use, and on every branch release.py refuses a later release that removes or changes anything that plugins use.
 
 --same-bazaar makes a release that keeps the last release's Bazaar
 and its mod version, and ships only the SDK and, if they changed, the docs; it stops if Bazaar's code changed in more
@@ -38,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +59,7 @@ import common  # noqa: E402
 import generate  # noqa: E402
 import layouts  # noqa: E402
 import mods  # noqa: E402
+import new_version  # noqa: E402
 import sync_checker  # noqa: E402
 import upload  # noqa: E402
 import version  # noqa: E402
@@ -68,9 +75,10 @@ TRIAL_FOLDER = os.path.join(DIST, "trial")
 BUILT_FROM = "built-from.txt"
 BRANCH_PREFIX = "release-"
 PART_WAY = (
-    "prepare stopped part way. Before running it again, put back the files it changed with git restore :/ and delete"
-    " any it added, which git status lists"
+    "%s stopped part way. Before running it again, put back the files it changed with git restore :/ and delete any"
+    " it added, which git status lists"
 )
+START_PREFIX = "start-"
 PREPARE_CHECKS = (
     ("the tests", "tests\\runtime\\run.cmd", ["cmd", "/c", os.path.join(common.REPO, "tests", "runtime", "run.cmd")]),
     (
@@ -191,6 +199,10 @@ def require_version_branch():
             "VERSION is for Bazaar %s, so run release.py on that version's branch, %s"
             % (current_bazaar_version(), branch)
         )
+    require_same_as_github(branch)
+
+
+def require_same_as_github(branch):
     changed = git("status", "--porcelain")
     if changed:
         stop("commit or put away these changes first:\n" + changed)
@@ -323,7 +335,7 @@ def ordered_difference(what, then, now):
 
 
 def layout_difference(then_text, now_text):
-    lost, new = layouts.compare(layouts.parse_record(then_text)[1], layouts.parse_record(now_text)[1])
+    lost, new = layouts.compare(layouts.parse_record(then_text), layouts.parse_record(now_text))
     return Difference(
         "class layouts and enum values", sorted(set(key for key, _ in new)), sorted(set(key for key, _, _ in lost))
     )
@@ -351,10 +363,16 @@ def adds_to_api(diffs):
     return any(d.added for d in diffs)
 
 
-def api_release_after(tag, new, diffs):
-    """CivPluginApi.h's release number for new, the release after tag: new's own last number when it adds to what
-    plugins use, so that plugins built with its SDK need it, else the number at tag."""
-    if adds_to_api(diffs):
+def first_of_version(last, bazaar):
+    """Whether the release after last, a release such as 0.5.3, is the first release of bazaar, a version such as
+    0.6."""
+    return version.bazaar_version(last) != bazaar
+
+
+def api_release_after(tag, new, diffs, first):
+    """CivPluginApi.h's release number for new, the release after tag: new's own last number when it is its version's
+    first release or adds to what plugins use, so that plugins built with its SDK need it, else the number at tag."""
+    if first or adds_to_api(diffs):
         return version.numbers(new.release)[2]
     shown = "%s at %s" % (common.shown(layouts.API_HEADER), tag)
     return layouts.release_in(at_tag(tag, layouts.API_HEADER, "cp1252"), shown)
@@ -362,14 +380,19 @@ def api_release_after(tag, new, diffs):
 
 def next_version(base, diffs, for_version, same_bazaar=False):
     """The release after base, for the version of Bazaar for_version, such as 0.5. Stops when this build may not be
-    released as one. A release with the same Bazaar keeps base's mod version."""
+    released as one. A release with the same Bazaar keeps base's mod version. When base is a release of an earlier
+    version, the next release is for_version's first, such as 0.6.0 with mod version 1, which may remove or change
+    what plugins use."""
     numbers = version.numbers(base.release)
-    if version.bazaar_version(base.release) != for_version:
-        stop(
-            "the last release in this branch's history, %s, is for Bazaar %d.%d, so the next release on this branch"
-            " would be the first release of Bazaar %s, a breaking release, which release.py cannot make yet"
-            % (base.release, numbers[0], numbers[1], for_version)
-        )
+    if first_of_version(base.release, for_version):
+        if numbers[:2] > version.numbers(for_version):
+            stop(
+                "the last release in this branch's history, %s, is for a later version of Bazaar than %s, so this is"
+                " not %s's branch" % (base.release, for_version, for_version)
+            )
+        if same_bazaar:
+            stop("the first release of Bazaar %s makes its first Bazaar, so --same-bazaar does not apply" % for_version)
+        return version.Version(for_version + ".0", 1)
     if any(d.removed for d in diffs):
         stop(
             "this build removes or changes what plugins use, which no release of Bazaar %s may do. That change must be"
@@ -501,18 +524,21 @@ def plan(lists, same_bazaar=False):
     """The next release's numbers and CivPluginApi.h's release number for it, after saying what they come from."""
     tag, base, diffs = choose(lists)
     require_options_allowed(tag, same_bazaar)
+    bazaar = current_bazaar_version()
     if diffs is None:
         say("no release has been made yet, so the first one keeps VERSION's numbers: %s, mod version %d" % base)
         new, api_release = base, layouts.api_release()
     else:
         report(tag, diffs)
-        if same_bazaar:
+        first = first_of_version(base.release, bazaar)
+        if same_bazaar and not first:
             require_api_unchanged(diffs, RUN_AGAIN)
             require_same_bazaar(version.bazaar_made_in(base, version.listed_versions()), RUN_AGAIN)
-        new = next_version(base, diffs, current_bazaar_version(), same_bazaar)
+        new = next_version(base, diffs, bazaar, same_bazaar)
         say("the next release is %s, mod version %d" % new)
-        api_release = api_release_after(tag, new, diffs)
-    bazaar = version.bazaar_version(new.release)
+        if first:
+            say("it is the first release of Bazaar %s, so it may remove or change what plugins use" % bazaar)
+        api_release = api_release_after(tag, new, diffs, first)
     say(
         "plugins built with its SDK will run on Bazaar %s.%d and later releases of Bazaar %s"
         % (bazaar, api_release, bazaar)
@@ -539,7 +565,7 @@ def write_zip(path, folder, top=""):
 
 def last_docs_zip(release):
     """The docs zip of the newest release before this one that has one, or None."""
-    tags = [tag for tag in git("tag", "--list", layouts.RELEASE_TAGS).split() if re.fullmatch(r"v\d+\.\d+\.\d+", tag)]
+    tags = [tag for tag in git("tag", "--list", layouts.RELEASE_TAGS).split() if layouts.TAG_NUMBERS.fullmatch(tag)]
     earlier = [tag for tag in tags if version.numbers(tag[1:]) < version.numbers(release)]
     for tag in sorted(earlier, key=lambda tag: version.numbers(tag[1:]), reverse=True):
         found = released_file(tag[1:], DOCS_PATTERN)
@@ -579,13 +605,10 @@ def write_release_files(current, out, trial, same_bazaar=False):
     names = release_files(current.release)
     written = []
     if not same_bazaar:
-        host_folder, bootstrap_folder = mods.write_dll_mod(
+        host_folder, bootstrap_folder = mods.write_host_mod(
             os.path.join(STAGE, "MODS"),
-            mods.HOST_NAME,
-            mods.HOST_ID,
             mods.HOST_TEASER,
             common.HOST_DLL,
-            host_screens=True,
             version=files.TEST_VERSION if trial else current.mod,
             description=None if trial else mods.host_description(current.release),
         )
@@ -615,13 +638,15 @@ def require_build_as_prepared(current):
         same_bazaar = kept_release(current) is not None
         if same_bazaar:
             require_api_unchanged(diffs, PREPARE_AGAIN)
-        expected = next_version(base, diffs, current_bazaar_version(current), same_bazaar)
+        bazaar = current_bazaar_version(current)
+        expected = next_version(base, diffs, bazaar, same_bazaar)
         if expected != current:
             stop(
                 "this build calls for release %s, mod version %d, but VERSION says %s, mod version %d: prepare the"
                 " release again" % (expected + current)
             )
-        api_release, written = api_release_after(tag, current, diffs), layouts.api_release()
+        first = first_of_version(base.release, bazaar)
+        api_release, written = api_release_after(tag, current, diffs, first), layouts.api_release()
         if api_release != written:
             stop(
                 "this build calls for CIV_HOST_API_RELEASE %d, but %s says %d: prepare the release again"
@@ -666,12 +691,10 @@ def prepare(same_bazaar=False):
     run("building the host", ["cmd", "/c", BUILD_HOOKED])
     lists = current_lists()
     new, api_release = plan(lists, same_bazaar)
-    with stopping_says(PART_WAY):
-        version.write(new)
-        new_major, new_minor, _ = version.numbers(new.release)
-        layouts.set_api_version(new_major, new_minor, api_release)
-        version.set_plugin_version(new.release)
-        if not same_bazaar:
+    with stopping_says(PART_WAY % "prepare"):
+        write_numbers(new, api_release)
+        # release.py start lists a version's first release when it starts the version.
+        if not same_bazaar and version.listed_versions()[:1] != [new]:
             version.add_listed_version(new)
         require_numbers_agree()
         restore_history(tag)
@@ -685,6 +708,60 @@ def prepare(same_bazaar=False):
         for what, _, cmd in PREPARE_CHECKS:
             run(what, cmd)
     say("%s is ready on branch %s. Commit it and open a pull request to %s" % (new.release, branch, target))
+    return 0
+
+
+def write_numbers(release, api_release):
+    """VERSION, CivPluginApi.h's version and the Claude Code plugin's version, for release."""
+    version.write(release)
+    major, minor, _ = version.numbers(release.release)
+    layouts.set_api_version(major, minor, api_release)
+    version.set_plugin_version(release.release)
+
+
+def start(major=False, workshop=False):
+    """Make this branch, the next version's, into that version of Bazaar, numbered for its first release."""
+    current = version.read()
+    previous = current_bazaar_version(current)
+    bazaar = version.next_bazaar_version(current.release, major)
+    branch = bazaar + ".x"
+    if git("rev-parse", "--abbrev-ref", "HEAD") != branch:
+        stop(
+            "VERSION is for Bazaar %s, so the next version is %s: run release.py start on that version's branch, %s"
+            % (previous, bazaar, branch)
+        )
+    require_same_as_github(branch)
+    tag = last_release()
+    if tag is None or version.bazaar_version(tag[1:]) != previous:
+        stop("Bazaar %s has no release yet, so the next version can't start" % previous)
+    if bazaar in common.BAZAAR_VERSIONS:
+        stop(
+            "BAZAAR_VERSIONS in %s already lists Bazaar %s: take it out, then run start again, which adds it with a"
+            " new mod ID" % (common.shown(common.COMMON_PY), bazaar)
+        )
+    work = START_PREFIX + bazaar
+    if git("branch", "--list", work):
+        stop(
+            "the branch %s is already here, from an earlier start: switch to it to go on with that start, or delete"
+            " it with git branch -D %s to start again" % (work, work)
+        )
+    mod_id = str(uuid.uuid4())
+    first = version.Version(bazaar + ".0", 1)
+    with stopping_says(PART_WAY % "start"):
+        new_version.add_to_bazaar_versions(bazaar, mod_id, workshop)
+        write_numbers(first, 0)
+        version.add_version_table(first)
+        for project in new_version.TEMPLATE_PROJECTS:
+            new_version.set_template_dependency(mod_id, common.host_mod_name(bazaar), project)
+        for script in new_version.BUILD_SCRIPTS:
+            new_version.add_to_build_script(bazaar, mod_id, script)
+        new_version.add_to_guide_table(bazaar, mod_id)
+        require_numbers_agree()
+        git("switch", "-c", work)
+    say(
+        "Bazaar %s, with the mod ID %s, is started on branch %s. Commit it and open a pull request to %s"
+        % (bazaar, mod_id, work, branch)
+    )
     return 0
 
 
@@ -902,10 +979,9 @@ def publish(notes, no_check=False):
     listed = common.BAZAAR_VERSIONS.get(current_bazaar_version(current))
     if listed is None:
         stop(
-            "VERSION is for Bazaar %s, which BAZAAR_VERSIONS, in %s, doesn't list. Add the version to BAZAAR_VERSIONS,"
-            " with its mod ID, whether it goes on the Steam Workshop, and its Workshop item as None until the version's"
-            " mod is first published on the Workshop"
-            % (current_bazaar_version(current), common.shown(os.path.join(common.HERE, "common.py")))
+            "VERSION is for Bazaar %s, which BAZAAR_VERSIONS, in %s, doesn't list, so VERSION was changed by hand. Put"
+            " VERSION back to the last release of the version before, then run release.py start on this branch"
+            % (current_bazaar_version(current), common.shown(common.COMMON_PY))
         )
     gh = require_gh()
     title = "Bazaar " + current.release
@@ -1025,7 +1101,12 @@ def main():
     publishing.add_argument("--notes", required=True)
     publishing.add_argument("--no-check", action="store_true")
     commands.add_parser("workshop")
+    starting = commands.add_parser("start")
+    starting.add_argument("--major", action="store_true")
+    starting.add_argument("--workshop", action="store_true")
     args = parser.parse_args()
+    if args.command == "start":
+        return start(args.major, args.workshop)
     if args.command == "number":
         return number(args.same_bazaar)
     if args.command == "prepare":

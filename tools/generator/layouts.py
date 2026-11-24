@@ -10,8 +10,8 @@ its own, as a plugin would, apart from the report, whose hook point structs are 
 
 usage: layouts.py            (run by build-hooked.cmd)
        layouts.py --accept   (run by build-hooked.cmd accept-layouts: save the current layouts as the record; a
-                              changed class or enum value is refused unless CIV_HOST_API_MAJOR is the last release's
-                              major while no release from the freeze on is tagged, or one more than it after that)
+                              changed or removed class or enum value is refused once the version in
+                              CivPluginApi.h has a release, or when no release tag is here)
 """
 
 import difflib
@@ -34,9 +34,9 @@ TYPES_HEADER = re.compile(r"^(types .+):$")
 ENUM_VALUE = re.compile(r"^(enum .+) = -?\d+$")
 API_LINE = re.compile(r"^api (\d+)\.(\d+)$")
 RELEASE_TAGS = "v[0-9]*"
+TAG_NUMBERS = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 API_NUMBER = r"^(#define CIV_HOST_API_%s )(\d+)(?=\r?$)"
 MAX_SHOWN = 15
-SET_BACK = "set it back to the major number in VERSION, run build-hooked.cmd again and commit the new record."
 MAX_DIFF_LINES = 12
 
 
@@ -174,16 +174,14 @@ def parse_report(text):
     return sorted(blocks)
 
 
-def format_record(version, blocks):
-    return "api %d.%d\n\n" % version + "".join(text + "\n\n" for _, text in sorted(blocks))
+def format_record(blocks):
+    return "".join(text + "\n\n" for _, text in sorted(blocks))
 
 
 def parse_record(text):
+    """The record at a release tag before 0.6 starts with a line 'api <major>.<minor>', which is skipped."""
     head, _, body = text.partition("\n\n")
-    m = API_LINE.match(head)
-    if not m:
-        raise RuntimeError("%s does not start with 'api <major>.<minor>'" % common.shown(RECORD))
-    return (int(m.group(1)), int(m.group(2))), parse_report(body)
+    return parse_report(body if API_LINE.match(head) else text)
 
 
 # Bazaar makes these and hands them to plugins, so a plugin built for an older one reads only the fields it knows:
@@ -236,17 +234,11 @@ def released_version(tag):
     return (int(released.group(1)), int(released.group(2) or 0)) if released else None
 
 
-def accept_allowed(recorded_version, version, tag):
-    """Before the freeze (common.FREEZE) a change may be accepted on purpose under the last release's major number. The
-    freeze fixes the layouts; from then on only the major version after the last release's may change them, as often as
-    needed until it is released. Without a release tag here, a change is allowed only while the record and the number
-    are both before the freeze."""
+def accept_allowed(version, tag):
+    """Plugins built against a release compile in its layouts, so only a version of Bazaar after the last release's,
+    which has no release yet, may change them."""
     released = released_version(tag)
-    if released is None:
-        return not common.frozen(version) and not common.frozen(recorded_version)
-    if not common.frozen(released):
-        return version[0] == released[0]
-    return version[0] == released[0] + 1
+    return released is not None and tuple(version[:2]) > released
 
 
 def shared_names(*reports):
@@ -293,59 +285,57 @@ def print_lost(lost, recorded, current):
     print("\n".join(describe(lost, shared_names(recorded, current))))
 
 
+def highest_release(tags):
+    """The highest of tags named like v0.6.3, or None. The highest, not the nearest in history, so that a merge from
+    an earlier version's branch can't make a released version look unreleased."""
+    numbered = []
+    for tag in tags:
+        found = TAG_NUMBERS.fullmatch(tag)
+        if found:
+            numbered.append((tuple(int(n) for n in found.groups()), tag))
+    return max(numbered)[1] if numbered else None
+
+
 def last_release_tag():
     try:
         done = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0", "--match", RELEASE_TAGS],
+            ["git", "tag", "--merged", "HEAD", "--list", RELEASE_TAGS],
             capture_output=True,
             text=True,
             cwd=common.REPO,
         )
     except FileNotFoundError:
         return None
-    return done.stdout.strip() if done.returncode == 0 else None
+    return highest_release(done.stdout.split()) if done.returncode == 0 else None
 
 
-def frozen_advice(tag):
-    """The way out when a changed class is refused. VERSION must keep agreeing with CivPluginApi.h, so a changed number
-    goes back once the record is saved."""
-    released = released_version(tag)
-    if released is None:
+def refused_advice(lost, tag):
+    if released_version(tag) is None:
         return ["No release tag is here, so the last release is not known: run git fetch --tags, then build again."]
-    if not common.frozen(released):
+    if not any(now for _, _, now in lost):
         return [
-            "%s freezes the layouts the releases before it left, and no %s release is tagged yet. To change a class or"
-            % (common.FREEZE_SHOWN, common.FREEZE_SHOWN),
-            "enum value before then, set CIV_HOST_API_MAJOR in host\\CivPluginApi.h to %d and run build-hooked.cmd"
-            % released[0],
-            "accept-layouts. Then " + SET_BACK,
-            "Rebuild every plugin.",
+            "Only the first release of a version of Bazaar can remove a class or an enum value that plugins see, so",
+            "the removal belongs in the next version of Bazaar, on that version's own branch.",
         ]
     return [
-        "From Bazaar %s on, a release can't change the layout of a class or an enum value that plugins see, because"
-        % common.FREEZE_SHOWN,
-        "plugins that were built against Bazaar %s would break. Make this change in the next version of Bazaar instead,"
-        % common.FREEZE_SHOWN,
-        "on that version's own branch, whose first release is a breaking release (a release that is allowed to change",
-        "the layout of these classes and enum values).",
+        "%s is released, so a later release of its version can't change or remove a class or an enum value that"
+        % tag[1:],
+        "plugins see: plugins built against %s would break. Make this change in the next version of Bazaar instead,"
+        % tag[1:],
+        "on that version's own branch, before its first release.",
     ]
 
 
-def read_record(version):
-    if os.path.exists(RECORD):
-        with open(RECORD, encoding="cp1252") as f:
-            return parse_record(f.read())
-    if common.frozen(version):
-        raise RuntimeError(
-            "%s is missing. From %s on it cannot be made again: restore it from git."
-            % (common.shown(RECORD), common.FREEZE_SHOWN)
-        )
-    return None, []
+def read_record():
+    if not os.path.exists(RECORD):
+        raise RuntimeError("%s is missing: restore it from git." % common.shown(RECORD))
+    with open(RECORD, encoding="cp1252") as f:
+        return parse_record(f.read())
 
 
-def write_record(version, blocks):
+def write_record(blocks):
     with open(RECORD, "w", encoding="cp1252", newline="\n") as f:
-        f.write(format_record(version, blocks))
+        f.write(format_record(blocks))
 
 
 def current_layouts(project):
@@ -381,26 +371,18 @@ def current_layouts(project):
 
 def check(project):
     current = current_layouts(project)
-    version = api_version()
-    recorded_version, recorded = read_record(version)
+    recorded = read_record()
     lost, new = compare(recorded, current)
     if lost:
         print_lost(lost, recorded, current)
         tag = last_release_tag()
-        if not any(now for _, _, now in lost):
-            print(
-                "Once no plugin uses what is gone, run build-hooked.cmd accept-layouts. From Bazaar %s on, a release"
-                % common.FREEZE_SHOWN
-            )
-            print("can't remove a class or an enum value that plugins see, and the removal belongs in the next version")
-            print("of Bazaar, on that version's own branch, whose first release is a breaking release.")
-        elif accept_allowed(recorded_version, version, tag):
+        if accept_allowed(api_version(), tag):
             print("To change them on purpose, run build-hooked.cmd accept-layouts, then rebuild every plugin.")
         else:
-            print("\n".join(frozen_advice(tag)))
+            print("\n".join(refused_advice(lost, tag)))
         return 1
-    if new or not recorded_version:
-        write_record(recorded_version or version, current)
+    if new:
+        write_record(current)
     print(
         "class layouts and enum values: %d match %s, %d new added to it"
         % (len(current) - len(new), common.shown(RECORD), len(new))
@@ -410,20 +392,17 @@ def check(project):
 
 def accept(project):
     current = current_layouts(project)
-    version = api_version()
-    recorded_version, recorded = read_record(version)
+    recorded = read_record()
     lost, _ = compare(recorded, current)
-    changed = any(now for _, _, now in lost)
     tag = last_release_tag()
-    if changed and not accept_allowed(recorded_version, version, tag):
+    if lost and not accept_allowed(api_version(), tag):
         print_lost(lost, recorded, current)
-        print("\n".join(frozen_advice(tag)))
+        print("\n".join(refused_advice(lost, tag)))
         return 1
-    saved = version if changed or not recorded_version else recorded_version
-    write_record(saved, current)
-    print("Saved %d class layouts and enum values as the record for API %d.%d." % (len(current), saved[0], saved[1]))
-    if changed:
-        print("Rebuild every plugin. If you changed CIV_HOST_API_MAJOR for this, " + SET_BACK)
+    write_record(current)
+    print("Saved %d class layouts and enum values as the record." % len(current))
+    if lost:
+        print("Rebuild every plugin.")
     return 0
 
 
