@@ -17,7 +17,6 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "generator"))
 
-import common  # noqa: E402
 import layouts  # noqa: E402
 
 UNIT = "class CvUnit\tsize(12):\n\t+---\n 0\t| {vfptr}\n 4\t| m_iX\n 8\t| m_iY\n\t+---\n"
@@ -185,13 +184,6 @@ class RecordTest(unittest.TestCase):
 
 
 class AcceptAllowedTest(unittest.TestCase):
-    def test_the_host_refuses_plugins_from_before_the_same_freeze(self):
-        with open(os.path.join(common.HOST_DIR, "CivHostRuntime.h"), encoding="utf-8") as f:
-            text = f.read()
-        found = [re.search(r"#define CIV_HOST_FREEZE_%s (\d+)" % part, text) for part in ("MAJOR", "MINOR")]
-        self.assertTrue(all(found))
-        self.assertEqual(tuple(int(m.group(1)) for m in found), common.FREEZE)
-
     def test_before_the_freeze_a_change_may_always_be_accepted(self):
         for tag in (None, "v0.3.0", "v0.4.1"):
             self.assertTrue(layouts.accept_allowed((0, 3), (0, 4), tag), tag)
@@ -256,24 +248,45 @@ class ApiVersionTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.version_of("#define CIV_HOST_API_MAJOR (1)\n")
 
+    def release_of(self, text):
+        path = os.path.join(temp_folder(self), "CivPluginApi.h")
+        with open(path, "w") as f:
+            f.write(text)
+        with mock.patch.object(layouts, "API_HEADER", path):
+            return layouts.api_release()
+
+    def test_the_release_is_read_from_its_define(self):
+        header = "#define CIV_HOST_API_MAJOR 0\n#define CIV_HOST_API_MINOR 6\n#define CIV_HOST_API_RELEASE 3\n"
+        self.assertEqual(self.release_of(header), 3)
+
+    def test_a_header_without_a_release_is_refused_with_a_message(self):
+        with self.assertRaises(RuntimeError) as refused:
+            self.release_of("#define CIV_HOST_API_MAJOR 0\n#define CIV_HOST_API_MINOR 6\n")
+        self.assertIn("CIV_HOST_API_RELEASE", str(refused.exception))
+
     def test_the_version_is_set_and_nothing_else_changes(self):
-        text = "#pragma once\r\n#define CIV_HOST_API_MAJOR 0\r\n#define CIV_HOST_API_MINOR 3\r\nstruct CivHostInfo;\r\n"
+        text = (
+            "#pragma once\r\n#define CIV_HOST_API_MAJOR 0\r\n#define CIV_HOST_API_MINOR 3\r\n"
+            "#define CIV_HOST_API_RELEASE 2\r\nstruct CivHostInfo;\r\n"
+        )
         path = os.path.join(temp_folder(self), "CivPluginApi.h")
         with open(path, "w", newline="") as f:
             f.write(text)
-        layouts.set_api_version(1, 0, path)
+        layouts.set_api_version(1, 0, 0, path)
         with open(path, newline="") as f:
-            self.assertEqual(f.read(), text.replace("MAJOR 0", "MAJOR 1").replace("MINOR 3", "MINOR 0"))
+            expected = text.replace("MAJOR 0", "MAJOR 1").replace("MINOR 3", "MINOR 0")
+            self.assertEqual(f.read(), expected.replace("RELEASE 2", "RELEASE 0"))
 
     def test_setting_a_header_without_one_of_the_numbers_stops(self):
-        for name in ("MAJOR", "MINOR"):
+        for name in ("MAJOR", "MINOR", "RELEASE"):
             with self.subTest(name=name):
                 path = os.path.join(temp_folder(self), "CivPluginApi.h")
                 with open(path, "w") as f:
                     header = "#define CIV_HOST_API_MAJOR 0\n#define CIV_HOST_API_MINOR 3\n"
+                    header += "#define CIV_HOST_API_RELEASE 0\n"
                     f.write(header.replace("API_" + name, "API_" + name + "_NUMBER"))
                 with self.assertRaises(SystemExit) as stop:
-                    layouts.set_api_version(1, 0, path)
+                    layouts.set_api_version(1, 0, 0, path)
                 self.assertIn("CIV_HOST_API_" + name, str(stop.exception))
 
 

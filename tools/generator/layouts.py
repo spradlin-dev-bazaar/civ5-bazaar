@@ -53,10 +53,23 @@ def api_version():
     return int(major.group(2)), int(minor.group(2))
 
 
-def set_api_version(major, minor, path=API_HEADER):
+def release_in(text, name):
+    found = re.search(API_NUMBER % "RELEASE", text, re.M)
+    if not found:
+        raise RuntimeError("%s has no '#define CIV_HOST_API_RELEASE <number>'" % name)
+    return int(found.group(2))
+
+
+def api_release():
+    with open(API_HEADER, encoding="cp1252") as f:
+        return release_in(f.read(), common.shown(API_HEADER))
+
+
+def set_api_version(major, minor, release, path=None):
+    path = path or API_HEADER
     with open(path, encoding="cp1252", newline="") as f:
         text = f.read()
-    for name, value in (("MAJOR", major), ("MINOR", minor)):
+    for name, value in (("MAJOR", major), ("MINOR", minor), ("RELEASE", release)):
         text, count = re.subn(API_NUMBER % name, r"\g<1>%d" % value, text, flags=re.M)
         if count != 1:
             raise SystemExit("version: %s does not define CIV_HOST_API_%s exactly once" % (common.shown(path), name))

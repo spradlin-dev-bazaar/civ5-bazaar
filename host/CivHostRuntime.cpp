@@ -934,6 +934,9 @@ namespace
 		}
 		CivApiVersion built = {0, 0};
 		const ExportRead read = CopyExportedData(image, CIV_PLUGIN_API_VERSION_NAME, &built, sizeof(built));
+		int builtRelease = 0;
+		if (read == EXPORT_FOUND)
+			CopyExportedData(image, CIV_PLUGIN_API_RELEASE_NAME, &builtRelease, sizeof(builtRelease));
 		FreeLibrary(image);
 		if (read == EXPORT_64_BIT)
 		{
@@ -948,26 +951,28 @@ namespace
 		}
 		rec.builtApiMajor = built.major;
 		rec.builtApiMinor = built.minor;
-		if (built.major != CIV_HOST_API_MAJOR)
+		rec.builtApiRelease = builtRelease;
+		const CivApiNumbers hostApi = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, CIV_HOST_API_RELEASE};
+		const CivApiNumbers builtApi = {built.major, built.minor, builtRelease};
+		switch (CivApiFitOf(hostApi, builtApi))
 		{
-			Refuse(rec, CIV_PLUGIN_OTHER_MAJOR, Format("Built for Bazaar API %d.%d, which this Bazaar (API %d.%d) cannot run.",
-				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
-			return true;
-		}
-		if (built.minor > CIV_HOST_API_MINOR)
-		{
+		case CIV_API_RUNS:
+			return false;
+		case CIV_API_NEWER_VERSION:
 			Refuse(rec, CIV_PLUGIN_NEWER_API, Format("Built for a newer Bazaar (API %d.%d); this Bazaar is API %d.%d.",
 				built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
-			return true;
+			break;
+		case CIV_API_LATER_RELEASE:
+			Refuse(rec, CIV_PLUGIN_NEWER_API, Format("Built for a newer Bazaar: it needs Bazaar %d.%d.%d or a later %d.%d release, "
+				"and this Bazaar is an earlier one.", built.major, built.minor, builtRelease, built.major, built.minor));
+			break;
+		case CIV_API_OLDER_VERSION:
+		default:
+			Refuse(rec, CIV_PLUGIN_OLDER_API, Format("Built for Bazaar API %d.%d, an older version, which this Bazaar (API %d.%d) "
+				"cannot run. Rebuild it with Bazaar %d.%d's SDK.", built.major, built.minor, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR,
+				CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
 		}
-		if (CivApiRefusedAsBeforeFreeze(CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, built.major, built.minor))
-		{
-			Refuse(rec, CIV_PLUGIN_OTHER_MAJOR, Format("Built for Bazaar API %d.%d, from before %d.%d changed what plugins use, "
-				"so this Bazaar (API %d.%d) cannot run it. Rebuild it with a newer SDK.", built.major, built.minor,
-				CIV_HOST_FREEZE_MAJOR, CIV_HOST_FREEZE_MINOR, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR));
-			return true;
-		}
-		return false;
+		return true;
 	}
 
 	int AddRecord(const CivPluginFile& file)
@@ -1106,7 +1111,8 @@ namespace
 		}
 		CommitPending(plugin);
 		rec.status = CIV_PLUGIN_LOADED;
-		Log("Plugin %s %s loaded (built for API %d.%d).", rec.name.c_str(), rec.version.c_str(), rec.builtApiMajor, rec.builtApiMinor);
+		Log("Plugin %s %s loaded (built for API %d.%d.%d).", rec.name.c_str(), rec.version.c_str(), rec.builtApiMajor, rec.builtApiMinor,
+			rec.builtApiRelease);
 	}
 
 	void LoadOne(const CivPluginFile& file)
@@ -1354,10 +1360,13 @@ void CivHostLogLine(const char* line)
 	Log("%s", line);
 }
 
-bool CivApiRefusedAsBeforeFreeze(int hostMajor, int hostMinor, int builtMajor, int builtMinor)
+CivApiFit CivApiFitOf(const CivApiNumbers& host, const CivApiNumbers& built)
 {
-	const int freeze = CIV_HOST_FREEZE_MAJOR * 1000 + CIV_HOST_FREEZE_MINOR;
-	return hostMajor * 1000 + hostMinor >= freeze && builtMajor * 1000 + builtMinor < freeze;
+	if (built.major > host.major || (built.major == host.major && built.minor > host.minor))
+		return CIV_API_NEWER_VERSION;
+	if (built.major != host.major || built.minor != host.minor)
+		return CIV_API_OLDER_VERSION;
+	return built.release > host.release ? CIV_API_LATER_RELEASE : CIV_API_RUNS;
 }
 
 const char* CivHostPluginName(int plugin)

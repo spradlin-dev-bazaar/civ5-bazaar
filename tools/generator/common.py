@@ -16,7 +16,7 @@ HOST_OUTPUT = os.path.join(BUILD_DIR, "src", "BuildOutput", "VS2008_ModWin32")
 HOST_DLL = os.path.join(HOST_OUTPUT, "CvGameCore_Expansion2.dll")
 LICENSE = os.path.join(REPO, "LICENSE")
 # From this release on, what plugins use is frozen: removing or changing any of it needs the next version of Bazaar, on
-# its own branch. Bazaar's loader has its own copy in host/CivHostRuntime.h, which a test keeps equal.
+# its own branch.
 FREEZE = (0, 5)
 FREEZE_SHOWN = "%d.%d" % FREEZE
 NOTICE = os.path.join(REPO, "NOTICE")

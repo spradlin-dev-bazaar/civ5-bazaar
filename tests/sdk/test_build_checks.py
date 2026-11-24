@@ -119,14 +119,15 @@ class BuildScriptTest(unittest.TestCase):
         self.env = dict((k, v) for k, v in os.environ.items() if not k.upper().startswith("BAZAAR_SDK"))
         self.env.update(TEMP=self.temp, TMP=self.temp)
 
-    def make_sdk(self, folder, api):
+    def make_sdk(self, folder, api, release=None):
+        """An SDK for api, "major.minor", whose header has no release number unless release is given."""
         os.makedirs(os.path.join(folder, "include"), exist_ok=True)
         write(os.path.join(folder, "CivPlugin.vsprops"), "")
         major, minor = api.split(".")
-        write(
-            os.path.join(folder, "include", "CivPluginApi.h"),
-            "#define CIV_HOST_API_MAJOR %s\n#define CIV_HOST_API_MINOR %s\n" % (major, minor),
-        )
+        header = "#define CIV_HOST_API_MAJOR %s\n#define CIV_HOST_API_MINOR %s\n" % (major, minor)
+        if release is not None:
+            header += "#define CIV_HOST_API_RELEASE %d\n" % release
+        write(os.path.join(folder, "include", "CivPluginApi.h"), header)
         return folder
 
     def project(self, template=PLUGIN_TEMPLATE, inside=None):
@@ -449,6 +450,20 @@ class BuildScriptTest(unittest.TestCase):
         self.assert_problems(folder, self.build(folder, api=None), "CIV_PLUGIN_EXPORT_API_VERSION")
         self.assert_problems(folder, self.build(folder, bits=64), "32-bit Windows DLL")
 
+    def test_a_plugin_dll_must_declare_its_sdk_s_release_too(self):
+        folder = self.project()
+        self.make_sdk(self.sdk, self.version, release=3)
+        self.assert_checked(self.build(folder, api=self.version + ".3"))
+        earlier = "declares API %s.2, but the SDK that it was built with is for %s.3" % (self.version, self.version)
+        self.assert_problems(folder, self.build(folder, api=self.version + ".2"), earlier)
+        unmarked = "declares API %s.0, but the SDK that it was built with is for %s.3" % (self.version, self.version)
+        self.assert_problems(folder, self.build(folder, api=self.version), unmarked)
+
+    def test_an_sdk_header_without_a_release_counts_as_the_version_s_first_release(self):
+        folder = self.project()
+        self.assert_checked(self.build(folder, api=self.version + ".0"))
+        self.assert_problems(folder, self.build(folder, api=self.version + ".1"), "declares API %s.1" % self.version)
+
     def test_a_lua_mod_with_a_dll_gets_every_check_but_the_api_version(self):
         folder = self.project(LUA_TEMPLATE)
         sql = mod_file(folder, ".sql")
@@ -540,6 +555,13 @@ class SdkBuildTest(unittest.TestCase):
 class OnePlaceTest(unittest.TestCase):
     def test_both_templates_build_scripts_are_the_same(self):
         self.assertTrue(filecmp.cmp(os.path.join(PLUGIN_TEMPLATE, SCRIPT), os.path.join(LUA_TEMPLATE, SCRIPT), False))
+
+    def test_the_build_script_reads_the_exports_that_the_api_header_names(self):
+        header = read(os.path.join(REPO, "host", "CivPluginApi.h"))
+        script = read(os.path.join(PLUGIN_TEMPLATE, SCRIPT))
+        for define in ("CIV_PLUGIN_API_VERSION_NAME", "CIV_PLUGIN_API_RELEASE_NAME"):
+            (name,) = re.findall(r'^#define %s "(\w+)"' % define, header, re.M)
+            self.assertIn("'%s'" % name, script, define)
 
     def test_the_build_script_lists_the_versions_and_mod_ids_of_bazaar_s_tools(self):
         versions = known_versions(os.path.join(PLUGIN_TEMPLATE, SCRIPT))

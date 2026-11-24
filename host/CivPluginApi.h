@@ -8,6 +8,9 @@
 
 #define CIV_HOST_API_MAJOR 0
 #define CIV_HOST_API_MINOR 5
+// The oldest release of this version that has everything this header has, such as 3 for 0.6.3. release.py raises it
+// when a release adds to what plugins use.
+#define CIV_HOST_API_RELEASE 0
 
 #include <string.h>
 
@@ -525,10 +528,14 @@ struct CivApiVersion
 };
 
 // Write CIV_PLUGIN_EXPORT_API_VERSION; once, outside any function, in one of your plugin's .cpp files. Bazaar reads it
-// from the plugin's file before running any of its code, and refuses a plugin built for a newer Bazaar or another major.
+// from the plugin's file before running any of its code, and refuses a plugin built for another version of Bazaar or
+// for a later release of this one. The release is a second export so that CivApiVersion never changes; a plugin
+// without it counts as built for the version's first release.
 #define CIV_PLUGIN_API_VERSION_NAME "CivPluginApiVersion"
+#define CIV_PLUGIN_API_RELEASE_NAME "CivPluginApiRelease"
 #define CIV_PLUGIN_EXPORT_API_VERSION \
-	extern "C" __declspec(dllexport) const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR}
+	extern "C" __declspec(dllexport) const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR}; \
+	extern "C" __declspec(dllexport) const int CivPluginApiRelease = CIV_HOST_API_RELEASE
 
 typedef bool (*CivPluginEntryFn)(const CivHostInfo* host, CivPluginInfo* plugin);
 typedef void (*CivPluginShutdownFn)();
