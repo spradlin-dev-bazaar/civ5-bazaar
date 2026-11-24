@@ -99,6 +99,16 @@ def disagreements(version, api, plugin):
     return found
 
 
+def release_disagreements(version, api_release):
+    """api_release is CivPluginApi.h's third number."""
+    if api_release > numbers(version.release)[2]:
+        return [
+            "the plugin API release in %s is %d, which names a release after %s"
+            % (common.shown(layouts.API_HEADER), api_release, version.release)
+        ]
+    return []
+
+
 def bazaar_version(release):
     """The version of Bazaar that a release belongs to: its first two numbers, such as 0.5."""
     return "%d.%d" % numbers(release)[:2]
@@ -134,6 +144,7 @@ def listed_disagreements(version, listed):
 def check():
     version = read()
     found = disagreements(version, layouts.api_version(), plugin_version())
+    found += release_disagreements(version, layouts.api_release())
     return version, found + listed_disagreements(version, listed_versions())
 
 

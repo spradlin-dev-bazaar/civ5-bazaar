@@ -24,11 +24,17 @@ namespace
 	}
 
 	// Mirrors the host's line for a plugin that loaded.
-	std::string LoadedLine(const char* pluginName, int major, int minor)
+	std::string LoadedLine(const char* pluginName, int major, int minor, int release)
 	{
 		char line[128];
-		_snprintf_s(line, sizeof(line), _TRUNCATE, "Plugin %s 1.0 loaded (built for API %d.%d).", pluginName, major, minor);
+		_snprintf_s(line, sizeof(line), _TRUNCATE, "Plugin %s 1.0 loaded (built for API %d.%d.%d).", pluginName, major, minor, release);
 		return line;
+	}
+
+	CivApiNumbers Api(int major, int minor, int release)
+	{
+		const CivApiNumbers numbers = {major, minor, release};
+		return numbers;
 	}
 
 	int AfterHookCount(int hookId)
@@ -142,7 +148,7 @@ namespace
 void TestLoading()
 {
 	const char* const names[] = {"toy_basic.dll", "toy_second.dll", "toy_shapes.dll", "toy_conflict.dll", "toy_newer.dll",
-		"toy_major.dll", "toy_no_version.dll", "toy_newer_imports.dll", "toy_older.dll", "toy_before_freeze.dll", "toy_ordinals.dll", "toy_no_entry.dll",
+		"toy_major.dll", "toy_no_version.dll", "toy_newer_imports.dll", "toy_older.dll", "toy_later_release.dll", "toy_ordinals.dll", "toy_no_entry.dll",
 		"toy_missing.dll", "toy_entry_fault.dll", "toy_load_fails.dll", "toy_64bit.dll", "toy_empty_name.dll"};
 	StartWith(names);
 
@@ -151,11 +157,29 @@ void TestLoading()
 	Check(HasStatus("toy_newer.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a newer host is refused");
 	Check(ReportRow("toy_newer.dll").problems.find("newer Bazaar") != std::string::npos, "the Plugins screen says why a plugin built for a newer host was refused");
 	Check(!LogHas("[Toy Newer]"), "a plugin built for a newer host never runs: its version is read from its file");
-	Check(HasStatus("toy_major.dll", CIV_PLUGIN_OTHER_MAJOR), "a plugin built for another major version is refused");
+	Check(HasStatus("toy_major.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a later major version is refused as built for a newer Bazaar");
 	Check(!LogHas("[Toy Major]"), "a plugin built for another major version never runs");
-	Check(CivApiRefusedAsBeforeFreeze(0, 5, 0, 4) && CivApiRefusedAsBeforeFreeze(0, 9, 0, 3) && !CivApiRefusedAsBeforeFreeze(0, 5, 0, 5)
-		&& !CivApiRefusedAsBeforeFreeze(1, 2, 1, 0), "from the freeze on, a plugin built before it is refused");
-	Check(!CivApiRefusedAsBeforeFreeze(0, 4, 0, 3), "before the freeze, a plugin built for an older minor version still loads");
+	Check(HasStatus("toy_older.dll", CIV_PLUGIN_OLDER_API)
+			&& ReportRow("toy_older.dll").problems.find("an older version") != std::string::npos
+			&& ReportRow("toy_older.dll").problems.find("Rebuild it with Bazaar") != std::string::npos,
+		"a plugin built for an older minor version is refused, and told to rebuild with this version's SDK");
+	Check(!LogHas("[Toy Older]"), "a plugin built for an older minor version never runs");
+	char needs[128];
+	_snprintf_s(needs, sizeof(needs), _TRUNCATE, "it needs Bazaar %d.%d.%d or a later %d.%d release, and this Bazaar is an earlier one.",
+		CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, CIV_HOST_API_RELEASE + 1, CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR);
+	Check(HasStatus("toy_later_release.dll", CIV_PLUGIN_NEWER_API), "a plugin built for a later release of this version is refused");
+	Check(ReportRow("toy_later_release.dll").problems.find(needs) != std::string::npos,
+		"the Plugins screen names the release that a plugin built for a later release needs, read from its file");
+	Check(!LogHas("[Toy Later Release]"), "a plugin built for a later release of this version never runs");
+	const CivApiNumbers host = Api(0, 6, 3);
+	Check(CivApiFitOf(host, Api(0, 6, 3)) == CIV_API_RUNS, "a plugin built for this release runs");
+	Check(CivApiFitOf(host, Api(0, 6, 0)) == CIV_API_RUNS, "a plugin built for an earlier release of this version runs");
+	Check(CivApiFitOf(host, Api(0, 6, 4)) == CIV_API_LATER_RELEASE, "a plugin built for a later release of this version does not run");
+	Check(CivApiFitOf(host, Api(0, 7, 0)) == CIV_API_NEWER_VERSION, "a plugin built for a later minor version does not run, whatever its release");
+	Check(CivApiFitOf(Api(0, 9, 0), Api(1, 0, 0)) == CIV_API_NEWER_VERSION, "a plugin built for a later major version does not run");
+	Check(CivApiFitOf(host, Api(0, 5, 9)) == CIV_API_OLDER_VERSION, "a plugin built for an earlier minor version does not run, whatever its release");
+	Check(CivApiFitOf(Api(1, 1, 0), Api(1, 0, 5)) == CIV_API_OLDER_VERSION, "a plugin built for an earlier version of the same major version does not run");
+	Check(CivApiFitOf(Api(1, 0, 0), Api(0, 9, 9)) == CIV_API_OLDER_VERSION, "a plugin built for an earlier major version does not run");
 	Check(HasStatus("toy_no_version.dll", CIV_PLUGIN_NO_API_VERSION), "a plugin that does not export its API version is refused");
 	Check(ReportRow("toy_no_version.dll").problems.find("which Bazaar") != std::string::npos, "the Plugins screen says the plugin does not say which Bazaar it was built for");
 	Check(!LogHas("[Toy No Version]"), "a plugin that does not export its API version never runs");
@@ -164,20 +188,14 @@ void TestLoading()
 	Check(!unloadable, "Windows itself cannot load toy_newer_imports.dll, so only its version could have refused it");
 	if (unloadable)
 		FreeLibrary(unloadable);
-	Check(LogHas(LoadedLine("Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR).c_str()), "the host reads the version a plugin exports");
-	// At the release the freeze starts from, the minor version before it is from before the freeze, and is refused.
-	const bool previousMinorFrozen = CIV_HOST_API_MINOR > 0
-		&& (CIV_HOST_API_MAJOR > CIV_HOST_FREEZE_MAJOR || CIV_HOST_API_MINOR - 1 >= CIV_HOST_FREEZE_MINOR);
-	if (previousMinorFrozen)
-	{
-		Check(HasStatus("toy_older.dll", CIV_PLUGIN_LOADED), "a plugin built for an older minor version loads");
-		Check(LogHas(LoadedLine("Toy Older", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1).c_str()), "the host reads an older plugin's own version");
-	}
-	Check(HasStatus("toy_before_freeze.dll", CIV_PLUGIN_OTHER_MAJOR)
-			&& ReportRow("toy_before_freeze.dll").problems.find("Rebuild it with a newer SDK") != std::string::npos
-			&& !LogHas("[Toy Before Freeze]"),
-		"a plugin built for the version before the freeze is refused, told to rebuild, and never runs");
+	Check(LogHas(LoadedLine("Toy Basic", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, CIV_HOST_API_RELEASE).c_str()),
+		"the host reads the version and the release a plugin exports");
+	const int* exportedRelease = reinterpret_cast<const int*>(ToyExport("toy_basic.dll", CIV_PLUGIN_API_RELEASE_NAME));
+	Check(exportedRelease && *exportedRelease == CIV_HOST_API_RELEASE,
+		"CIV_PLUGIN_EXPORT_API_VERSION exports the header's release under the name the host reads");
 	Check(HasStatus("toy_ordinals.dll", CIV_PLUGIN_LOADED), "a plugin whose exports are numbered out of name order loads: its version is found by name");
+	Check(LogHas(LoadedLine("Toy Ordinals", CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR, 0).c_str()),
+		"a plugin that exports no release counts as built for the version's first release");
 	Check(HasStatus("toy_no_entry.dll", CIV_PLUGIN_NO_ENTRY), "a DLL without the entry point is refused");
 	Check(HasStatus("toy_missing.dll", CIV_PLUGIN_FILE_NOT_LOADED), "a missing file is reported, not ignored");
 	Check(HasStatus("toy_load_fails.dll", CIV_PLUGIN_FILE_NOT_LOADED)

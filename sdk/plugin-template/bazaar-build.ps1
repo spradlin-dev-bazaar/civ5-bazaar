@@ -139,14 +139,17 @@ function Test-SdkFolder([string] $folder) {
         (Test-Path -LiteralPath (Join-Path $folder 'include\CivPluginApi.h') -PathType Leaf)
 }
 
-function Get-SdkApiVersion([string] $folder) {
+# A header without CIV_HOST_API_RELEASE, such as Bazaar 0.5's, counts as its version's first release.
+function Get-SdkApi([string] $folder) {
     $header = Read-RawText (Join-Path $folder 'include\CivPluginApi.h')
     $major = [regex]::Match($header, '#define CIV_HOST_API_MAJOR (\d+)')
     $minor = [regex]::Match($header, '#define CIV_HOST_API_MINOR (\d+)')
     if (-not $major.Success -or -not $minor.Success) {
         return $null
     }
-    return '{0}.{1}' -f [int] $major.Groups[1].Value, [int] $minor.Groups[1].Value
+    $release = [regex]::Match($header, '#define CIV_HOST_API_RELEASE (\d+)')
+    $releaseNumber = if ($release.Success) { [int] $release.Groups[1].Value } else { 0 }
+    return '{0}.{1}.{2}' -f [int] $major.Groups[1].Value, [int] $minor.Groups[1].Value, $releaseNumber
 }
 
 function Find-Sdk([string] $version) {
@@ -168,12 +171,13 @@ function Find-Sdk([string] $version) {
     if (-not (Test-SdkFolder $folder)) {
         Stop-Build "The folder $source, '$folder', is not a Bazaar SDK: it has no CivPlugin.vsprops or include\CivPluginApi.h."
     }
-    $api = Get-SdkApiVersion $folder
+    $api = Get-SdkApi $folder
     if (-not $api) {
         Stop-Build "The SDK's include\CivPluginApi.h, in '$folder', names no API version."
     }
-    if ($api -ne $version) {
-        Stop-Build "The SDK $source, '$folder', is for Bazaar $api, but the mod depends on Bazaar $version. Build with Bazaar $version's SDK."
+    $sdkVersion = $api.Substring(0, $api.LastIndexOf('.'))
+    if ($sdkVersion -ne $version) {
+        Stop-Build "The SDK $source, '$folder', is for Bazaar $sdkVersion, but the mod depends on Bazaar $version. Build with Bazaar $version's SDK."
     }
     # Combining with '.' drops a separator at the end of the folder but keeps a drive root such as C:\ whole,
     # because C: alone means the current folder on drive C.
@@ -208,9 +212,10 @@ function Get-XmlDllPluginRows($xml) {
     }
 }
 
-# $null means no such export; a file that is not a 32-bit DLL throws. Offsets: Microsoft's PE format specification.
-# CivPluginApiVersion's address holds two ints, the major and minor API version (CivPluginApi.h).
-function Get-ExportedApiVersion([byte[]] $data) {
+# $null means no CivPluginApiVersion; a file that is not a 32-bit DLL throws. Offsets: Microsoft's PE format
+# specification. CivPluginApiVersion's address holds two ints, the major and minor API version, and CivPluginApiRelease's
+# one int (CivPluginApi.h). Bazaar counts a DLL without CivPluginApiRelease as built for its version's first release.
+function Get-ExportedApi([byte[]] $data) {
     $peHeader = [BitConverter]::ToInt32($data, 0x3C)
     if ($peHeader -lt 0 -or [BitConverter]::ToUInt32($data, $peHeader) -ne 0x4550) {
         throw 'No PE header.'
@@ -247,16 +252,26 @@ function Get-ExportedApiVersion([byte[]] $data) {
     $functions = & $toFilePosition ([BitConverter]::ToUInt32($data, $exportTable + 28))
     $names = & $toFilePosition ([BitConverter]::ToUInt32($data, $exportTable + 32))
     $ordinals = & $toFilePosition ([BitConverter]::ToUInt32($data, $exportTable + 36))
+    $version, $release = $null, 0
     for ($i = 0; $i -lt $nameCount; $i++) {
         $nameStart = & $toFilePosition ([BitConverter]::ToUInt32($data, $names + 4 * $i))
         $nameEnd = [Array]::IndexOf($data, [byte] 0, [int] $nameStart)
-        if ([Text.Encoding]::ASCII.GetString($data, $nameStart, $nameEnd - $nameStart) -ceq 'CivPluginApiVersion') {
-            $ordinal = [BitConverter]::ToUInt16($data, $ordinals + 2 * $i)
-            $value = & $toFilePosition ([BitConverter]::ToUInt32($data, $functions + 4 * $ordinal))
-            return '{0}.{1}' -f [BitConverter]::ToInt32($data, $value), [BitConverter]::ToInt32($data, $value + 4)
+        $name = [Text.Encoding]::ASCII.GetString($data, $nameStart, $nameEnd - $nameStart)
+        if ($name -cne 'CivPluginApiVersion' -and $name -cne 'CivPluginApiRelease') {
+            continue
+        }
+        $ordinal = [BitConverter]::ToUInt16($data, $ordinals + 2 * $i)
+        $value = & $toFilePosition ([BitConverter]::ToUInt32($data, $functions + 4 * $ordinal))
+        if ($name -ceq 'CivPluginApiVersion') {
+            $version = '{0}.{1}' -f [BitConverter]::ToInt32($data, $value), [BitConverter]::ToInt32($data, $value + 4)
+        } else {
+            $release = [BitConverter]::ToInt32($data, $value)
         }
     }
-    return $null
+    if (-not $version) {
+        return $null
+    }
+    return '{0}.{1}' -f $version, $release
 }
 
 function Get-UnpackedModProblems([string] $folder, [bool] $isPlugin, [string] $sdkApi) {
@@ -334,7 +349,7 @@ function Add-DllProblems([string] $folder, [string] $dll, $packed, [string[]] $l
         $problems.Add("its mod description does not list $dll among the mod's files, so Bazaar would not find the DLL. Keep the DLL's <Content> entry in the .civ5proj")
     }
     try {
-        $api = Get-ExportedApiVersion ([IO.File]::ReadAllBytes($file[0].FullName))
+        $api = Get-ExportedApi ([IO.File]::ReadAllBytes($file[0].FullName))
     } catch {
         $problems.Add("$dll could not be read as a 32-bit Windows DLL, the format that Civilization V requires")
         return
@@ -411,7 +426,7 @@ if ($built.Count -ne 1) {
     Stop-Build "The build made $($built.Count) packages ending in '(v $($project.ModVersion)).civ5mod' in Packages, not one."
 }
 # build.cmd sets BAZAAR_SDK to the SDK start found, and the plugin's .vcproj builds with that same variable.
-$sdkApi = if ($Plugin) { Get-SdkApiVersion $env:BAZAAR_SDK } else { $null }
+$sdkApi = if ($Plugin) { Get-SdkApi $env:BAZAAR_SDK } else { $null }
 $problems = @(Get-PackageProblems $built[0].FullName $Plugin.IsPresent $sdkApi)
 foreach ($leftover in Get-TemplateLeftovers $project) {
     Write-Output "build: warning: $leftover."

@@ -62,6 +62,17 @@ class DisagreementTest(unittest.TestCase):
         self.assertIn("plugin API version", found[0])
         self.assertIn("is 0.3, not 0.4", found[0])
 
+    def test_the_api_release_may_name_this_release_or_an_earlier_one(self):
+        for api_release in (0, 3, 4):
+            with self.subTest(api_release=api_release):
+                self.assertEqual(version.release_disagreements(version.Version("0.6.4", 5), api_release), [])
+
+    def test_an_api_release_after_the_release_is_named(self):
+        found = version.release_disagreements(version.Version("0.6.4", 5), 5)
+        self.assertEqual(len(found), 1)
+        self.assertIn("plugin API release", found[0])
+        self.assertIn("is 5, which names a release after 0.6.4", found[0])
+
     def test_a_claude_plugin_version_that_differs_is_named(self):
         found = version.disagreements(version.Version("0.3.1", 1), (0, 3), "0.3.0")
         self.assertEqual(len(found), 1)
@@ -105,6 +116,12 @@ class DisagreementTest(unittest.TestCase):
         with mock.patch.object(version, "listed_versions", return_value=[version.Version("0.1.0", 1)]):
             found = version.check()[1]
         self.assertTrue(any("newest row of VERSIONS.md" in problem for problem in found), found)
+
+    def test_the_check_covers_the_api_release(self):
+        after = version.numbers(version.read().release)[2] + 1
+        with mock.patch.object(version.layouts, "api_release", return_value=after):
+            found = version.check()[1]
+        self.assertTrue(any("plugin API release" in problem for problem in found), found)
 
     def test_this_repository_agrees_with_itself(self):
         self.assertEqual(version.check()[1], [], "run python tools/version.py and fix what it names")

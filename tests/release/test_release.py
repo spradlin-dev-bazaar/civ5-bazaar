@@ -45,6 +45,7 @@ API_HEADER = """#pragma once
 // The handshake.
 #define CIV_HOST_API_MAJOR 0
 #define CIV_HOST_API_MINOR 3
+#define CIV_HOST_API_RELEASE 0
 
 /* What a plugin
    gets. */
@@ -149,6 +150,7 @@ class DifferenceTest(unittest.TestCase):
             API_HEADER.replace("// The handshake.", "// What the host and a plugin agree on.")
             .replace("What a plugin", "What each plugin")
             .replace("MINOR 3", "MINOR 4")
+            .replace("RELEASE 0", "RELEASE 4")
             .replace("int  size;", "int size;")
             .replace("host,\n\tCivPluginInfo* plugin);", "host, CivPluginInfo* plugin);")
         )
@@ -245,11 +247,40 @@ class NumberTest(unittest.TestCase):
             mock.patch.object(release, "code_changes", return_value=list(changed)) as code,
             mock.patch.object(release.bazaar_compare, "package_changes", return_value=[]),
             mock.patch.object(release, "build_settings_changes", return_value=[]),
+            mock.patch.object(release, "api_release_after", return_value=0),
             contextlib.redirect_stdout(io.StringIO()),
         ):
-            new = release.plan(None, same_bazaar=True)
+            new, _ = release.plan(None, same_bazaar=True)
         self.compared = code.call_args[0][0]
         return new
+
+    def plan(self, base, diffs, tagged_release=2, api_release=5):
+        """plan's numbers after base, on base's version's branch, with CIV_HOST_API_RELEASE at tagged_release in base's
+        CivPluginApi.h and at api_release in today's; self.said is what plan printed."""
+        tag = None if diffs is None else "v" + base.release
+        tagged_header = API_HEADER.replace("RELEASE 0", "RELEASE %d" % tagged_release)
+        out = io.StringIO()
+        with (
+            mock.patch.object(release, "choose", return_value=(tag, base, diffs)),
+            mock.patch.object(release, "current_bazaar_version", return_value=version.bazaar_version(base.release)),
+            mock.patch.object(release, "at_tag", return_value=tagged_header),
+            mock.patch.object(release.layouts, "api_release", return_value=api_release),
+            contextlib.redirect_stdout(out),
+        ):
+            planned = release.plan(None)
+        self.said = out.getvalue()
+        return planned
+
+    def test_a_release_that_adds_to_what_plugins_use_becomes_the_release_its_plugins_need(self):
+        self.assertEqual(self.plan(version.Version("0.6.2", 3), changes(added=["x"])), (("0.6.3", 4), 3))
+        self.assertIn("plugins built with its SDK will run on Bazaar 0.6.3 and later releases of Bazaar 0.6", self.said)
+
+    def test_a_release_that_adds_nothing_keeps_the_last_release_s_number(self):
+        self.assertEqual(self.plan(version.Version("0.6.2", 3), changes()), (("0.6.3", 4), 2))
+        self.assertIn("will run on Bazaar 0.6.2 and later", self.said)
+
+    def test_the_first_release_keeps_the_release_plugins_need(self):
+        self.assertEqual(self.plan(version.Version("0.6.0", 1), None, api_release=0), (("0.6.0", 1), 0))
 
     def test_the_same_bazaar_is_checked_against_the_release_that_made_it(self):
         self.assertEqual(self.plan_same_bazaar(changes()), ("0.5.2", 5))
@@ -433,11 +464,44 @@ class ChooseTest(unittest.TestCase):
                 mock.patch.object(release, "current_lists", return_value=lists),
                 mock.patch.object(release, "last_release", return_value="v0.3.0"),
                 mock.patch.object(release, "at_tag", self.at_tag),
+                mock.patch.object(release.layouts, "api_release", return_value=1),
             ):
                 release.require_build_as_prepared(version.Version("0.3.1", 2))
                 with self.assertRaises(SystemExit) as stop:
                     release.require_build_as_prepared(version.Version("0.3.2", 2))
                 self.assertIn("calls for release 0.3.1", str(stop.exception))
+
+    def build_as_prepared(self, lists, written_release):
+        """require_build_as_prepared for 0.3.1 after 0.3.0, whose CivPluginApi.h says CIV_HOST_API_RELEASE 0, with
+        written_release in today's."""
+        self.SAVED = dict(self.SAVED, **{"CivPluginApi.h": API_HEADER})
+        with tempfile.TemporaryDirectory() as folder:
+            names = ("hooks.txt", "exports.txt", "CivPluginApi.h")
+            hooks, exports, header = (os.path.join(folder, name) for name in names)
+            release.write_list(hooks, "0.3.1", lists[0])
+            release.write_list(exports, "0.3.1", lists[1])
+            with open(header, "w") as f:
+                f.write(API_HEADER.replace("RELEASE 0", "RELEASE %d" % written_release))
+            with (
+                mock.patch.object(release, "HOOKS_LIST", hooks),
+                mock.patch.object(release, "EXPORTS_LIST", exports),
+                mock.patch.object(release.layouts, "API_HEADER", header),
+                mock.patch.object(release, "current_lists", return_value=lists),
+                mock.patch.object(release, "last_release", return_value="v0.3.0"),
+                mock.patch.object(release, "at_tag", self.at_tag),
+            ):
+                release.require_build_as_prepared(version.Version("0.3.1", 2))
+
+    def test_a_build_whose_api_release_is_not_the_one_it_calls_for_stops(self):
+        same = (["0\tCvCity_init"], ["DllGetGameContext"])
+        grown = (same[0] + ["1\tCvUnit_kill"], same[1])
+        self.build_as_prepared(grown, 1)
+        self.build_as_prepared(same, 0)
+        for lists, written, called_for in ((grown, 0, 1), (same, 1, 0)):
+            with self.subTest(written=written), self.assertRaises(SystemExit) as stop:
+                self.build_as_prepared(lists, written)
+            self.assertIn("calls for CIV_HOST_API_RELEASE %d, but" % called_for, str(stop.exception))
+            self.assertIn("says %d: prepare the release again" % written, str(stop.exception))
 
     def test_a_build_that_keeps_bazaar_must_not_change_what_plugins_use(self):
         same = (["0\tCvCity_init"], ["DllGetGameContext"])
@@ -835,7 +899,7 @@ class PrepareTest(unittest.TestCase):
             (release, "last_release", steps.step("last_release", "v0.3.0")),
             (release, "run", run),
             (release, "current_lists", steps.step("lists", self.LISTS)),
-            (release, "plan", steps.step("plan", planned)),
+            (release, "plan", steps.step("plan", (planned, 3))),
             (release.version, "write", steps.step("VERSION")),
             (release.layouts, "set_api_version", steps.step("API version")),
             (release.version, "set_plugin_version", steps.step("plugin version")),
@@ -892,7 +956,7 @@ class PrepareTest(unittest.TestCase):
     def test_each_step_gets_the_new_release(self):
         steps, _ = self.prepare()
         self.assertEqual(steps.arguments("VERSION"), [((version.Version("0.4.0", 2),), {})])
-        self.assertEqual(steps.arguments("API version"), [((0, 4), {})])
+        self.assertEqual(steps.arguments("API version"), [((0, 4, 3), {})])
         self.assertEqual(steps.arguments("plugin version"), [(("0.4.0",), {})])
         self.assertEqual(steps.arguments("mod versions"), [((version.Version("0.4.0", 2),), {})])
         self.assertEqual(steps.arguments("restore history"), [(("v0.3.0",), {})])
@@ -1152,12 +1216,13 @@ class FileTest(unittest.TestCase):
 
 
 class ReleaseChecksTest(unittest.TestCase):
-    CURRENT = version.Version("0.6.0", 6)
-    LOADED = "Plugin Template Plugin 1 loaded (built for API 0.6)."
+    CURRENT = version.Version("0.6.4", 6)
+    LOADED = "Plugin Template Plugin 1 loaded (built for API 0.6.2)."
     TEMPLATE = release.runner.read_checks(os.path.join(release.common.REPO, "sdk", "plugin-template", "checks.toml"))
 
     def checks(self, trial):
-        return release.release_checks(self.CURRENT, ["host.civ5mod", "vmc.civ5mod"], self.TEMPLATE, trial)
+        with mock.patch.object(release.layouts, "api_release", return_value=2):
+            return release.release_checks(self.CURRENT, ["host.civ5mod", "vmc.civ5mod"], self.TEMPLATE, trial)
 
     def test_a_release_names_itself_and_loads_the_template_then_plays_the_template_s_own_checks(self):
         checks = self.checks(trial=False)
@@ -1170,19 +1235,20 @@ class ReleaseChecksTest(unittest.TestCase):
         self.assertLess(kinds.index("end_turns"), kinds.index("log"))
         description = checks.steps[0]
         self.assertEqual((description["description_of"], description["version"]), (release.mods.HOST_ID, 6))
-        self.assertEqual(description["is"], release.mods.host_description("0.6.0"))
+        self.assertEqual(description["is"], release.mods.host_description("0.6.4"))
         self.assertEqual(
             [step["what"] for step in checks.steps[:2]],
             [
-                "Bazaar's description in the Mods menu names 0.6.0",
-                "Bazaar.log says the template plugin loaded, built for API 0.6",
+                "Bazaar's description in the Mods menu names 0.6.4",
+                "Bazaar.log says the template plugin loaded, built for API 0.6.2",
             ],
         )
 
     def test_the_loaded_check_finds_the_template_built_for_this_api_only(self):
         loaded = self.checks(trial=False).steps[1]["has"]
         self.assertRegex(self.LOADED, loaded)
-        self.assertNotRegex(self.LOADED.replace("0.6", "0.5"), loaded)
+        self.assertNotRegex(self.LOADED.replace("0.6.2", "0.5.2"), loaded)
+        self.assertNotRegex(self.LOADED.replace("0.6.2", "0.6.1"), loaded)
 
     def test_a_trial_build_or_a_release_that_keeps_bazaar_is_not_asked_to_name_its_release(self):
         for trial, keep_bazaar in ((True, False), (False, True)):
@@ -1605,9 +1671,9 @@ class SourceContractTest(unittest.TestCase):
 
     def test_the_loaded_line_is_the_one_bazaar_writes(self):
         (fmt,) = re.findall(
-            r'Log\("(Plugin %s %s loaded \(built for API %d\.%d\)\.)"', self.source("host", "CivHostRuntime.cpp")
+            r'Log\("(Plugin %s %s loaded \(built for API %d\.%d\.%d\)\.)"', self.source("host", "CivHostRuntime.cpp")
         )
-        self.assertRegex(fmt % ("Template Plugin", "1", 0, 6), release.TEMPLATE_LOADED % (0, 6))
+        self.assertRegex(fmt % ("Template Plugin", "1", 0, 6, 2), release.TEMPLATE_LOADED % (0, 6, 2))
 
 
 if __name__ == "__main__":

@@ -6,11 +6,6 @@
 #include <utility>
 #include <vector>
 
-// From this API on, what plugins use only grows within a major version. tools/generator/common.py's FREEZE says the
-// same, and tests/generator/test_layouts.py keeps the two equal.
-#define CIV_HOST_FREEZE_MAJOR 0
-#define CIV_HOST_FREEZE_MINOR 5
-
 enum CivPluginStatus
 {
 	CIV_PLUGIN_LOADED,
@@ -19,13 +14,28 @@ enum CivPluginStatus
 	CIV_PLUGIN_NO_API_VERSION,
 	CIV_PLUGIN_ENTRY_DECLINED,
 	CIV_PLUGIN_NEWER_API,
-	CIV_PLUGIN_OTHER_MAJOR,
+	CIV_PLUGIN_OLDER_API,
 	CIV_PLUGIN_FAULTED_AT_LOAD,
 	CIV_PLUGIN_DUPLICATE,
 	CIV_PLUGIN_STILL_IN_MEMORY,
 	CIV_PLUGIN_REPLACE_CONFLICT,
 	CIV_PLUGIN_POSSIBLE_CONFLICT,
 	CIV_PLUGIN_ID_TAKEN,
+};
+
+enum CivApiFit
+{
+	CIV_API_RUNS,
+	CIV_API_NEWER_VERSION,
+	CIV_API_LATER_RELEASE,
+	CIV_API_OLDER_VERSION,
+};
+
+struct CivApiNumbers
+{
+	int major;
+	int minor;
+	int release;
 };
 
 struct CivPluginFile
@@ -39,7 +49,7 @@ struct CivPluginFile
 struct CivPluginRecord
 {
 	CivPluginRecord()
-		: builtApiMajor(0), builtApiMinor(0), status(CIV_PLUGIN_FILE_NOT_LOADED), quarantined(false), module(0), host(0),
+		: builtApiMajor(0), builtApiMinor(0), builtApiRelease(0), status(CIV_PLUGIN_FILE_NOT_LOADED), quarantined(false), module(0), host(0),
 		  serial(0), saveFn(0), loadFn(0)
 	{
 	}
@@ -51,6 +61,7 @@ struct CivPluginRecord
 	std::string version;
 	int builtApiMajor;
 	int builtApiMinor;
+	int builtApiRelease;
 	CivPluginStatus status;
 	bool quarantined;
 	std::vector<std::string> problems;
@@ -123,8 +134,9 @@ bool CivHostGameMayBeDamaged();
 void CivHostForgetGameDamage();
 const std::vector<CivPluginRecord>& CivHostPlugins();
 void CivHostLogLine(const char* line);
-// A plugin built before the freeze compiled in what the freeze changed, so a host from the freeze on refuses it.
-bool CivApiRefusedAsBeforeFreeze(int hostMajor, int hostMinor, int builtMajor, int builtMinor);
+// Every version may change what plugins use, so a plugin runs only on its own version, from the release it was built
+// for on.
+CivApiFit CivApiFitOf(const CivApiNumbers& host, const CivApiNumbers& built);
 const char* CivHostPluginName(int plugin);
 // The refusal of a second plugin with the same key, the lookup of saved data and the finding of published values all
 // use this, or data would mix.

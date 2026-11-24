@@ -77,8 +77,9 @@ TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HO
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR + 1, 0};
 #elif defined(TOY_OLDER)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR - 1};
-#elif defined(TOY_BEFORE_FREEZE)
-TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_FREEZE_MAJOR, CIV_HOST_FREEZE_MINOR - 1};
+#elif defined(TOY_LATER_RELEASE)
+TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR};
+TOY_EXPORT const int CivPluginApiRelease = CIV_HOST_API_RELEASE + 1;
 #elif defined(TOY_ORDINALS)
 TOY_EXPORT const CivApiVersion CivPluginApiVersion = {CIV_HOST_API_MAJOR, CIV_HOST_API_MINOR};
 #elif !defined(TOY_NO_VERSION)
@@ -357,7 +358,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
-#elif defined(TOY_NEWER) || defined(TOY_MAJOR) || defined(TOY_NO_VERSION)
+#elif defined(TOY_NEWER) || defined(TOY_MAJOR) || defined(TOY_NO_VERSION) || defined(TOY_OLDER) || defined(TOY_LATER_RELEASE)
 
 // Bazaar must refuse these toys before running them; the log line and hooks show it if it does not.
 static void AfterAdd(const FakeUnit*, int, int, int& result)
@@ -372,6 +373,10 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	Describe(info, "Toy Newer");
 #elif defined(TOY_MAJOR)
 	Describe(info, "Toy Major");
+#elif defined(TOY_OLDER)
+	Describe(info, "Toy Older");
+#elif defined(TOY_LATER_RELEASE)
+	Describe(info, "Toy Later Release");
 #else
 	Describe(info, "Toy No Version");
 #endif
@@ -935,18 +940,12 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
-#elif defined(TOY_OLDER) || defined(TOY_ORDINALS) || defined(TOY_BEFORE_FREEZE)
+#elif defined(TOY_ORDINALS)
 
 TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 {
 	s_host = host;
-#if defined(TOY_OLDER)
-	Describe(info, "Toy Older");
-#elif defined(TOY_BEFORE_FREEZE)
-	Describe(info, "Toy Before Freeze");
-#else
 	Describe(info, "Toy Ordinals");
-#endif
 	return true;
 }
 

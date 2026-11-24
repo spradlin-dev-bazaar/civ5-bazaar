@@ -47,7 +47,10 @@ def fake_dll(exports, magic=0x10B):
 def write_dll(path, api, bits):
     exports = {"CivPluginEntry": b"code"}
     if api:
-        exports["CivPluginApiVersion"] = struct.pack("<ii", *(int(n) for n in api.split(".")))
+        numbers = [int(n) for n in api.split(".")]
+        exports["CivPluginApiVersion"] = struct.pack("<ii", *numbers[:2])
+        if len(numbers) == 3:
+            exports["CivPluginApiRelease"] = struct.pack("<i", numbers[2])
     with open(path, "wb") as f:
         f.write(fake_dll(exports, 0x20B if bits == 64 else 0x10B))
 
@@ -63,9 +66,9 @@ def project_property(civ5proj, name):
 
 @dataclasses.dataclass
 class Build:
-    """What to pack: each DLL declares api, "major.minor", or no version when api is None, and sits in dll_folder, with
-    a second listed copy in copy_in when that is given. skip_dll is left out of the package and unlisted_dll out of the
-    mod's file list; saves is what the mod description's <Properties> holds."""
+    """What to pack: each DLL declares api, "major.minor" or "major.minor.release", or no version when api is None, and
+    sits in dll_folder, with a second listed copy in copy_in when that is given. skip_dll is left out of the package
+    and unlisted_dll out of the mod's file list; saves is what the mod description's <Properties> holds."""
 
     dlls: tuple = ()
     dll_folder: str = ""

@@ -409,9 +409,9 @@ class PlayTest(FolderTest):
         )
 
     def test_log_checks_find_or_miss_a_line(self):
-        log = ["Plugin Plugin 1 loaded (built for API 0.6).", "[Plugin] turn 1"]
+        log = ["Plugin Plugin 1 loaded (built for API 0.6.2).", "[Plugin] turn 1"]
         steps = [
-            {"log": "Bazaar.log", "has": r"loaded \(built for API 0\.6\)"},
+            {"log": "Bazaar.log", "has": r"loaded \(built for API 0\.6\.2\)"},
             {"log": "Bazaar.log", "has": "turn 2"},
             {"log": "Bazaar.log", "lacks": "turn 1"},
         ]
@@ -688,7 +688,7 @@ class RunTest(unittest.TestCase):
         side_effect,
         checks=None,
         started=1000.0,
-        log=("Plugin Template Plugin 1 loaded (built for API 0.6).",),
+        log=("Plugin Template Plugin 1 loaded (built for API 0.6.2).",),
         mods_on=None,
     ):
         g = mock.create_autospec(game.Game, instance=True)
@@ -803,7 +803,7 @@ class SourceContractTest(unittest.TestCase):
         (refusal,) = re.findall(r'Format\("(It stopped working while loading [^"]*)"', source)
         self.assertRegex("Plugin %s: %s" % ("Toy Fault", fault % (5, "doTurn")), runner.CRASH)
         self.assertRegex("Plugin %s: %s" % ("Toy Fault", refusal.replace("%08X", "%d") % 5), runner.CRASH)
-        self.assertNotRegex("Plugin Template Plugin 1 loaded (built for API 0.6).", runner.CRASH)
+        self.assertNotRegex("Plugin Template Plugin 1 loaded (built for API 0.6.2).", runner.CRASH)
 
     def test_the_status_words_a_checks_file_compares_are_the_ones_the_plugins_screen_shows(self):
         source = ""

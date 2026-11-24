@@ -98,11 +98,11 @@ PREPARE_AGAIN = "prepare the release again without --same-bazaar"
 
 CHECK_FOLDER = os.path.join(tempfile.gettempdir(), "Bazaar release check")
 CHECKED = "checked.txt"
-TEMPLATE_LOADED = r"^Plugin Template Plugin \S+ loaded \(built for API %d\.%d\)"
+TEMPLATE_LOADED = r"^Plugin Template Plugin \S+ loaded \(built for API %d\.%d\.%d\)"
 
 EXPORT_LINE = re.compile(r"^ +\d+ +[0-9A-F]+ +[0-9A-F]{8} (\S+)", re.M)
 EXPORT_COUNT = re.compile(r"^ +(\d+) number of names$", re.M)
-API_VERSION_LINE = re.compile(layouts.API_NUMBER % "(?:MAJOR|MINOR)")
+API_VERSION_LINE = re.compile(layouts.API_NUMBER % "(?:MAJOR|MINOR|RELEASE)")
 MAX_LISTED = 20
 
 Difference = collections.namedtuple("Difference", "what added removed")
@@ -286,8 +286,8 @@ def current_lists():
 
 
 def api_statements(text):
-    """CivPluginApi.h one statement at a time, so that wrapping a line differently is no change. The API version is left
-    out, since every minor release raises it."""
+    """CivPluginApi.h one statement at a time, so that wrapping a line differently is no change. The API version and
+    release are left out, since releases raise them."""
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     text = re.sub(r"//[^\n]*", "", text)
     text = re.sub(r"\\\s*\n", " ", text)
@@ -347,6 +347,19 @@ def api_changed(diffs):
     return any(d.added or d.removed for d in diffs)
 
 
+def adds_to_api(diffs):
+    return any(d.added for d in diffs)
+
+
+def api_release_after(tag, new, diffs):
+    """CivPluginApi.h's release number for new, the release after tag: new's own last number when it adds to what
+    plugins use, so that plugins built with its SDK need it, else the number at tag."""
+    if adds_to_api(diffs):
+        return version.numbers(new.release)[2]
+    shown = "%s at %s" % (common.shown(layouts.API_HEADER), tag)
+    return layouts.release_in(at_tag(tag, layouts.API_HEADER, "cp1252"), shown)
+
+
 def next_version(base, diffs, for_version, same_bazaar=False):
     """The release after base, for the version of Bazaar for_version, such as 0.5. Stops when this build may not be
     released as one. A release with the same Bazaar keeps base's mod version."""
@@ -362,7 +375,7 @@ def next_version(base, diffs, for_version, same_bazaar=False):
             "this build removes or changes what plugins use, which no release of Bazaar %s may do. That change must be"
             " made in the next version of Bazaar, on its own branch" % for_version
         )
-    if for_version in FIXES_ONLY and any(d.added for d in diffs):
+    if for_version in FIXES_ONLY and adds_to_api(diffs):
         stop(
             "this build adds to what plugins use, but releases of Bazaar %s only fix things. Put the addition on the"
             " branch of a later version" % for_version
@@ -485,19 +498,26 @@ def build_settings_changes(kept):
 
 
 def plan(lists, same_bazaar=False):
-    """The next release's numbers, after saying what they come from."""
+    """The next release's numbers and CivPluginApi.h's release number for it, after saying what they come from."""
     tag, base, diffs = choose(lists)
     require_options_allowed(tag, same_bazaar)
     if diffs is None:
         say("no release has been made yet, so the first one keeps VERSION's numbers: %s, mod version %d" % base)
-        return base
-    report(tag, diffs)
-    if same_bazaar:
-        require_api_unchanged(diffs, RUN_AGAIN)
-        require_same_bazaar(version.bazaar_made_in(base, version.listed_versions()), RUN_AGAIN)
-    new = next_version(base, diffs, current_bazaar_version(), same_bazaar)
-    say("the next release is %s, mod version %d" % new)
-    return new
+        new, api_release = base, layouts.api_release()
+    else:
+        report(tag, diffs)
+        if same_bazaar:
+            require_api_unchanged(diffs, RUN_AGAIN)
+            require_same_bazaar(version.bazaar_made_in(base, version.listed_versions()), RUN_AGAIN)
+        new = next_version(base, diffs, current_bazaar_version(), same_bazaar)
+        say("the next release is %s, mod version %d" % new)
+        api_release = api_release_after(tag, new, diffs)
+    bazaar = version.bazaar_version(new.release)
+    say(
+        "plugins built with its SDK will run on Bazaar %s.%d and later releases of Bazaar %s"
+        % (bazaar, api_release, bazaar)
+    )
+    return new, api_release
 
 
 def release_files(release):
@@ -590,7 +610,7 @@ def require_build_as_prepared(current):
                 "this build's %s differ from %s, saved when the release was prepared: prepare the release again"
                 % (what, common.shown(path))
             )
-    _, base, diffs = choose((hooks, exports))
+    tag, base, diffs = choose((hooks, exports))
     if diffs is not None:
         same_bazaar = kept_release(current) is not None
         if same_bazaar:
@@ -600,6 +620,12 @@ def require_build_as_prepared(current):
             stop(
                 "this build calls for release %s, mod version %d, but VERSION says %s, mod version %d: prepare the"
                 " release again" % (expected + current)
+            )
+        api_release, written = api_release_after(tag, current, diffs), layouts.api_release()
+        if api_release != written:
+            stop(
+                "this build calls for CIV_HOST_API_RELEASE %d, but %s says %d: prepare the release again"
+                % (api_release, common.shown(layouts.API_HEADER), written)
             )
 
 
@@ -639,11 +665,11 @@ def prepare(same_bazaar=False):
     require_options_allowed(tag, same_bazaar)
     run("building the host", ["cmd", "/c", BUILD_HOOKED])
     lists = current_lists()
-    new = plan(lists, same_bazaar)
+    new, api_release = plan(lists, same_bazaar)
     with stopping_says(PART_WAY):
         version.write(new)
         new_major, new_minor, _ = version.numbers(new.release)
-        layouts.set_api_version(new_major, new_minor)
+        layouts.set_api_version(new_major, new_minor, api_release)
         version.set_plugin_version(new.release)
         if not same_bazaar:
             version.add_listed_version(new)
@@ -771,11 +797,11 @@ def release_checks(current, packages, template_checks, trial, same_bazaar=False)
     """The template's own checks, the ones plugin authors start from, after the release's. A trial build does not name
     its release, and a release that keeps an earlier Bazaar ships no description of its own, so then the description is
     not checked."""
-    api = version.numbers(current.release)[:2]
+    api = version.numbers(current.release)[:2] + (layouts.api_release(),)
     loaded = {
         "log": "Bazaar.log",
         "has": TEMPLATE_LOADED % api,
-        "what": "Bazaar.log says the template plugin loaded, built for API %d.%d" % api,
+        "what": "Bazaar.log says the template plugin loaded, built for API %d.%d.%d" % api,
     }
     steps = [loaded] + list(template_checks.steps)
     if not trial and not same_bazaar:
