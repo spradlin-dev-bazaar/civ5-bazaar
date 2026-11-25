@@ -25,6 +25,7 @@ $root = $PSScriptRoot
 # Oldest first. Bazaar's tests check that the last entry is the mod ID of the Bazaar this SDK is for.
 $bazaarVersions = [ordered]@{
     '0.5' = 'b829cadb-b570-46c5-a0ba-419434eb6398'
+    '0.6' = 'f2719381-da26-4a86-8d2e-5fd533a77ba9'
 }
 $templateIds = @('63a9bd4c-c9fc-4d26-97c7-9a8a86e331be', 'f4d85239-ecea-43dc-b4ff-e64e23ad91b4')
 # Split so the scaffold scripts, which put a new mod's names in place of the template's in every file, leave these.
@@ -342,7 +343,7 @@ function Add-DllProblems([string] $folder, [string] $dll, $packed, [string[]] $l
         $prefix = (Get-Item -LiteralPath $folder).FullName.TrimEnd('\') + '\'
         $paths = @($file | ForEach-Object { $_.FullName.Substring($prefix.Length) } | Sort-Object)
         $list = if ($paths.Count -lt 3) { $paths -join ' and ' } else { ($paths[0..($paths.Count - 2)] -join ', ') + ', and ' + $paths[-1] }
-        $problems.Add("the package holds more than one file named $($dll): $list. Bazaar 0.5 finds the plugin's DLL by its file name among the mod's files and loads the last file that has that name in the mod description's list of files, so which copy loads depends on the order of that list. Keep a single file named $dll in the mod")
+        $problems.Add("the package holds more than one file named $($dll): $list. Bazaar finds the plugin's DLL by its file name among the mod's files and loads the last file that has that name in the mod description's list of files, so which copy loads depends on the order of that list. Keep a single file named $dll in the mod")
         return
     }
     if ($listed -notcontains $dll) {

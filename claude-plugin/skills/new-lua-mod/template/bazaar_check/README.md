@@ -37,6 +37,7 @@ Unless `checks.toml` sets `seed = 0`, every run starts the game with the same se
 | Setting | What it is |
 |---|---|
 | `mods` | The mods to check: mod folders, such as `"Build/My Mod"`, or `.civ5mod` packages. Required. |
+| `mods_off` | Optional. More mods, written the same way as the mods in `mods` (mod folders or `.civ5mod` packages). The checker installs these mods in the game's MODS folder for the run, as it does the mods in `mods`, and puts the MODS folder back afterwards, but leaves them switched off in the Mods menu. A step can then check what the game reports about these mods, for example whether the Mods menu would let the player switch one of them on. |
 | `plugin_order` | Optional. The order Bazaar loads plugins in, as on its Plugins screen: DLL names, such as `"MyPlugin.dll"`, or tables, such as `{ file = "MyPlugin.dll", skip = true }` or `{ file = "MyPlugin.dll", use_both_with = ["Other.dll"] }`. Without it, Bazaar uses its own order. |
 | `steps` | What to do, in order: see below. |
 | `crash_expected` | Optional. `true` when a plugin is meant to crash, or a list of the plugins that may, by the name they give Bazaar, such as `["My Plugin"]`. |

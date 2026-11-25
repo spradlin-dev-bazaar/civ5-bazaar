@@ -596,6 +596,14 @@ class OnePlaceTest(unittest.TestCase):
                     SKILLS, "new-dll-plugin", "evals", "score-doubler-builds", "graders", "05-left-machine-alone.md"
                 ),
             ],
+            r"Bazaar (\d+\.\d+) - Multi-DLL Mod Loader": [
+                GUIDE,
+                os.path.join(PLUGIN_TEMPLATE, "workshop-description.txt"),
+                os.path.join(LUA_TEMPLATE, "workshop-description.txt"),
+                os.path.join(SKILLS, "new-lua-mod", "SKILL.md"),
+                os.path.join(SKILLS, "new-dll-plugin", "SKILL.md"),
+                os.path.join(REPO, "workshop", "bazaar.txt"),
+            ],
         }
         for pattern, paths in names.items():
             for path in paths:

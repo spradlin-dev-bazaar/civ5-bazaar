@@ -21,7 +21,7 @@ param(
     [string] $FileName,
     # The folder to make the plugin folder in.
     [string] $Destination = (Get-Location).Path,
-    [string] $Sdk = $env:BAZAAR_SDK_0_5,
+    [string] $Sdk = $env:BAZAAR_SDK_0_6,
     [string] $Description,
     # Left out, the template's "Your name" stays.
     [string] $Author
@@ -35,7 +35,7 @@ try {
     Assert-PlainText @($Description, $Author)
 
     if (-not $Sdk) {
-        Fail 'Pass -Sdk with the Bazaar SDK''s folder, or set BAZAAR_SDK_0_5 to it.'
+        Fail 'Pass -Sdk with the Bazaar SDK''s folder, or set BAZAAR_SDK_0_6 to it.'
     }
     $Sdk = Resolve-UserPath $Sdk
     $template = Join-Path $Sdk 'plugin-template'

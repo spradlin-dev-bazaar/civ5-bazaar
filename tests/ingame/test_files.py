@@ -184,7 +184,9 @@ class InstallTest(PlayerFolderTest):
     def test_two_mods_that_go_into_one_folder_in_mods_are_refused(self):
         first = write_mod(self.path("build", "Template Plugin"), "template")
         second = write_mod(self.path("other", "Template Plugin"), "template")
-        with self.assertRaisesRegex(files.CheckError, "mods lists two that go into the same folder in MODS"):
+        with self.assertRaisesRegex(
+            files.CheckError, "mods and mods_off list two mods that go into the same folder in MODS"
+        ):
             self.stage(first, second)
 
     def test_a_package_whose_mod_name_cannot_be_a_folder_name_is_refused(self):

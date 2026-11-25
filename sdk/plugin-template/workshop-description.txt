@@ -1,4 +1,4 @@
 [h1]Template Plugin[/h1]
 A minimal plugin for the Bazaar Multi-DLL Mod Loader.
 
-Runs on Bazaar 0.5.x. Subscribe to Bazaar 0.5 - Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required) too.
+Runs on Bazaar 0.6.x. Get Bazaar 0.6 - Multi-DLL Mod Loader and Bazaar - VMC Bootstrap (required) from the matching release on Bazaar's Releases page (https://github.com/spradlin-dev-bazaar/civ5-bazaar/releases) too.

@@ -35,8 +35,8 @@
       </Association>
       <Association>
         <Type>Mod</Type>
-        <Name>Bazaar 0.5 - Multi-DLL Mod Loader</Name>
-        <Id>b829cadb-b570-46c5-a0ba-419434eb6398</Id>
+        <Name>Bazaar 0.6 - Multi-DLL Mod Loader</Name>
+        <Id>f2719381-da26-4a86-8d2e-5fd533a77ba9</Id>
         <MinVersion>0</MinVersion>
         <MaxVersion>999</MaxVersion>
       </Association>

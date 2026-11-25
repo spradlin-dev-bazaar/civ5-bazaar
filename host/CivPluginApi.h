@@ -8,7 +8,7 @@
 #endif
 
 #define CIV_HOST_API_MAJOR 0
-#define CIV_HOST_API_MINOR 5
+#define CIV_HOST_API_MINOR 6
 // The oldest release of this version that has everything this header has, such as 3 for 0.6.3. release.py raises it
 // when a release adds to what plugins use.
 #define CIV_HOST_API_RELEASE 0

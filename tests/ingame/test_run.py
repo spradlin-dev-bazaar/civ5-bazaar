@@ -19,6 +19,7 @@ LAID_OUT = {
     "%s (v %d)" % (mods.HOST_NAME, files.TEST_VERSION),
     "%s (v %d)" % (mods.VMC_DATA_NAME, mods.vmc_mod_parts().version),
     "Toy VMC Check (v 1)",
+    "%s (v 1)" % run.package.EARLIER_BAZAAR_NAME,
 } | {"%s (v 1)" % toy.mod_name for toy in run.package.TOYS}
 PLUGINS = {toy.dll_name + ".dll" for toy in run.package.TOYS}
 UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -35,17 +36,18 @@ class ChecksFilesTest(unittest.TestCase):
         for name in checks_names():
             with self.subTest(name=name):
                 checks = runner.read_checks(run.checks_path(name))
-                self.assertEqual({os.path.dirname(mod) for mod in checks.mods}, {out})
-                self.assertLessEqual({os.path.basename(mod) for mod in checks.mods}, LAID_OUT)
+                listed = list(checks.mods) + list(checks.mods_off)
+                self.assertEqual({os.path.dirname(mod) for mod in listed}, {out})
+                self.assertLessEqual({os.path.basename(mod) for mod in listed}, LAID_OUT)
                 named = [entry if isinstance(entry, str) else entry["file"] for entry in checks.plugin_order]
                 named += [step["plugin"] for step in checks.steps if "plugin" in step]
                 self.assertLessEqual(set(named), PLUGINS)
 
-    def test_the_mod_ids_in_checks_files_are_the_test_plugins(self):
-        toy_ids = {toy.mod_id for toy in run.package.TOYS}
+    def test_the_mod_ids_in_checks_files_are_those_of_the_mods_package_py_lays_out(self):
+        laid_out = {toy.mod_id for toy in run.package.TOYS} | {mods.HOST_ID, run.package.EARLIER_BAZAAR_ID}
         for name in checks_names():
             with open(run.checks_path(name), encoding="utf-8") as f:
-                self.assertLessEqual(set(re.findall(UUID, f.read())), toy_ids, name)
+                self.assertLessEqual(set(re.findall(UUID, f.read())), laid_out, name)
 
     def test_no_state_a_check_reads_is_one_the_checks_close(self):
         for name in checks_names():

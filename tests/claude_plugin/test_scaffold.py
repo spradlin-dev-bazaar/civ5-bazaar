@@ -29,6 +29,7 @@ NEW_DLL_PLUGIN = os.path.join(SKILLS, "new-dll-plugin", "scripts", "new-dll-plug
 LUA_TEMPLATE = os.path.join(SKILLS, "new-lua-mod", "template")
 PLUGIN_TEMPLATE = os.path.join(REPO, "sdk", "plugin-template")
 REPOSITORY_SDK = os.path.relpath(build_sdk.SDK, build_sdk.HERE)
+SDK_VARIABLE = "BAZAAR_SDK_" + build_sdk.common.HOST_VERSION.replace(".", "_")
 BOM = b"\xef\xbb\xbf"
 PLUGIN_NAMES = [("Template Plugin", "Score Doubler"), ("TemplatePlugin", "ScoreDoubler")]
 # What a template folder holds after a build, which the scripts must leave out.
@@ -369,7 +370,7 @@ class ScaffoldTest(unittest.TestCase):
     def test_the_sdk_comes_from_sdk_or_its_version_s_variable_and_must_be_one(self):
         sdk = self.make_sdk(os.path.join(self.folder, "Bazaar SDK"))
         done = self.run_script(NEW_DLL_PLUGIN, "-DisplayName", "Score Doubler", "-Destination", self.out)
-        self.assertIn("or set BAZAAR_SDK_0_5 to it", done.stderr)
+        self.assertIn("or set %s to it" % SDK_VARIABLE, done.stderr)
         empty, half = os.path.join(self.folder, "Empty"), os.path.join(self.folder, "Half SDK")
         os.makedirs(empty)
         os.makedirs(half)
@@ -378,7 +379,7 @@ class ScaffoldTest(unittest.TestCase):
             done = self.make_plugin(folder)
             self.assertIn("is not a Bazaar SDK folder", done.stderr, folder)
         self.assertEqual(os.listdir(self.out), [])
-        env = dict(self.env, BAZAAR_SDK_0_5=sdk)
+        env = dict(self.env, **{SDK_VARIABLE: sdk})
         done = self.run_script(
             NEW_DLL_PLUGIN, "-DisplayName", "Score Doubler", "-Destination", "out", cwd=self.folder, env=env
         )

@@ -310,7 +310,7 @@ class PlayerFiles:
         staged = [self.stage(source, staging) for source in sources]
         targets = [os.path.normcase(target) for _, target in staged]
         if len(set(targets)) != len(targets):
-            raise CheckError("mods lists two that go into the same folder in MODS: keep one")
+            raise CheckError("mods and mods_off list two mods that go into the same folder in MODS: keep one")
         return staged
 
     def changed_by(self, staged):
@@ -318,7 +318,7 @@ class PlayerFiles:
         return [os.path.basename(target) for folder, target in staged if not in_place(folder, target)]
 
     def install(self, staged):
-        """Returns the folders holding what the game should load."""
+        """Returns the folder holding each staged mod, in the order staged."""
         for folder, target in staged:
             if in_place(folder, target):
                 continue

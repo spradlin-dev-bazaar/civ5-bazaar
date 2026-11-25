@@ -587,10 +587,11 @@ class Game:
 @contextlib.contextmanager
 def session(game, seed=None, staged=(), saves=(), windowed=False):
     """Install the staged mods into MODS, start the game, with these seeds unless seed is None and in a window if
-    windowed, and yield the folders the game loads the mods from. Afterwards close the game and put back everything the
-    run changed: MODS, the Mods menu's choices, the plugin order, config.ini, the display settings, the autosaves and
-    the saves of these names. A problem putting things back is reported without hiding the error that ended the run.
-    Preflight must have found the game closed, since installing replaces folders a running game holds."""
+    windowed, and yield the folder the game loads each staged mod from, in the order staged. Afterwards close the game
+    and put back everything the run changed: MODS, the Mods menu's choices, the plugin order, config.ini, the display
+    settings, the autosaves and the saves of these names. A problem putting things back is reported without hiding the
+    error that ended the run. Preflight must have found the game closed, since installing replaces folders a running
+    game holds."""
     copies = game.files.copy_aside(saves, game.files.changed_by(staged), windowed)
     try:
         expected = game.files.install(staged)
