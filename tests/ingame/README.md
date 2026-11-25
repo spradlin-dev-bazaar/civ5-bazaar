@@ -22,6 +22,7 @@ It builds the test plugins below against the last `build-hooked.cmd` build with 
 | Toy VMC Check | A Lua mod: switches on one of VMC's events and writes what it sees, and Toy Hand's Lua functions, to `Lua.log`. | `plugins` |
 | Toy Crash | Crashes as the human player's first turn starts, or in a Lua function. | `crash_turn`, `crash_lua` |
 | Toy Saves | Keeps data in saved games, publishes values that carry over when the game replaces a unit or city, and a function Toy Gold calls. | `saves`, `mod_switch` |
+| Earlier Bazaar Stand-in | An empty mod, with no files, that has the mod ID of the oldest version of Bazaar, 0.5. Each version of Bazaar's mod blocks the mods of every earlier version of Bazaar, so that the game's Mods menu won't let a player switch on two versions of Bazaar at the same time. | `bazaar_versions`, which installs the stand-in but leaves it switched off. With the test build of Bazaar switched on, it checks that the Mods menu shows that the stand-in is blocked by another mod. It then switches the test build off and the stand-in on, and checks that the Mods menu shows that the test build is blocked by another mod. |
 
 ## The test DLC pack
 

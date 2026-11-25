@@ -1,0 +1,23 @@
+# Bazaar's mod blocks every earlier version's, so the Mods menu won't let a player turn on two versions of Bazaar. The
+# stand-in has the oldest version's mod ID.
+mods = [
+    "../out/MODS/Bazaar 0.6 - Multi-DLL Mod Loader (v 900)",
+    "../out/MODS/Bazaar - VMC Bootstrap (required) (v 97)",
+]
+mods_off = ["../out/MODS/Earlier Bazaar Stand-in (v 1)"]
+
+[[steps]]
+lua = 'Modding.CanEnableMod({{"b829cadb-b570-46c5-a0ba-419434eb6398", 1}})[1]'
+state = "MainMenu"
+has = "^1$"
+what = "with this Bazaar on, the Mods menu won't turn on an earlier version's Bazaar"
+
+[[steps]]
+run = 'Modding.DisableMod("f2719381-da26-4a86-8d2e-5fd533a77ba9", 900) Modding.EnableMod("b829cadb-b570-46c5-a0ba-419434eb6398", 1)'
+state = "MainMenu"
+
+[[steps]]
+lua = 'Modding.CanEnableMod({{"f2719381-da26-4a86-8d2e-5fd533a77ba9", 900}})[1]'
+state = "MainMenu"
+has = "^1$"
+what = "with an earlier version's Bazaar on, the Mods menu won't turn on this Bazaar"

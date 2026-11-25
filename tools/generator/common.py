@@ -75,6 +75,7 @@ BazaarVersion = collections.namedtuple("BazaarVersion", "mod_id on_workshop work
 # The SDK's build script lists the same mod IDs, which a test keeps equal.
 BAZAAR_VERSIONS = {
     "0.5": BazaarVersion("b829cadb-b570-46c5-a0ba-419434eb6398", True, 3825428828),
+    "0.6": BazaarVersion("f2719381-da26-4a86-8d2e-5fd533a77ba9", False, None),
 }
 
 

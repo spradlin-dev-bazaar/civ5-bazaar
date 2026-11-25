@@ -164,6 +164,13 @@ class ReadChecksTest(FolderTest):
         self.assertEqual([runner.kind_of(step) for step in checks.steps], ["start_game", "end_turns", "log"])
         self.assertEqual((checks.crash_expected, checks.lua_errors_expected), (False, False))
 
+    def test_mods_to_leave_off_come_from_the_checks_file_s_own_folder_too(self):
+        checks = self.read('mods = ["On (v 1)"]\nmods_off = ["Off (v 1)"]\n')
+        self.assertEqual((checks.mods, checks.mods_off), ([self.path("On (v 1)")], [self.path("Off (v 1)")]))
+        self.assertEqual(self.read('mods = ["On (v 1)"]\n').mods_off, [])
+        self.refused('mods = ["a"]\nmods_off = "b"\n', "mods_off needs a list")
+        self.refused('mods = ["a"]\nmods_off = [1]\n', "mods_off needs a list of folders and packages")
+
     def test_settings_it_does_not_know_or_of_the_wrong_kind_are_named(self):
         self.refused('mods = ["a"]\nplugin_ordre = []\n', "a setting the checks do not know: plugin_ordre")
         self.refused('mods = "a"\n', "mods needs a list")
@@ -368,6 +375,16 @@ class PlayTest(FolderTest):
         with self.assertRaisesRegex(CheckError, "MODS holds 2 copies of Plugin \\(v 1\\)"):
             self.play()
 
+    def test_a_mod_to_leave_off_that_the_checked_mods_need_stops_before_anything_is_switched_on(self):
+        off = write_mod(self.path("off", "Bazaar"), "bazaar", 7)
+        g = FakeGame(self.root, self.installed)
+        with self.assertRaisesRegex(CheckError, "^the checked mods need Bazaar \\(v 7\\), which mods_off lists: list"):
+            runner.play_steps(runner.Checks([self.plugin]), g, [self.plugin], [], [off])
+        self.assertEqual(g.steps, [])
+        player_mod = write_mod(self.path("off", "Player Mod"), "player-mod", 2)
+        runner.play_steps(runner.Checks([self.plugin]), g, [self.plugin], [], [player_mod])
+        self.assertEqual(g.steps[0], ("set_mods", [("plugin", 1), ("bazaar", 7)]))
+
     def test_lua_checks_pass_on_anything_but_false_or_nil(self):
         steps = [{"lua": "a"}, {"lua": "b", "state": "MainMenu"}, {"lua": "c"}]
         _, results = self.play(steps, answers={"a": "3", "b": "false", "c": "nil"})
@@ -566,8 +583,27 @@ class RunChecksTest(FolderTest):
             finally:
                 self.done, self.staging = done, staging[0] if staging else None
 
+    def test_the_mods_to_leave_off_are_installed_but_only_the_checked_mods_are_switched_on(self):
+        g = mock.create_autospec(game.Game, instance=True)
+        g.files = mock.create_autospec(files.PlayerFiles, instance=True)
+        g.files.stage_all.side_effect = lambda sources, folder: [(source, "MODS") for source in sources]
+        played = []
+
+        @contextlib.contextmanager
+        def session(game, seed, staged, saves, windowed):
+            yield [folder for folder, _ in staged]
+
+        def play_steps(checks, g, expected, results, off):
+            played.append((expected, off))
+
+        checks = runner.Checks(["on 1", "on 2"], mods_off=["off"])
+        with mock.patch.object(game, "session", session), mock.patch.object(runner, "play_steps", play_steps):
+            runner.run_checks(checks, g, [])
+        self.assertEqual(g.files.stage_all.call_args[0][0], ["on 1", "on 2", "off"])
+        self.assertEqual(played, [(["on 1", "on 2"], ["off"])])
+
     def test_an_earlier_check_s_copies_go_back_before_the_mods_are_staged_with_the_game_closed(self):
-        self.run_checks(lambda checks, g, expected, results: None)
+        self.run_checks(lambda checks, g, expected, results, off: None)
         self.assertEqual(
             self.done[:4],
             [
@@ -580,7 +616,7 @@ class RunChecksTest(FolderTest):
         self.assertFalse(os.path.exists(self.staging))
 
     def test_crashes_and_lua_errors_are_read_once_the_game_has_closed(self):
-        self.run_checks(lambda checks, g, expected, results: None)
+        self.run_checks(lambda checks, g, expected, results, off: None)
         self.assertEqual(self.done[4:], ["game closed", "read Bazaar.log", "read Lua.log"])
 
     def test_the_staging_folder_goes_even_when_a_check_fails(self):
@@ -610,7 +646,7 @@ class PlayByHandTest(FolderTest):
             finally:
                 done.append("everything put back")
 
-        def switch_on(checks, g, expected):
+        def switch_on(checks, g, expected, off):
             done.append("switched on %s" % expected)
 
         with mock.patch.object(game, "session", session), mock.patch.object(runner, "switch_on", side_effect=switch_on):

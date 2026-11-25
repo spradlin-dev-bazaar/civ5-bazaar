@@ -19,6 +19,7 @@ from . import CheckError, files, game, tuner
 
 SETTINGS = {
     "mods": (list, tuple),
+    "mods_off": (list, tuple),
     "plugin_order": (list, tuple),
     "steps": (list, tuple),
     "crash_expected": (bool, list, tuple),
@@ -52,8 +53,8 @@ LUA_ERROR = r"(Runtime|Syntax) Error:"
 DEFAULT_SEED = 1
 Checks = collections.namedtuple(
     "Checks",
-    "mods plugin_order steps crash_expected lua_errors_expected seed",
-    defaults=((), (), (), False, False, DEFAULT_SEED),
+    "mods plugin_order steps crash_expected lua_errors_expected seed mods_off",
+    defaults=((), (), (), False, False, DEFAULT_SEED, ()),
 )
 Result = collections.namedtuple("Result", "what passed found")
 
@@ -117,8 +118,9 @@ def validate(checks):
             raise CheckError("%s needs %s" % (name, kinds_text(kinds)))
     if not checks.mods:
         raise CheckError("the checks name no mods")
-    if not all(isinstance(mod, str) for mod in checks.mods):
-        raise CheckError("mods needs a list of folders and packages")
+    for name in ("mods", "mods_off"):
+        if not all(isinstance(mod, str) for mod in getattr(checks, name)):
+            raise CheckError("%s needs a list of folders and packages" % name)
     if not 0 <= checks.seed <= MAX_SEED:
         raise CheckError("seed needs a whole number from 0 to %d" % MAX_SEED)
     if type(checks.crash_expected) is not bool and not all(isinstance(name, str) for name in checks.crash_expected):
@@ -153,7 +155,12 @@ def read_checks(path):
     except CheckError as e:
         raise CheckError("%s: %s" % (path, e))
     folder = os.path.dirname(os.path.abspath(path))
-    return checks._replace(mods=[os.path.normpath(os.path.join(folder, mod)) for mod in checks.mods])
+    return checks._replace(
+        **{
+            name: [os.path.normpath(os.path.join(folder, mod)) for mod in getattr(checks, name)]
+            for name in ("mods", "mods_off")
+        }
+    )
 
 
 def versions_text(low, high):
@@ -365,8 +372,9 @@ def do_step(g, step, results, marks):
         raise AssertionError("STEPS has %s, which do_step does not do" % kind)
 
 
-def switch_on(checks, g, expected):
-    """Switch on the checked mods and the mods they need, and no others, which loads Bazaar and its plugins."""
+def switch_on(checks, g, expected, off=()):
+    """Switch on the checked mods and the mods they need, and no others, which loads Bazaar and its plugins. Stops if
+    they need one of the mods to leave off, whose folders are off."""
     keys = [files.mod_key(folder) for folder in expected]
 
     def listed():
@@ -380,14 +388,20 @@ def switch_on(checks, g, expected):
     installed = g.mods(enabled_only=False)
     wanted = dependencies(expected, installed, g.files.path("MODS"))
     names = {(m, v): name for m, v, name in installed}
+    off_keys = {files.mod_key(folder) for folder in off}
+    needed_off = ["%s (v %d)" % (names[key], key[1]) for key in wanted if key in off_keys]
+    if needed_off:
+        raise CheckError(
+            "the checked mods need %s, which mods_off lists: list it in mods instead" % ", ".join(needed_off)
+        )
     g.say("choosing " + ", ".join("%s (v %d)" % (names[key], key[1]) for key in wanted))
     g.set_mods(wanted)
     g.activate()
 
 
-def play_steps(checks, g, expected, results):
+def play_steps(checks, g, expected, results, off=()):
     """The part of a run inside the game; it adds a Result to results as each check is made."""
-    switch_on(checks, g, expected)
+    switch_on(checks, g, expected, off)
     marks = Marks(checks.steps)
     for number, step in enumerate(checks.steps, 1):
         try:
@@ -413,15 +427,16 @@ def final_checks(checks, g):
 @contextlib.contextmanager
 def checked_mods_in_game(checks, g, seed=None, saves=(), windowed=False):
     """With no other run going and the game closed, put back what a stopped run left, then start the game with the
-    checked mods installed, and yield the folders it loads them from; everything goes back afterwards."""
+    checked mods and the mods to leave off installed, and yield the folders it loads the checked mods from and the
+    folders of the mods to leave off; everything goes back afterwards."""
     with files.one_run_at_a_time():
         g.preflight()
         g.files.put_back_leftovers()
         staging = tempfile.mkdtemp(prefix="Bazaar check mods ")
         try:
-            staged = g.files.stage_all(checks.mods, staging)
-            with game.session(g, seed, staged, saves, windowed) as expected:
-                yield expected
+            staged = g.files.stage_all(list(checks.mods) + list(checks.mods_off), staging)
+            with game.session(g, seed, staged, saves, windowed) as installed:
+                yield installed[: len(checks.mods)], installed[len(checks.mods) :]
         finally:
             with contextlib.suppress(OSError):
                 files.remove_tree(staging)
@@ -429,8 +444,8 @@ def checked_mods_in_game(checks, g, seed=None, saves=(), windowed=False):
 
 def run_checks(checks, g, results):
     saves = [step["save"] for step in checks.steps if "save" in step]
-    with checked_mods_in_game(checks, g, checks.seed, saves, windowed=True) as expected:
-        play_steps(checks, g, expected, results)
+    with checked_mods_in_game(checks, g, checks.seed, saves, windowed=True) as (expected, off):
+        play_steps(checks, g, expected, results, off)
     results.extend(final_checks(checks, g))
 
 
@@ -438,8 +453,8 @@ def play_by_hand(checks, g):
     """Start the game with the checked mods switched on, and leave it to the player until they close it. Returns
     None, or why it stopped early in words that follow "Playing ", such as "stopped: ..."."""
     try:
-        with checked_mods_in_game(checks, g) as expected:
-            switch_on(checks, g, expected)
+        with checked_mods_in_game(checks, g) as (expected, off):
+            switch_on(checks, g, expected, off)
             g.say(
                 "Civilization V is yours: play, then close it, and your files go back as they were; saves you make"
                 " by hand stay. Leave this window open until then."

@@ -30,6 +30,8 @@ CL = r"C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin\cl.exe"
 PLAIN_OUT = os.path.join(common.SOURCE_ROOT, "BuildOutput", "VS2008_ModWin32")
 
 BENCH_ID = "d9b32c9d-2f72-42f0-b53e-50b86d1ed3c7"
+EARLIER_BAZAAR_NAME = "Earlier Bazaar Stand-in"
+EARLIER_BAZAAR_ID = next(iter(common.BAZAAR_VERSIONS.values())).mod_id
 BENCH_DLLS = {
     "plain": os.path.join(PLAIN_OUT, "CvGameCoreDLL_Expansion2Win32Mod.dll"),
     "host": common.HOST_DLL,
@@ -109,6 +111,13 @@ def write_vmc_check_mod():
     )
 
 
+def write_earlier_bazaar_mod():
+    """An empty mod with the oldest version's mod ID, which every later version's Bazaar blocks."""
+    folder = mods.new_mod_folder(MODS, EARLIER_BAZAAR_NAME)
+    teaser = "Stand-in for an earlier version's Bazaar, which the %s blocks." % mods.HOST_NAME
+    mods.write_modinfo(folder, EARLIER_BAZAAR_NAME, EARLIER_BAZAAR_ID, teaser, [], [])
+
+
 def write_bench_mod(build):
     teaser = "Benchmark build (%s): the computer plays by itself and logs how long each turn takes." % build
     mods.write_dll_mod(MODS, "Civ Bench", BENCH_ID, teaser, BENCH_DLLS[build])
@@ -172,6 +181,7 @@ def main(args):
     for toy in TOYS:
         write_toy_mod(toy.dll_name, toy.mod_name, toy.mod_id)
     write_vmc_check_mod()
+    write_earlier_bazaar_mod()
     print("mod folders in", MODS)
     return 0
 
