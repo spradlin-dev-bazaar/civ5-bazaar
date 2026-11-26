@@ -11,6 +11,7 @@
 void TestLoading();
 void TestHooks();
 void TestChangedValues();
+void TestCallRecords();
 void TestShapes();
 void TestQuarantine();
 void TestSamePluginCrashingOnTwoThreads();
@@ -103,6 +104,7 @@ namespace
 		{"loading", &TestLoading},
 		{"hooks", &TestHooks},
 		{"changed values", &TestChangedValues},
+		{"call records", &TestCallRecords},
 		{"shapes", &TestShapes},
 		{"quarantine", &TestQuarantine},
 		{"same plugin crashing on two threads", &TestSamePluginCrashingOnTwoThreads},

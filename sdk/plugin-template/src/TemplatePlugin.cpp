@@ -33,13 +33,21 @@ static void Check(int result, const char* hook)
 }
 
 // Runs before CvPlayer::doTurn. Returning true would skip the function.
-static bool BeforeDoTurn(CvPlayer* player)
+static bool BeforeDoTurn(CivHookCall&, CvPlayer* player)
 {
 	s_turnsStarted.Set(player, s_turnsStarted.Get(player) + 1);
 	if (player->isHuman())
 		Log("%s starts turn %d with %d gold (turns started: %d, notifications seen: %d)", player->getCivilizationShortDescription(),
 			GC.getGame().getGameTurn(), player->GetTreasury()->GetGold(), s_turnsStarted.Get(player), s_notifications);
 	return false;
+}
+
+// Runs after CvPlayer::doTurn, and also when another plugin's before-hook vetoed it, which call.vetoed says.
+static void AfterDoTurn(const CivHookCall& call, CvPlayer* player)
+{
+	if (!call.vetoed && player->isHuman())
+		Log("%s ends turn %d with %d gold", player->getCivilizationShortDescription(), GC.getGame().getGameTurn(),
+			player->GetTreasury()->GetGold());
 }
 
 static void NotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
@@ -70,7 +78,7 @@ static void LoadData(const void* data, int size)
 }
 
 // The Game table is on top of the Lua stack while its methods are registered.
-static void AfterRegisterGame(lua_State* L)
+static void AfterRegisterGame(const CivHookCall&, lua_State* L)
 {
 	s_host->PushLuaFunction(s_host->pluginIndex, L, &Hello);
 	lua_setfield(L, -2, "TemplateHello");
@@ -82,6 +90,7 @@ PLUGIN_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* plugin
 	plugin->name = "Template Plugin";
 	plugin->version = "1";
 	Check(CivRegisterBefore<CivHooks::CvPlayer_doTurn>(host, &BeforeDoTurn), "before CvPlayer::doTurn");
+	Check(CivRegisterAfter<CivHooks::CvPlayer_doTurn>(host, &AfterDoTurn), "after CvPlayer::doTurn");
 	Check(host->RegisterHandHook(host->pluginIndex, CIV_HAND_NOTIFICATION_ADDED, (void*)&NotificationAdded), "NotificationAdded");
 	Check(CivRegisterAfter<CivHooks::CvLuaGame_RegisterMembers>(host, &AfterRegisterGame), "after CvLuaGame::RegisterMembers");
 	Check(host->RegisterSaveData(host->pluginIndex, &SaveData, &LoadData), "save data");

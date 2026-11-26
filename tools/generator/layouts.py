@@ -186,7 +186,10 @@ def parse_record(text):
 
 # Bazaar makes these and hands them to plugins, so a plugin built for an older one reads only the fields it knows:
 # fields added after the last one are an addition, as CivPluginApi.h's opening comment promises.
-GROWS_AT_END = frozenset(["class CivHostInfo", "class CivPluginInfo", "types CivHostInfo", "types CivPluginInfo"])
+GROWS_AT_END = frozenset(
+    ["class CivHookCall", "class CivHostInfo", "class CivPluginInfo"]
+    + ["types CivHookCall", "types CivHostInfo", "types CivPluginInfo"]
+)
 
 
 def grew_at_end(key, old, new):

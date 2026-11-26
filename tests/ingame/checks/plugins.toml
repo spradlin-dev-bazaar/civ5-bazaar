@@ -59,7 +59,12 @@ has = '^\[Toy Gold\] turn starting for .+ with \d+ gold'
 
 [[steps]]
 log = "Bazaar.log"
-has = '^\[Toy Gold\] turn finished for .+ with \d+ gold'
+has = '^\[Toy Gold\] turn finished for .+ with \d+ gold; the before-hook.s note reached the after-hook$'
+what = "Toy Gold's after-hook on CvPlayer::doTurn gets the note its before-hook left on the same call"
+
+[[steps]]
+log = "Bazaar.log"
+lacks = "the before-hook's note was lost"
 
 [[steps]]
 lua = "Players[Game.GetActivePlayer()]:GetScore()"

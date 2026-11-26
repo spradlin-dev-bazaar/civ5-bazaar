@@ -36,7 +36,7 @@ Then delete the template's example hooks that the plugin does not need, as the g
 
 - Choose the kind of hook as the guide's "Which kind of hook to use" says. If one of VMC's Lua events already does the job, tell the user a plain Lua mod is enough before writing C++.
 - Find the function in the SDK's `include\CivHooks.h` by searching for `Class::Method(`, not for a single word.
-- Build the hook's parameter list from that function's block, with the guide's table: `self` and whether it is const, every parameter in order and by reference in a before-hook, `result` as a reference, and a reference to a pointer for functions that return a reference. Register it with `CivRegisterBefore`, `CivRegisterAfter` or `CivRegisterReplace`, so the compiler checks the list against the block's types. A block with no types needs `host->RegisterHook`, which checks nothing: there a wrong list is caught only when the game crashes or reads garbage, so check it twice.
+- Build the hook's parameter list from that function's block, with the guide's table: `call` first in a before-hook or an after-hook (`CivHookCall&` in a before-hook, `const CivHookCall&` in an after-hook), `self` and whether it is const, every parameter in order and by reference in a before-hook, `result` as a reference, and a reference to a pointer for functions that return a reference. Register it with `CivRegisterBefore`, `CivRegisterAfter` or `CivRegisterReplace`, so the compiler checks the list against the block's types. A block with no types needs `host->RegisterHook`, which checks nothing: there a before-hook or an after-hook still takes `call` first, and a wrong list is caught only when the game crashes or reads garbage, so check it twice.
 - When the behaviour matters, read the function's code, not just its name. For example, `CvCity::CreateBuilding` also runs when a building is bought. The SDK has headers only. The closest code is Bazaar's own source, which is based on VMC; the Civilization V SDK's `CvGameCoreSource` has Firaxis's original.
 - Register each hook in `CivPluginEntry` with the template's `Check(...)`, so a failed registration shows in `Bazaar.log`.
 
@@ -57,7 +57,7 @@ When the user is turning a modified core DLL into a plugin:
 
 1. List every edit the mod made to the game's code, by comparing it with the code it was built from (Firaxis's, or VMC v97's).
 2. Map each edit to a hook:
-   - code at the start or end of a function becomes a before-hook or an after-hook, and a before-hook can change a value that is passed into the function;
+   - code at the start or end of a function becomes a before-hook or an after-hook, and a before-hook can change a value that is passed into the function; when the code at the end of a function uses something that the code at its start worked out, the before-hook leaves it in `call.note` for the after-hook, and an after-hook that must not act on a call that never happened checks `call.vetoed`;
    - code in the middle becomes a hand-placed hook if one exists, and otherwise a request for one or, as a last resort, a replacement;
    - `Game.*` Lua methods added in `CvLuaGame.cpp` become an after-hook on `CvLuaGame::RegisterMembers`, which pushes each one with `host->PushLuaFunction` so that it runs inside Bazaar's crash protection.
 3. Flag code that reads or writes private or protected members: a plugin cannot reach them yet, so it needs another route.

@@ -23,14 +23,24 @@ class CvPlayer;
 class CvPlot;
 class CvUnit;
 
+// A plugin's record of one call of a hooked function, which each of its before-hooks and after-hooks on the function gets
+// first. Every call has its own, so a record stays right when the function calls itself or runs on another thread.
+struct CivHookCall
+{
+	// For an after-hook: a before-hook vetoed this call, so neither the function nor a replacement ran.
+	bool vetoed;
+	// 0 when the call starts. The plugin's before-hooks can leave a value here for its after-hooks; no other plugin sees it.
+	void* note;
+};
+
 enum CivHookKind
 {
-	// Gets the values the function is called with by reference, except those it takes as const references, so a change
-	// reaches the before-hooks after it, the function and the after-hooks. Returning true vetoes the call: the caller
-	// gets what the before-hooks left in the result, and the after-hooks still run. A veto on a function that returns a
-	// reference still runs the function if no before-hook set the result.
+	// Gets the plugin's CivHookCall, then the values the function is called with by reference, except those it takes as
+	// const references, so a change reaches the before-hooks after it, the function and the after-hooks. Returning true
+	// vetoes the call: the caller gets what the before-hooks left in the result, and the after-hooks still run. On a
+	// function that returns a reference, Bazaar ignores a veto while the result is unset, and logs that once.
 	CIV_HOOK_BEFORE = 0,
-	// Runs after the function, or after a veto, and may change the result.
+	// Gets the plugin's CivHookCall, read-only. Runs after the function, or after a veto, and may change the result.
 	CIV_HOOK_AFTER = 1,
 	// A replacement gets the original function as its first argument; calling it runs the engine's own version.
 	CIV_HOOK_REPLACE = 2,

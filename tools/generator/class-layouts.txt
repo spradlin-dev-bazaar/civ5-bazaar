@@ -27804,6 +27804,13 @@ class CivApiVersion	size(8):
  4	| minor
 	+---
 
+class CivHookCall	size(8):
+	+---
+ 0	| vetoed
+  	| <alignment member> (size=3)
+ 4	| note
+	+---
+
 class CivHostInfo	size(80):
 	+---
  0	| pluginIndex
@@ -54257,6 +54264,10 @@ types CitySpecializationData:
 types CivApiVersion:
  field major: int
  field minor: int
+
+types CivHookCall:
+ field vetoed: bool
+ field note: void *
 
 types CivHostInfo:
  field pluginIndex: int

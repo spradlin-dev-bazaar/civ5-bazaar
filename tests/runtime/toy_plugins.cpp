@@ -4,6 +4,7 @@
 #include "CivHostRuntime.h"
 #include "toy_api.h"
 
+#include <stddef.h>
 #include <stdio.h>
 
 #include <stdexcept>
@@ -95,6 +96,16 @@ static void Describe(CivPluginInfo* info, const char* name)
 	info->version = "1.0";
 }
 
+inline void* NoteOf(int value)
+{
+	return reinterpret_cast<void*>(static_cast<intptr_t>(value));
+}
+
+inline int NoteValue(const CivHookCall& call)
+{
+	return static_cast<int>(reinterpret_cast<intptr_t>(call.note));
+}
+
 static int Register(int hookId, int kind, void* fn)
 {
 	return s_host->RegisterHook(s_host->pluginIndex, hookId, kind, fn);
@@ -170,7 +181,7 @@ static void LogResult(const char* what, int result)
 
 #if defined(TOY_BASIC)
 
-static bool BeforeAdd(const FakeUnit*, int& a, int&, int& result)
+static bool BeforeAdd(CivHookCall&, const FakeUnit*, int& a, int&, int& result)
 {
 	++s_beforeCalls;
 	s_host->Log(s_host->pluginIndex, "before add");
@@ -182,7 +193,7 @@ static bool BeforeAdd(const FakeUnit*, int& a, int&, int& result)
 	return false;
 }
 
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result += 100;
 }
@@ -193,7 +204,7 @@ static void ReplaceNotify(NotifyFn original, FakeUnit* self, int amount)
 	original(self, amount);
 }
 
-static void AfterName(const FakeUnit*, const std::string*& result)
+static void AfterName(const CivHookCall&, const FakeUnit*, const std::string*& result)
 {
 	static const std::string hooked("Hooked Warrior");
 	result = &hooked;
@@ -226,14 +237,14 @@ TOY_EXPORT void ToyReleaseStrings(std::string& s, std::vector<std::string>& v)
 
 #elif defined(TOY_SECOND)
 
-static bool BeforeAdd(const FakeUnit*, int&, int&, int&)
+static bool BeforeAdd(CivHookCall&, const FakeUnit*, int&, int&, int&)
 {
 	++s_beforeCalls;
 	s_host->Log(s_host->pluginIndex, "before add");
 	return false;
 }
 
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result *= 2;
 }
@@ -261,8 +272,9 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_CHANGE)
 
-static bool BeforeAdd(const FakeUnit*, int& a, int& b, int&)
+static bool BeforeAdd(CivHookCall& call, const FakeUnit*, int& a, int& b, int&)
 {
+	call.note = NoteOf(7);
 	if (a == 12)
 		a = 13;
 	else
@@ -270,26 +282,26 @@ static bool BeforeAdd(const FakeUnit*, int& a, int& b, int&)
 	return false;
 }
 
-static void AfterAdd(const FakeUnit*, int a, int b, int&)
+static void AfterAdd(const CivHookCall& call, const FakeUnit*, int a, int b, int&)
 {
 	char line[64];
-	_snprintf_s(line, sizeof(line), _TRUNCATE, "after add sees a %d b %d", a, b);
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "after add sees a %d b %d note %d", a, b, NoteValue(call));
 	s_host->Log(s_host->pluginIndex, line);
 }
 
-static bool BeforeSubtract(const FakeUnit*, int& a, int&, int&)
+static bool BeforeSubtract(CivHookCall&, const FakeUnit*, int& a, int&, int&)
 {
 	a = 9;
 	return false;
 }
 
-static bool BeforeHalf(const FakeUnit*, int& v, int&)
+static bool BeforeHalf(CivHookCall&, const FakeUnit*, int& v, int&)
 {
 	v = 40;
 	return false;
 }
 
-static bool BeforeGreet(const FakeUnit*, std::string& who, std::string&)
+static bool BeforeGreet(CivHookCall&, const FakeUnit*, std::string& who, std::string&)
 {
 	who = "changed";
 	return false;
@@ -307,55 +319,138 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	return true;
 }
 
+#elif defined(TOY_RECORD)
+
+static void LogRecord(const char* format, int first, int second = 0)
+{
+	char line[64];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, format, first, second);
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+static bool BeforeAdd(CivHookCall& call, const FakeUnit*, int& a, int&, int&)
+{
+	call.note = NoteOf(a + 1000);
+	return a == 99;
+}
+
+static void AfterAdd(const CivHookCall& call, const FakeUnit*, int, int, int&)
+{
+	LogRecord("add note %d vetoed %d", NoteValue(call), call.vetoed ? 1 : 0);
+}
+
+static bool BeforeSubtractFirst(CivHookCall& call, const FakeUnit*, int&, int&, int&)
+{
+	call.note = NoteOf(NoteValue(call) + 1);
+	return false;
+}
+
+static bool BeforeSubtractSecond(CivHookCall& call, const FakeUnit*, int&, int&, int&)
+{
+	call.note = NoteOf(NoteValue(call) + 2);
+	return false;
+}
+
+static void AfterSubtract(const CivHookCall& call, const FakeUnit*, int, int, int&)
+{
+	LogRecord("subtract note %d", NoteValue(call));
+}
+
+static bool BeforeCountdown(CivHookCall& call, const FakeUnit*, int& n, int&)
+{
+	call.note = NoteOf(n + 1);
+	return false;
+}
+
+static void AfterCountdown(const CivHookCall& call, const FakeUnit*, int n, int&)
+{
+	LogRecord("countdown %d note %d", n, NoteValue(call));
+}
+
+static bool BeforeName(CivHookCall& call, const FakeUnit*, const std::string*&)
+{
+	call.note = NoteOf(5);
+	return false;
+}
+
+static const std::string& ReplaceName(CivHooks::FakeUnit_name::Original original, const FakeUnit* self)
+{
+	s_host->Log(s_host->pluginIndex, "replacement of name runs");
+	return original(self);
+}
+
+static void AfterName(const CivHookCall& call, const FakeUnit*, const std::string*&)
+{
+	LogRecord("name note %d vetoed %d", NoteValue(call), call.vetoed ? 1 : 0);
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Record");
+	CivRegisterBefore<CivHooks::FakeUnit_add>(s_host, &BeforeAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
+	CivRegisterBefore<CivHooks::FakeUnit_Subtract>(s_host, &BeforeSubtractFirst);
+	CivRegisterBefore<CivHooks::FakeUnit_Subtract>(s_host, &BeforeSubtractSecond);
+	CivRegisterAfter<CivHooks::FakeUnit_Subtract>(s_host, &AfterSubtract);
+	// After-hook first, so the before-hook's record is found through the after-hooks.
+	CivRegisterAfter<CivHooks::FakeUnit_Countdown>(s_host, &AfterCountdown);
+	CivRegisterBefore<CivHooks::FakeUnit_Countdown>(s_host, &BeforeCountdown);
+	CivRegisterBefore<CivHooks::FakeUnit_name>(s_host, &BeforeName);
+	CivRegisterReplace<CivHooks::FakeUnit_name>(s_host, &ReplaceName);
+	CivRegisterAfter<CivHooks::FakeUnit_name>(s_host, &AfterName);
+	return true;
+}
+
 #elif defined(TOY_SHAPES)
 
-static void AfterTwice(int, int& result)
+static void AfterTwice(const CivHookCall&, int, int& result)
 {
 	result += 1000;
 }
 
-static void AfterScale(const FakeUnit*, int, int, int& result)
+static void AfterScale(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result += 1000;
 }
 
-static void AfterLevel(const FakeUnit*, int& result)
+static void AfterLevel(const CivHookCall&, const FakeUnit*, int& result)
 {
 	result += 1000;
 }
 
-static void AfterGreet(const FakeUnit*, std::string, std::string& result)
+static void AfterGreet(const CivHookCall&, const FakeUnit*, std::string, std::string& result)
 {
 	result += "!";
 }
 
-static void AfterEquals(const FakeUnit*, const FakeUnit&, bool& result)
+static void AfterEquals(const CivHookCall&, const FakeUnit*, const FakeUnit&, bool& result)
 {
 	result = !result;
 }
 
-static void AfterHeal(const FakeUnit*, int, int& result)
+static void AfterHeal(const CivHookCall&, const FakeUnit*, int, int& result)
 {
 	result += 1000;
 }
 
-static void AfterRange(const FakeUnit*, int& result)
+static void AfterRange(const CivHookCall&, const FakeUnit*, int& result)
 {
 	result += 1000;
 }
 
-static bool BeforeIgnore(FakeUnit*, int&)
+static bool BeforeIgnore(CivHookCall&, FakeUnit*, int&)
 {
 	++s_beforeCalls;
 	return false;
 }
 
-static void AfterPlusThousand(int, int& result)
+static void AfterPlusThousand(const CivHookCall&, int, int& result)
 {
 	result += 1000;
 }
 
-static void AfterUnannounced(int, int, int& result)
+static void AfterUnannounced(const CivHookCall&, int, int, int& result)
 {
 	result += 1000;
 }
@@ -386,7 +481,7 @@ static void ReplaceNotify(NotifyFn, FakeUnit* self, int amount)
 	self->m_notified -= amount;
 }
 
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result += 1000000;
 }
@@ -409,7 +504,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 #elif defined(TOY_NEWER) || defined(TOY_MAJOR) || defined(TOY_NO_VERSION) || defined(TOY_OLDER) || defined(TOY_LATER_RELEASE)
 
 // Bazaar must refuse these toys before running them; the log line and hooks show it if it does not.
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result = 999999;
 }
@@ -450,7 +545,7 @@ TOY_EXPORT int ToyExplodeLine()
 }
 
 // The statement after the call starts a new line, so the return address names that line rather than the call's.
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	s_explodeLine = __LINE__ + 1;
 	Explode();
@@ -483,7 +578,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_FAULT_BEFORE) || defined(TOY_FAULT_KEPT)
 
-static bool BeforeAdd(const FakeUnit*, int&, int&, int&)
+static bool BeforeAdd(CivHookCall&, const FakeUnit*, int&, int&, int&)
 {
 	int* volatile nowhere = 0;
 	return *nowhere == 1;
@@ -533,7 +628,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_BENCH)
 
-static void AfterSquare(int, int&)
+static void AfterSquare(const CivHookCall&, int, int&)
 {
 }
 
@@ -551,7 +646,7 @@ static ToyHostCallFn* s_hostCall = 0;
 static int s_hostCallResult = -1;
 static bool s_breakNextCall = false;
 
-static void AfterTwice(int, int&)
+static void AfterTwice(const CivHookCall&, int, int&)
 {
 	if (s_breakNextCall)
 	{
@@ -665,7 +760,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_DECLINE) || defined(TOY_LATE_FAULT)
 
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result += 500000;
 }
@@ -700,7 +795,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #include "ToyGoneHook.h"
 
-static void AfterAdd(const FakeUnit*, int, int, int& result)
+static void AfterAdd(const CivHookCall&, const FakeUnit*, int, int, int& result)
 {
 	result += 700000;
 }
@@ -746,7 +841,7 @@ static int Deeper(int depth)
 	return depth < 0 ? 0 : Deeper(depth + 1) + room[0];
 }
 
-static void AfterRange(const FakeUnit*, int& result)
+static void AfterRange(const CivHookCall&, const FakeUnit*, int& result)
 {
 	result += Deeper(0);
 }
@@ -761,7 +856,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_THROW)
 
-static void AfterRange(const FakeUnit*, int&)
+static void AfterRange(const CivHookCall&, const FakeUnit*, int&)
 {
 	throw std::runtime_error("thrown from a plugin hook");
 }
@@ -776,7 +871,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_VETO)
 
-static bool BeforeSubtract(const FakeUnit*, int& a, int&, int& result)
+static bool BeforeSubtract(CivHookCall&, const FakeUnit*, int& a, int&, int& result)
 {
 	if (a != 99)
 		return false;
@@ -784,17 +879,17 @@ static bool BeforeSubtract(const FakeUnit*, int& a, int&, int& result)
 	return true;
 }
 
-static bool BeforeScale(const FakeUnit*, int& v, int&, int&)
+static bool BeforeScale(CivHookCall&, const FakeUnit*, int& v, int&, int&)
 {
 	return v == 99;
 }
 
-static bool BeforeName(const FakeUnit*, const std::string*&)
+static bool BeforeName(CivHookCall&, const FakeUnit*, const std::string*&)
 {
 	return true;
 }
 
-static bool BeforeGreet(const FakeUnit*, std::string& who, std::string& result)
+static bool BeforeGreet(CivHookCall&, const FakeUnit*, std::string& who, std::string& result)
 {
 	if (who == "veto")
 		result = "Vetoed";

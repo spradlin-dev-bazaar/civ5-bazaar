@@ -210,14 +210,12 @@ def hook_declarations(fn, data, typed, qualified):
     if fn["owner"] and not fn["static_method"]:
         self_type = "%s%s*" % ("const " if fn["const"] else "", owner)
     hook = generate.hook_parameters(result, self_type, types)
-    names = (["self"] if self_type else []) + [
-        "arg" + n[len("civ_p") :] if n.startswith("civ_p") else n for _, n in params
-    ]
+    names = ["arg" + n[len("civ_p") :] if n.startswith("civ_p") else n for _, n in params]
 
-    def named(kind_types):
-        return ["%s %s" % (t, n) for t, n in zip(kind_types, names + ["result"])]
+    def named(parameters):
+        return ["%s %s" % (p.type, names[p.role] if isinstance(p.role, int) else p.role) for p in parameters]
 
-    original = "%s (*original)(%s)" % (result, ", ".join(hook.original))
+    original = "%s (*original)(%s)" % (result, generate.joined_types(hook.original))
     name = fn["hook_name"]
     lines = [
         "static bool Before%s(%s);" % (name, ", ".join(named(hook.before))),

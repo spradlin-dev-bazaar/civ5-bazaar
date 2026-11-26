@@ -252,21 +252,32 @@ def free_function_declarations(fn, data, exported):
     return ""
 
 
-def thunk_lines(is_void, plugin_args):
-    pa = ", ".join(plugin_args)
-    pa_slot = ", ".join(plugin_args + ["c.res->value"])
-    pa_orig = ", ".join(["&civ_C::Original"] + plugin_args)
+# A HookParameter's role is CALL, SELF, RESULT, or the index of one of the function's own parameters.
+CALL, SELF, RESULT = "call", "self", "result"
+HookParameter = collections.namedtuple("HookParameter", "role type")
+HookParameters = collections.namedtuple("HookParameters", "original before after")
+
+
+THUNK_ARGUMENTS = {CALL: "*c.civ_h.call", SELF: "c.self", RESULT: "c.res->value"}
+
+
+def thunk_argument(parameter):
+    return "*c.a%d" % parameter.role if isinstance(parameter.role, int) else THUNK_ARGUMENTS[parameter.role]
+
+
+def thunk_call(kind, parameters, first=()):
+    arguments = list(first) + [thunk_argument(p) for p in parameters]
+    return "reinterpret_cast<%sFn>(c.civ_h.fn)(%s)" % (kind, ", ".join(arguments))
+
+
+def thunk_lines(result, hook):
+    replace = thunk_call("Replace", hook.original, ["&civ_C::Original"])
     head = "\t\tstatic void %s(void* p) { civ_C& c = *static_cast<civ_C*>(p); "
-    if is_void:
-        return [
-            head % "Before" + "c.civ_h.veto = reinterpret_cast<BeforeFn>(c.civ_h.fn)(%s); }" % pa,
-            head % "Replace" + "reinterpret_cast<ReplaceFn>(c.civ_h.fn)(%s); }" % pa_orig,
-            head % "After" + "reinterpret_cast<AfterFn>(c.civ_h.fn)(%s); }" % pa,
-        ]
+    unset = " c.civ_h.resultUnset = c.res->Empty();" if result.endswith("&") else ""
     return [
-        head % "Before" + "c.civ_h.veto = reinterpret_cast<BeforeFn>(c.civ_h.fn)(%s); }" % pa_slot,
-        head % "Replace" + "c.res->Set(reinterpret_cast<ReplaceFn>(c.civ_h.fn)(%s)); }" % pa_orig,
-        head % "After" + "reinterpret_cast<AfterFn>(c.civ_h.fn)(%s); }" % pa_slot,
+        head % "Before" + "c.civ_h.veto = %s;%s }" % (thunk_call("Before", hook.before), unset),
+        head % "Replace" + ("%s; }" if result == "void" else "c.res->Set(%s); }") % replace,
+        head % "After" + "%s; }" % thunk_call("After", hook.after),
     ]
 
 
@@ -286,9 +297,15 @@ def hooked_lines(is_void, self_type, types, names, call):
     params = (["%s civ_self" % self_type] if self_type else []) + [
         "CivHookArg< %s >::Type %s" % (t, n) for t, n in zip(types, names)
     ]
-    init = ["{ 0, false }"] + (["civ_self"] if self_type else []) + ["&" + n for n in names]
+    init = (
+        ["{ 0, false, 0, civ_records, civ_recordCount }"]
+        + (["civ_self"] if self_type else [])
+        + ["&" + n for n in names]
+    )
     lines = ["\t\tstatic __declspec(noinline) %s Hooked(%s)" % ("void" if is_void else "civ_R", ", ".join(params))]
     lines += ["\t\t{", "\t\t\tCivHookPoint& civ_hp = g_CivHookPoints[%s];" % ID_PLACEHOLDER]
+    lines.append("\t\t\tconst int civ_recordCount = civ_hp.records;")
+    lines.append("\t\t\tCivHookCall* const civ_records = CIV_HOOK_RECORDS(civ_recordCount);")
     if not is_void:
         lines.append("\t\t\tciv_Res civ_res;")
         init.append("&civ_res")
@@ -300,8 +317,7 @@ def hooked_lines(is_void, self_type, types, names, call):
     if is_void:
         lines.append("\t\t\t\t%s;" % call)
     else:
-        # Only a reference result can be empty: one a veto left unset runs the original after all (CivHookResult).
-        lines += ["\t\t\t\tciv_res.Set(%s);" % call, "\t\t\tif (civ_res.Empty())", "\t\t\t\tciv_res.Set(%s);" % call]
+        lines.append("\t\t\t\tciv_res.Set(%s);" % call)
     lines.append("\t\t\tCivHookRunAfter(civ_hp, %s, &civ_C::After, &civ_c);" % ID_PLACEHOLDER)
     if not is_void:
         lines.append("\t\t\treturn civ_res.Get();")
@@ -318,21 +334,21 @@ def wrapper_code(fn, data, src_path, exported):
     self_type = None
     if fn["class"] is not None and not fn["static_method"]:
         self_type = ("const %s*" % fn["class"]) if fn["const"] else ("%s*" % fn["class"])
-    require_same_hook_types(fn, types, "void" if is_void else return_text(fn, data))
+    written_result = "void" if is_void else return_text(fn, data)
+    require_same_hook_types(fn, types, written_result)
+    hook = hook_parameters(written_result, self_type, types)
     copies = [hooked_copy(t) for t in types]
-    plugin_args = (["c.self"] if self_type else []) + ["*c.a%d" % i for i in range(len(types))]
     inner_call = "%s%s(%s)" % ("civ_self->" if self_type else "", orig_name(fn), ", ".join(names))
 
     lines = ["#line %d %s" % (fn["line"], c_string(src_path))]
     lines.append(("CIV_HOST_API " if exported else "") + wrapper_signature(fn, data))
     lines.append("{")
-    written_result = "void" if is_void else return_text(fn, data)
     if not is_void:
         lines.append("\ttypedef %s civ_R;" % written_result)
         lines.append("\ttypedef CivHookResult< civ_R > civ_Res;")
     result = "void" if is_void else "civ_R"
     lines += ["\tstruct civ_C", "\t{"]
-    lines += ["\t\t" + typedef for typedef in hook_type_lines(written_result, self_type, types, "Fn")]
+    lines += ["\t\t" + typedef for typedef in hook_type_lines(written_result, hook, "Fn")]
     lines.append("\t\tCivHookCtx civ_h;")
     if self_type:
         lines.append("\t\t%s self;" % self_type)
@@ -340,7 +356,7 @@ def wrapper_code(fn, data, src_path, exported):
     if not is_void:
         lines.append("\t\tciv_Res* res;")
     lines.append(original_line(fn, self_type, types, result))
-    lines += thunk_lines(is_void, plugin_args)
+    lines += thunk_lines(written_result, hook)
     lines += hooked_lines(is_void, self_type, copies, names, inner_call)
     lines.append("\t};")
     lines.append("\tif (!g_CivHookActive[%s])" % ID_PLACEHOLDER)
@@ -685,9 +701,6 @@ def plugin_spelling(type_text):
     return type_text
 
 
-HookParameters = collections.namedtuple("HookParameters", "original before after")
-
-
 def without_template_arguments(type_text):
     """A > inside parentheses, as in an argument libclang writes as an expression, does not close the brackets."""
     angles, parens, kept = 0, 0, []
@@ -758,24 +771,33 @@ def hook_parameters(result, self_type, params):
     """Hook types for a function that returns result and takes params, on an object of self_type unless that is None.
     A replacement takes original after its pointer to the game's function. The wrapper, CivHooks.h and the docs all
     take hook types from here."""
-    head = [self_type] if self_type else []
-    slot = [] if result == "void" else [result_slot(result)]
+    head = [HookParameter(SELF, self_type)] if self_type else []
+    slot = [] if result == "void" else [HookParameter(RESULT, result_slot(result))]
     return HookParameters(
-        original=head + params,
-        before=head + [by_reference(t) for t in params] + slot,
-        after=head + params + slot,
+        original=head + [HookParameter(i, t) for i, t in enumerate(params)],
+        before=[HookParameter(CALL, "CivHookCall&")]
+        + head
+        + [HookParameter(i, by_reference(t)) for i, t in enumerate(params)]
+        + slot,
+        after=[HookParameter(CALL, "const CivHookCall&")]
+        + head
+        + [HookParameter(i, t) for i, t in enumerate(params)]
+        + slot,
     )
 
 
-def hook_type_lines(result, self_type, params, suffix=""):
+def joined_types(parameters):
+    return ", ".join(p.type for p in parameters)
+
+
+def hook_type_lines(result, hook, suffix=""):
     """The typedefs of a hook point's original function, and of a before-hook, after-hook and replacement on it."""
-    types = hook_parameters(result, self_type, params)
     original = "Original" + suffix
     return [
-        "typedef %s (*%s)(%s);" % (result, original, ", ".join(types.original)),
-        "typedef bool (*Before%s)(%s);" % (suffix, ", ".join(types.before)),
-        "typedef void (*After%s)(%s);" % (suffix, ", ".join(types.after)),
-        "typedef %s (*Replace%s)(%s);" % (result, suffix, ", ".join([original] + types.original)),
+        "typedef %s (*%s)(%s);" % (result, original, joined_types(hook.original)),
+        "typedef bool (*Before%s)(%s);" % (suffix, joined_types(hook.before)),
+        "typedef void (*After%s)(%s);" % (suffix, joined_types(hook.after)),
+        "typedef %s (*Replace%s)(%s);" % (result, suffix, ", ".join([original] + [p.type for p in hook.original])),
     ]
 
 
@@ -798,7 +820,8 @@ def hook_types(fn, qualified=False):
 
 def plugin_typedefs(fn, qualified=False):
     """The hook point's typedefs for CivHooks.h."""
-    return hook_type_lines(*hook_types(fn, qualified))
+    result, self_type, params = hook_types(fn, qualified)
+    return hook_type_lines(result, hook_parameters(result, self_type, params))
 
 
 def function_types(fn):

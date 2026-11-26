@@ -19,6 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import generate  # noqa: E402
 
 
+def types_of(parameters):
+    return [p.type for p in parameters]
+
+
 def function(
     name,
     displayname=None,
@@ -266,8 +270,8 @@ class RegistryTest(unittest.TestCase):
             generate.plugin_typedefs(method),
             [
                 "typedef int (*Original)(const Game::CvPlayer *, bool);",
-                "typedef bool (*Before)(const Game::CvPlayer *, bool&, int&);",
-                "typedef void (*After)(const Game::CvPlayer *, bool, int&);",
+                "typedef bool (*Before)(CivHookCall&, const Game::CvPlayer *, bool&, int&);",
+                "typedef void (*After)(const CivHookCall&, const Game::CvPlayer *, bool, int&);",
                 "typedef int (*Replace)(Original, const Game::CvPlayer *, bool);",
             ],
         )
@@ -277,8 +281,8 @@ class RegistryTest(unittest.TestCase):
             generate.plugin_typedefs(static),
             [
                 "typedef void (*Original)(std::vector<std::vector<int> >);",
-                "typedef bool (*Before)(std::vector<std::vector<int> >&);",
-                "typedef void (*After)(std::vector<std::vector<int> >);",
+                "typedef bool (*Before)(CivHookCall&, std::vector<std::vector<int> >&);",
+                "typedef void (*After)(const CivHookCall&, std::vector<std::vector<int> >);",
                 "typedef void (*Replace)(Original, std::vector<std::vector<int> >);",
             ],
         )
@@ -288,10 +292,37 @@ class RegistryTest(unittest.TestCase):
             "int", "CvUnit *", ["int", "CvPlot *", "const CvPlot *", "const CvBuildInfo &", "int &"]
         )
         self.assertEqual(
-            hook.before, ["CvUnit *", "int&", "CvPlot *&", "const CvPlot *&", "const CvBuildInfo &", "int &", "int&"]
+            types_of(hook.before),
+            [
+                "CivHookCall&",
+                "CvUnit *",
+                "int&",
+                "CvPlot *&",
+                "const CvPlot *&",
+                "const CvBuildInfo &",
+                "int &",
+                "int&",
+            ],
         )
-        self.assertEqual(hook.after, hook.original + ["int&"])
-        self.assertEqual(generate.hook_parameters("void", None, ["int"]).before, ["int&"])
+        self.assertEqual(types_of(hook.after), ["const CivHookCall&"] + types_of(hook.original) + ["int&"])
+        self.assertEqual(types_of(generate.hook_parameters("void", None, ["int"]).before), ["CivHookCall&", "int&"])
+
+    def test_a_hook_gets_its_plugins_record_then_self_then_the_values_then_the_result(self):
+        hook = generate.hook_parameters("int", "CvUnit *", ["int", "bool"])
+        before, replace, after = generate.thunk_lines("int", hook)
+        self.assertIn("(*c.civ_h.call, c.self, *c.a0, *c.a1, c.res->value)", before)
+        self.assertIn("(&civ_C::Original, c.self, *c.a0, *c.a1)", replace)
+        self.assertIn("(*c.civ_h.call, c.self, *c.a0, *c.a1, c.res->value)", after)
+        before, replace, after = generate.thunk_lines("void", generate.hook_parameters("void", None, []))
+        self.assertIn("(*c.civ_h.call)", before)
+        self.assertIn("(&civ_C::Original)", replace)
+        self.assertIn("(*c.civ_h.call)", after)
+
+    def test_only_a_before_hook_on_a_function_returning_a_reference_reports_an_unset_result(self):
+        hook = generate.hook_parameters("CvUnit &", None, [])
+        self.assertIn("c.civ_h.resultUnset = c.res->Empty();", generate.thunk_lines("CvUnit &", hook)[0])
+        hook = generate.hook_parameters("int", None, [])
+        self.assertNotIn("resultUnset", "".join(generate.thunk_lines("int", hook)))
 
     def test_a_value_the_definition_marks_const_can_still_be_changed_by_a_before_hook(self):
         for written, before in [
