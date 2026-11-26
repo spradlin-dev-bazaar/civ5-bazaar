@@ -320,7 +320,9 @@ class RegistryTest(unittest.TestCase):
 
     def test_only_a_before_hook_on_a_function_returning_a_reference_reports_an_unset_result(self):
         hook = generate.hook_parameters("CvUnit &", None, [])
-        self.assertIn("c.civ_h.resultUnset = c.res->Empty();", generate.thunk_lines("CvUnit &", hook)[0])
+        before, replace, after = generate.thunk_lines("CvUnit &", hook)
+        self.assertIn("c.civ_h.resultUnset = c.res->Empty();", before)
+        self.assertNotIn("resultUnset", replace + after)
         hook = generate.hook_parameters("int", None, [])
         self.assertNotIn("resultUnset", "".join(generate.thunk_lines("int", hook)))
 
@@ -649,6 +651,15 @@ class SignatureTest(unittest.TestCase):
         self.assertEqual(
             generate.wrapper_signature(fn, data, keep_defaults=True), "int CvUnit::f(int a = 3, bool civ_p1)"
         )
+
+    def test_the_wrapper_stops_on_a_parameter_whose_two_spellings_give_hooks_other_types(self):
+        data = b"void CvUnit::f(unsigned const int a)"
+        params = written_params(data, ("unsigned const int a", "a"))
+        params[0]["type"] = "const unsigned int"
+        fn = {"def_start": 0, "body_start": len(data), "params": params, "result": {"kind": "void"}}
+        fn.update(name="f", static_method=False, const=False, **{"class": "CvUnit"})
+        with self.assertRaisesRegex(ValueError, "f: the game's code gives a hook unsigned const int&"):
+            generate.wrapper_code(fn, data, "CvUnit.cpp", False)
 
     def test_an_unnamed_parameter_with_a_default_is_skipped(self):
         data = b"void f(int = 3)"

@@ -35,6 +35,7 @@ HOST_ENTRY_POINTS = {
     ("CvDllWorldBuilderMapLoader", "GetMapPreview"),
     ("CvDllGame", "ReadSupportingClassData"),
     ("CvDllGame", "WriteSupportingClassData"),
+    ("CvGlobals", "init"),
     ("CvGame", "ReadSupportingClassData"),
     ("CvGame", "WriteSupportingClassData"),
 }

@@ -299,6 +299,8 @@ void TestCallRecords()
 		"a function that calls itself: the outermost call keeps its own record");
 	Check(LogIndex("[Toy Record] countdown 1 note 2") >= 0, "a function that calls itself: the middle call keeps its own record");
 	Check(LogIndex("[Toy Record] countdown 0 note 1") >= 0, "a function that calls itself: the innermost call keeps its own record");
+	Check(unit.Half(10) == 5 && LogIndex("[Toy Record] half note 0 vetoed 0") >= 0,
+		"an after-hook whose plugin has no before-hook on the function gets a blank record, though earlier calls used that stack");
 	const char* const basicFirst[] = {"toy_basic.dll", "toy_record.dll"};
 	StartWith(basicFirst);
 	Check(unit.add(13, 1) == 99 && LogIndex("[Toy Record] add note 0 vetoed 1") >= 0,
@@ -316,6 +318,13 @@ void TestCallRecords()
 	Check(LogIndex("[Toy Record] replacement of name runs") >= 0, "a veto that leaves a reference result unset does not skip the replacement");
 	unit.name();
 	Check(LogCount(ignored) == 1, "Bazaar logs once, naming the plugin and the function, that it ignored such a veto");
+	ClearLog();
+	ToyVetoNameWithResultFn* const withResult = TOY_FUNCTION("toy_veto.dll", ToyVetoNameWithResult);
+	if (withResult)
+		withResult();
+	Check(withResult && unit.name() == "Vetoed Warrior" && LogIndex("[Toy Record] name note 0 vetoed 1") >= 0,
+		"a veto that sets a reference result counts: the caller gets that object, and the after-hooks see the veto");
+	Check(LogIndex("[Toy Record] replacement of name runs") < 0, "a veto that sets a reference result skips the replacement");
 	const char* const faultFirst[] = {"toy_fault_before.dll", "toy_record.dll"};
 	StartWith(faultFirst);
 	Check(unit.add(2, 3) == 5 && LogIndex("[Toy Record] add note 1002 vetoed 0") >= 0,

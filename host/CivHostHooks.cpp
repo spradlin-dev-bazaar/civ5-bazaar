@@ -51,23 +51,23 @@ namespace
 		DeleteEntries(hp.after);
 		delete hp.replace;
 		hp.before = hp.after = hp.replace = 0;
-		hp.records = 0;
+		hp.recordCount = 0;
 	}
 
-	int RecordOf(CivHookPoint& hp, int plugin)
+	int RecordIndexOf(CivHookPoint& hp, int plugin)
 	{
 		const CivHookEntry* const lists[] = {hp.before, hp.after};
 		for (int i = 0; i < 2; ++i)
 			for (const CivHookEntry* e = lists[i]; e; e = e->next)
 				if (e->plugin == plugin)
 					return e->record;
-		return hp.records++;
+		return hp.recordCount++;
 	}
 
-	// Null for a hand-placed hook, whose context has no records.
+	// Null for a hand-placed hook, which has no record.
 	CivHookCall* RecordFor(const CivHookCtx& c, const CivHookEntry& e)
 	{
-		return e.record < c.recordCount ? &c.records[e.record] : 0;
+		return e.record >= 0 && e.record < c.recordCount ? &c.records[e.record] : 0;
 	}
 
 	void LogSkippedOriginal(int plugin, int hookId)
@@ -78,7 +78,7 @@ namespace
 
 	void LogIgnoredVeto(int plugin, int hookId)
 	{
-		CivHostLog("Plugin %s: its before-hook on %s returned true to veto the call but left result null. That function returns a reference, so a veto needs an object to give the caller. Bazaar ignored the veto and ran the before-hooks after this one, then the replacement or the game's function, then the after-hooks. A veto of this function counts only when a before-hook sets result, its last parameter, to the object that the caller gets back. This is logged only once.",
+		CivHostLog("Plugin %s: its before-hook on %s returned true to veto the call but left result null. That function returns a reference, so a veto needs an object to give the caller. Bazaar ignored the veto and ran the before-hooks after this one, as if this hook had returned false. A veto of this function counts only when a before-hook sets result, its last parameter, to the object that the caller gets back. This is logged only once.",
 			CivHostRecord(plugin).name.c_str(), CivHookName(hookId));
 	}
 }
@@ -120,7 +120,8 @@ void CivHookAdd(int plugin, int id, int kind, void* fn)
 	}
 	else
 	{
-		e->record = RecordOf(hp, plugin);
+		if (id < g_CivHookPointCount)
+			e->record = RecordIndexOf(hp, plugin);
 		CivHookEntry** tail = kind == CIV_HOOK_BEFORE ? &hp.before : &hp.after;
 		while (*tail)
 			tail = &(*tail)->next;
@@ -160,9 +161,6 @@ std::vector<int> CivHandHookPlugins(int handHook)
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
 {
 	CivHookCtx* c = static_cast<CivHookCtx*>(ctx);
-	const CivHookCall blank = {false, 0};
-	for (int i = 0; i < c->recordCount; ++i)
-		c->records[i] = blank;
 	bool vetoed = false;
 	for (CivHookEntry* e = hp.before; e && !vetoed; e = e->next)
 	{

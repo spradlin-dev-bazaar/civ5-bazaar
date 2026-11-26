@@ -252,17 +252,10 @@ def free_function_declarations(fn, data, exported):
     return ""
 
 
-# A HookParameter's role is CALL, SELF, RESULT, or the index of one of the function's own parameters.
-CALL, SELF, RESULT = "call", "self", "result"
-HookParameter = collections.namedtuple("HookParameter", "role type")
-HookParameters = collections.namedtuple("HookParameters", "original before after")
-
-
-THUNK_ARGUMENTS = {CALL: "*c.civ_h.call", SELF: "c.self", RESULT: "c.res->value"}
-
-
 def thunk_argument(parameter):
-    return "*c.a%d" % parameter.role if isinstance(parameter.role, int) else THUNK_ARGUMENTS[parameter.role]
+    if isinstance(parameter.role, int):
+        return "*c.a%d" % parameter.role
+    return {CALL: "*c.civ_h.call", SELF: "c.self", RESULT: "c.res->value"}[parameter.role]
 
 
 def thunk_call(kind, parameters, first=()):
@@ -297,14 +290,10 @@ def hooked_lines(is_void, self_type, types, names, call):
     params = (["%s civ_self" % self_type] if self_type else []) + [
         "CivHookArg< %s >::Type %s" % (t, n) for t, n in zip(types, names)
     ]
-    init = (
-        ["{ 0, false, 0, civ_records, civ_recordCount }"]
-        + (["civ_self"] if self_type else [])
-        + ["&" + n for n in names]
-    )
+    init = ["CivHookCtx(civ_records, civ_recordCount)"] + (["civ_self"] if self_type else []) + ["&" + n for n in names]
     lines = ["\t\tstatic __declspec(noinline) %s Hooked(%s)" % ("void" if is_void else "civ_R", ", ".join(params))]
     lines += ["\t\t{", "\t\t\tCivHookPoint& civ_hp = g_CivHookPoints[%s];" % ID_PLACEHOLDER]
-    lines.append("\t\t\tconst int civ_recordCount = civ_hp.records;")
+    lines.append("\t\t\tconst int civ_recordCount = civ_hp.recordCount;")
     lines.append("\t\t\tCivHookCall* const civ_records = CIV_HOOK_RECORDS(civ_recordCount);")
     if not is_void:
         lines.append("\t\t\tciv_Res civ_res;")
@@ -765,6 +754,12 @@ def result_slot(result):
     if result.endswith("&"):
         return result[:-1].rstrip() + "*&"
     return without_top_const(result) + "&"
+
+
+# A HookParameter's role is CALL, SELF, RESULT, or the index of one of the function's own parameters.
+CALL, SELF, RESULT = "call", "self", "result"
+HookParameter = collections.namedtuple("HookParameter", "role type")
+HookParameters = collections.namedtuple("HookParameters", "original before after")
 
 
 def hook_parameters(result, self_type, params):

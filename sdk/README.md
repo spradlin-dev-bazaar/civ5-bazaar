@@ -170,8 +170,8 @@ Log("%s starts turn %d with %d gold (turns started: %d, notifications seen: %d)"
 ```cpp
 struct CvPlayer_GetScore { enum { ID = 6887 }; // int CvPlayer::GetScore(bool, bool) const
 	typedef int (*Original)(const CvPlayer *, bool, bool);
-	typedef bool (*Before)(const CvPlayer *, bool&, bool&, int&);
-	typedef void (*After)(const CvPlayer *, bool, bool, int&);
+	typedef bool (*Before)(CivHookCall&, const CvPlayer *, bool&, bool&, int&);
+	typedef void (*After)(const CivHookCall&, const CvPlayer *, bool, bool, int&);
 	typedef int (*Replace)(Original, const CvPlayer *, bool, bool);
 };
 ```
@@ -233,7 +233,7 @@ A hook's parameters must match the game's function exactly. Build them from the 
 | `result` | before-hooks and after-hooks, when the function returns a value | `int& result`: a reference to the return value |
 
 - **`call`** is this plugin's record of the call, a `CivHookCall` declared in `CivPluginApi.h`. A before-hook gets it as `CivHookCall& call` and can change it; an after-hook gets it as `const CivHookCall& call` and can only read it. It has two fields:
-  - `vetoed` (a `bool`) is true in an after-hook when a before-hook vetoed the call, and is always false in a before-hook, because a veto stops the before-hooks after it. When a plugin higher in the list vetoes the call, this plugin's before-hooks do not run, so its after-hooks see `vetoed` true and `note` zero. An after-hook that counts something, such as a plugin that counts deaths with an after-hook on `CvUnit::kill`, checks `vetoed`, because another plugin may have vetoed the death. For a function that returns a reference, a before-hook's return of `true` vetoes the call only when `result` points at an object, set by this hook or one above it. When `result` is still null, Bazaar ignores the veto, so `vetoed` stays false, as [Functions that return a reference](#functions-that-return-a-reference) explains.
+  - `vetoed` (a `bool`) is true in an after-hook when a before-hook vetoed the call, and is always false in a before-hook, because a veto stops the before-hooks after it. When a plugin higher in the list vetoes the call, this plugin's before-hooks do not run, so its after-hooks see `vetoed` true and `note` zero. An after-hook that counts something, such as a plugin that counts deaths with an after-hook on `CvUnit::kill`, checks `vetoed`, because another plugin may have vetoed the death. For a function that returns a reference, a before-hook's return of `true` vetoes the call only when `result` points at an object, set by this hook or one above it. When `result` is still null, Bazaar ignores the veto and goes on with the before-hooks after it, so `vetoed` is true only when one of those later before-hooks vetoes properly, by setting `result` and returning `true`, as [Functions that return a reference](#functions-that-return-a-reference) explains.
   - `note` (a `void*`, an untyped pointer) is zero when the call starts. A before-hook can store a value there, usually a pointer, for the same plugin's after-hooks on the same call, and no other plugin sees it. The commonest use is to note something in a before-hook and act on it in the after-hook.
 
   All of one plugin's before-hooks and after-hooks on one function share this plugin's record of a call, so a plugin with several before-hooks on one function can note which of them ran. Every call has its own record, so the record remains correct when a function calls itself before it returns, such as `CvUnit::setXY`, which puts a unit on a tile and calls itself for each unit that the unit carries, and when the game runs a hooked function on its save thread at the same time. A plugin needs no stack of its own.
@@ -683,7 +683,7 @@ static void AfterHandicap(const CivHookCall& call, const CvPlayer* self, CvHandi
 ```
 
 - In an after-hook, `result` points at the object the function returned. To make the caller get a different object, point `result` at it: `result = &otherObject;` (`&` before a name takes its address).
-- In a before-hook, `result` starts as null. To veto the call, the hook must also point `result` at an object to return, because a reference has to refer to something. If the hook returns `true` while `result` is still null, Bazaar ignores the veto, as if the hook had returned `false`: the before-hooks after this hook run, then the replacement if a plugin has one, otherwise the game's function, then the after-hooks, which see `call.vetoed` false. The first time a plugin's before-hook returns `true` on a given function while `result` is null, Bazaar writes one line to the log file `Bazaar.log`, naming the plugin and the function, and writes that line only once for each plugin and function.
+- In a before-hook, `result` starts as null. To veto the call, the hook must also point `result` at an object to return, because a reference has to refer to something. If the hook returns `true` while `result` is still null, Bazaar ignores the veto, as if the hook had returned `false`, and the before-hooks after this hook run. One of those later before-hooks can still veto the call properly, by setting `result` and returning `true`, so the replacement and the game's function do not run. If none does, the replacement runs if a plugin has one, otherwise the game's function. The after-hooks run either way, and see `call.vetoed` false unless a later before-hook vetoed properly. The first time each before-hook returns `true` while `result` is null, Bazaar writes one line to the log file `Bazaar.log`, naming the plugin and the function.
 
 ## Word list
 

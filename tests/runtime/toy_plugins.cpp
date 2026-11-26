@@ -26,6 +26,7 @@ TOY_EXPORT ToyReleaseStringsFn ToyReleaseStrings;
 TOY_EXPORT ToySetHostCallFn ToySetHostCall;
 TOY_EXPORT ToyHostCallResultFn ToyHostCallResult;
 TOY_EXPORT ToyBreakOnNextCallFn ToyBreakOnNextCall;
+TOY_EXPORT ToyVetoNameWithResultFn ToyVetoNameWithResult;
 TOY_EXPORT ToyStartThreadFn ToyStartThread;
 TOY_EXPORT ToyLeaveThreadRunningFn ToyLeaveThreadRunning;
 TOY_EXPORT ToySetWaitFn ToySetWait;
@@ -367,6 +368,11 @@ static void AfterCountdown(const CivHookCall& call, const FakeUnit*, int n, int&
 	LogRecord("countdown %d note %d", n, NoteValue(call));
 }
 
+static void AfterHalf(const CivHookCall& call, const FakeUnit*, int, int&)
+{
+	LogRecord("half note %d vetoed %d", NoteValue(call), call.vetoed ? 1 : 0);
+}
+
 static bool BeforeName(CivHookCall& call, const FakeUnit*, const std::string*&)
 {
 	call.note = NoteOf(5);
@@ -398,6 +404,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	CivRegisterBefore<CivHooks::FakeUnit_Countdown>(s_host, &BeforeCountdown);
 	CivRegisterBefore<CivHooks::FakeUnit_name>(s_host, &BeforeName);
 	CivRegisterReplace<CivHooks::FakeUnit_name>(s_host, &ReplaceName);
+	CivRegisterAfter<CivHooks::FakeUnit_Half>(s_host, &AfterHalf);
 	CivRegisterAfter<CivHooks::FakeUnit_name>(s_host, &AfterName);
 	return true;
 }
@@ -884,9 +891,19 @@ static bool BeforeScale(CivHookCall&, const FakeUnit*, int& v, int&, int&)
 	return v == 99;
 }
 
-static bool BeforeName(CivHookCall&, const FakeUnit*, const std::string*&)
+static bool s_nameWithResult = false;
+
+static bool BeforeName(CivHookCall&, const FakeUnit*, const std::string*& result)
 {
+	static const std::string vetoed("Vetoed Warrior");
+	if (s_nameWithResult)
+		result = &vetoed;
 	return true;
+}
+
+TOY_EXPORT void ToyVetoNameWithResult()
+{
+	s_nameWithResult = true;
 }
 
 static bool BeforeGreet(CivHookCall&, const FakeUnit*, std::string& who, std::string& result)

@@ -12,7 +12,8 @@ struct CivHookEntry
 	CivHookEntry* next;
 	bool loggedSkippedOriginal;
 	bool loggedIgnoredVeto;
-	// An index into a call's records, the same for every hook of this plugin on this hook point.
+	// An index into a call's records, the same for every before-hook and after-hook of this plugin on this hook point;
+	// -1 for a replacement and for a hand-placed hook.
 	int record;
 };
 
@@ -21,14 +22,23 @@ struct CivHookPoint
 	CivHookEntry* before;
 	CivHookEntry* after;
 	CivHookEntry* replace;
-	// One for each plugin with a before-hook or after-hook here.
-	int records;
+	// One for each plugin with a before-hook or after-hook here; a hand-placed hook point keeps 0.
+	int recordCount;
 };
 
-// The first member of every generated thunk context; the runtime reaches it through a void*. The generated wrappers
-// fill it in field order, and CivHostHand.cpp fills its first two fields, so new fields go at the end.
+// The first member of every generated thunk context; the runtime reaches it through a void*, so a context struct
+// never gets a base class or a virtual function.
 struct CivHookCtx
 {
+	CivHookCtx() : fn(0), veto(false), call(0), records(0), recordCount(0), resultUnset(false) {}
+	// Blanks the records here, where the wrapper hands them over, since _alloca leaves whatever the stack held.
+	CivHookCtx(CivHookCall* first, int count) : fn(0), veto(false), call(0), records(first), recordCount(count), resultUnset(false)
+	{
+		const CivHookCall blank = {false, 0};
+		for (int i = 0; i < count; ++i)
+			records[i] = blank;
+	}
+
 	void* fn;
 	bool veto;
 	// The record of the plugin whose hook runs now.
@@ -72,7 +82,6 @@ struct CivHandHookSite
 extern const CivHandHookSite g_CivHandHookSites[];
 extern const int g_CivHandHookSiteCount;
 
-// Runs on every hooked call, even one with no before-hooks, since it also starts the call's records.
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
 // False when there is no replacement or it faulted; the wrapper then runs the original.
 bool CivHookRunReplace(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx);
@@ -91,7 +100,6 @@ template<class R> struct CivHookResult
 	CivHookResult() : value() {}
 	// Copy-construct rather than assign: some engine handles copy state their operator= drops.
 	void Set(R v) { value.~R(); new (&value) R(v); }
-	bool Empty() const { return false; }
 	R Get() { return value; }
 };
 
