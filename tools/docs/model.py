@@ -196,38 +196,33 @@ def in_ranges(offset, ranges):
     return any(s <= offset <= e for s, e in ranges)
 
 
-def result_slot(result):
-    # Mirrors CivHookSlot in host/CivPluginApi.h, which a plugin's result parameter must match.
-    if result.endswith("&"):
-        return result[:-1].rstrip() + "*&"
-    value = re.sub(r"\s+const$", "", result)
-    return re.sub(r"^const\s+(?=[^*&]*$)", "", value) + "&"
-
-
 def hook_declarations(fn, data, typed, qualified):
     """qualified: CivHooks.h names the hook point's types in full, since a plugin cannot name them as the game's code
     writes them, so the declarations must too."""
     params = [generate.param_parts(fn, data, i) for i in range(len(fn["params"]))]
-    void = fn["result"]["kind"] == "void"
     if qualified:
-        result, types = generate.hook_types(fn, qualified=True)
-        types, owner = types[len(types) - len(params) :], fn["canonical_class"]
+        result, _, types = generate.hook_types(fn, qualified=True)
+        owner = fn["canonical_class"]
     else:
-        result = "void" if void else generate.return_text(fn, data)
+        result = "void" if fn["result"]["kind"] == "void" else generate.return_text(fn, data)
         types, owner = [t for t, _ in params], fn["owner"]
-    names = ["arg" + n[len("civ_p") :] if n.startswith("civ_p") else n for _, n in params]
-    args = ["%s %s" % (t, n) for t, n in zip(types, names)]
-    self_type = []
+    self_type = None
     if fn["owner"] and not fn["static_method"]:
-        self_type = ["%s%s*" % ("const " if fn["const"] else "", owner)]
-    self_param = ["%s self" % t for t in self_type]
-    slot = [] if void else [result_slot(result) + " result"]
-    original = "%s (*original)(%s)" % (result, ", ".join(self_type + types))
+        self_type = "%s%s*" % ("const " if fn["const"] else "", owner)
+    hook = generate.hook_parameters(result, self_type, types)
+    names = (["self"] if self_type else []) + [
+        "arg" + n[len("civ_p") :] if n.startswith("civ_p") else n for _, n in params
+    ]
+
+    def named(kind_types):
+        return ["%s %s" % (t, n) for t, n in zip(kind_types, names + ["result"])]
+
+    original = "%s (*original)(%s)" % (result, ", ".join(hook.original))
     name = fn["hook_name"]
     lines = [
-        "static bool Before%s(%s);" % (name, ", ".join(self_param + args + slot)),
-        "static void After%s(%s);" % (name, ", ".join(self_param + args + slot)),
-        "static %s Replace%s(%s);" % (result, name, ", ".join([original] + self_param + args)),
+        "static bool Before%s(%s);" % (name, ", ".join(named(hook.before))),
+        "static void After%s(%s);" % (name, ", ".join(named(hook.after))),
+        "static %s Replace%s(%s);" % (result, name, ", ".join([original] + named(hook.original))),
         "",
     ]
     if not typed:

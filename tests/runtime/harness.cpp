@@ -10,6 +10,7 @@
 
 void TestLoading();
 void TestHooks();
+void TestChangedValues();
 void TestShapes();
 void TestQuarantine();
 void TestSamePluginCrashingOnTwoThreads();
@@ -101,6 +102,7 @@ namespace
 	const Section kSections[] = {
 		{"loading", &TestLoading},
 		{"hooks", &TestHooks},
+		{"changed values", &TestChangedValues},
 		{"shapes", &TestShapes},
 		{"quarantine", &TestQuarantine},
 		{"same plugin crashing on two threads", &TestSamePluginCrashingOnTwoThreads},

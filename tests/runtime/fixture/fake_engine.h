@@ -26,6 +26,7 @@ public:
 	const std::string& name() const;
 	static int Twice(int x);
 	int Scale(int v, int factor = 2) const;
+	int Half(const int v) const;
 	void Ignore(int);
 	const int Level() const;
 	std::string Greet(std::string who) const;

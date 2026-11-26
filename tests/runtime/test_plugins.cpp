@@ -264,6 +264,26 @@ void TestHooks()
 	Check(unit.add(2, 3) == 110, "the hooks of a plugin listed twice still run once per call");
 }
 
+void TestChangedValues()
+{
+	FakeUnit unit;
+	const char* const changeLast[] = {"toy_basic.dll", "toy_change.dll"};
+	StartWith(changeLast);
+	ClearLog();
+	Check(unit.add(2, 3) == 112, "a before-hook's change reaches the function (2 + 10, then Toy Basic's 100)");
+	Check(LogIndex("[Toy Change] after add sees a 2 b 10") >= 0, "the after-hooks see the changed value");
+	Check(unit.Half(10) == 20, "a before-hook can change a value that the function's definition marks const (40 / 2)");
+	Check(unit.Greet("you") == "Hello changed", "a before-hook can change an object passed by value, such as a string");
+	const char* const changeFirst[] = {"toy_change.dll", "toy_basic.dll"};
+	StartWith(changeFirst);
+	ClearLog();
+	Check(unit.add(12, 1) == 99, "a before-hook lower in the list sees the change of one above it (Toy Basic vetoes 13)");
+	Check(LogIndex("[Toy Change] after add sees a 13 b 1") >= 0, "the after-hooks see the changed value after another plugin's veto");
+	const char* const withReplacement[] = {"toy_change.dll", "toy_second.dll"};
+	StartWith(withReplacement);
+	Check(unit.Subtract(7, 2) == 70, "a replacement gets the values the before-hooks changed ((9 - 2) * 10)");
+}
+
 void TestShapes()
 {
 	const char* const names[] = {"toy_shapes.dll"};

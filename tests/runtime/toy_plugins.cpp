@@ -170,7 +170,7 @@ static void LogResult(const char* what, int result)
 
 #if defined(TOY_BASIC)
 
-static bool BeforeAdd(const FakeUnit*, int a, int, int& result)
+static bool BeforeAdd(const FakeUnit*, int& a, int&, int& result)
 {
 	++s_beforeCalls;
 	s_host->Log(s_host->pluginIndex, "before add");
@@ -226,7 +226,7 @@ TOY_EXPORT void ToyReleaseStrings(std::string& s, std::vector<std::string>& v)
 
 #elif defined(TOY_SECOND)
 
-static bool BeforeAdd(const FakeUnit*, int, int, int&)
+static bool BeforeAdd(const FakeUnit*, int&, int&, int&)
 {
 	++s_beforeCalls;
 	s_host->Log(s_host->pluginIndex, "before add");
@@ -256,6 +256,54 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
 	CivRegisterReplace<CivHooks::FakeUnit_Subtract>(s_host, &ReplaceSubtract);
 	CivRegisterReplace<CivHooks::FakeUnit_Grow>(s_host, &ReplaceGrow);
+	return true;
+}
+
+#elif defined(TOY_CHANGE)
+
+static bool BeforeAdd(const FakeUnit*, int& a, int& b, int&)
+{
+	if (a == 12)
+		a = 13;
+	else
+		b = 10;
+	return false;
+}
+
+static void AfterAdd(const FakeUnit*, int a, int b, int&)
+{
+	char line[64];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "after add sees a %d b %d", a, b);
+	s_host->Log(s_host->pluginIndex, line);
+}
+
+static bool BeforeSubtract(const FakeUnit*, int& a, int&, int&)
+{
+	a = 9;
+	return false;
+}
+
+static bool BeforeHalf(const FakeUnit*, int& v, int&)
+{
+	v = 40;
+	return false;
+}
+
+static bool BeforeGreet(const FakeUnit*, std::string& who, std::string&)
+{
+	who = "changed";
+	return false;
+}
+
+TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
+{
+	s_host = host;
+	Describe(info, "Toy Change");
+	CivRegisterBefore<CivHooks::FakeUnit_add>(s_host, &BeforeAdd);
+	CivRegisterAfter<CivHooks::FakeUnit_add>(s_host, &AfterAdd);
+	CivRegisterBefore<CivHooks::FakeUnit_Subtract>(s_host, &BeforeSubtract);
+	CivRegisterBefore<CivHooks::FakeUnit_Half>(s_host, &BeforeHalf);
+	CivRegisterBefore<CivHooks::FakeUnit_Greet>(s_host, &BeforeGreet);
 	return true;
 }
 
@@ -296,7 +344,7 @@ static void AfterRange(const FakeUnit*, int& result)
 	result += 1000;
 }
 
-static bool BeforeIgnore(FakeUnit*, int)
+static bool BeforeIgnore(FakeUnit*, int&)
 {
 	++s_beforeCalls;
 	return false;
@@ -435,7 +483,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_FAULT_BEFORE) || defined(TOY_FAULT_KEPT)
 
-static bool BeforeAdd(const FakeUnit*, int, int, int&)
+static bool BeforeAdd(const FakeUnit*, int&, int&, int&)
 {
 	int* volatile nowhere = 0;
 	return *nowhere == 1;
@@ -728,7 +776,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_VETO)
 
-static bool BeforeSubtract(const FakeUnit*, int a, int, int& result)
+static bool BeforeSubtract(const FakeUnit*, int& a, int&, int& result)
 {
 	if (a != 99)
 		return false;
@@ -736,7 +784,7 @@ static bool BeforeSubtract(const FakeUnit*, int a, int, int& result)
 	return true;
 }
 
-static bool BeforeScale(const FakeUnit*, int v, int, int&)
+static bool BeforeScale(const FakeUnit*, int& v, int&, int&)
 {
 	return v == 99;
 }
@@ -746,7 +794,7 @@ static bool BeforeName(const FakeUnit*, const std::string*&)
 	return true;
 }
 
-static bool BeforeGreet(const FakeUnit*, std::string who, std::string& result)
+static bool BeforeGreet(const FakeUnit*, std::string& who, std::string& result)
 {
 	if (who == "veto")
 		result = "Vetoed";

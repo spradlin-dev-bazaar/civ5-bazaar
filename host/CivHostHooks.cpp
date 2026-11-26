@@ -123,6 +123,20 @@ void CivHookRemoveAll()
 		RemoveHooks(g_CivHandHookPoints[i]);
 }
 
+int CivHookReplacer(int hookId)
+{
+	const CivHookEntry* e = g_CivHookPoints[hookId].replace;
+	return e ? e->plugin : -1;
+}
+
+std::vector<int> CivHandHookPlugins(int handHook)
+{
+	std::vector<int> plugins;
+	for (const CivHookEntry* e = g_CivHandHookPoints[handHook].before; e; e = e->next)
+		plugins.push_back(e->plugin);
+	return plugins;
+}
+
 bool CivHookRunBefore(const CivHookPoint& hp, int id, CivHookThunk thunk, void* ctx)
 {
 	CivHookCtx* c = static_cast<CivHookCtx*>(ctx);

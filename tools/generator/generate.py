@@ -8,6 +8,7 @@ Hook ids live in a registry file: an id, once given, always means the same funct
 built against an older host keep working.
 """
 
+import collections
 import glob
 import json
 import os
@@ -317,28 +318,30 @@ def wrapper_code(fn, data, src_path, exported):
     self_type = None
     if fn["class"] is not None and not fn["static_method"]:
         self_type = ("const %s*" % fn["class"]) if fn["const"] else ("%s*" % fn["class"])
-    plugin_params = ([self_type] if self_type else []) + types
+    require_same_hook_types(fn, types, "void" if is_void else return_text(fn, data))
+    copies = [hooked_copy(t) for t in types]
     plugin_args = (["c.self"] if self_type else []) + ["*c.a%d" % i for i in range(len(types))]
     inner_call = "%s%s(%s)" % ("civ_self->" if self_type else "", orig_name(fn), ", ".join(names))
 
     lines = ["#line %d %s" % (fn["line"], c_string(src_path))]
     lines.append(("CIV_HOST_API " if exported else "") + wrapper_signature(fn, data))
     lines.append("{")
+    written_result = "void" if is_void else return_text(fn, data)
     if not is_void:
-        lines.append("\ttypedef %s civ_R;" % return_text(fn, data))
+        lines.append("\ttypedef %s civ_R;" % written_result)
         lines.append("\ttypedef CivHookResult< civ_R > civ_Res;")
     result = "void" if is_void else "civ_R"
     lines += ["\tstruct civ_C", "\t{"]
-    lines += ["\t\t" + typedef for typedef in hook_type_lines(result, plugin_params, "Fn")]
+    lines += ["\t\t" + typedef for typedef in hook_type_lines(written_result, self_type, types, "Fn")]
     lines.append("\t\tCivHookCtx civ_h;")
     if self_type:
         lines.append("\t\t%s self;" % self_type)
-    lines += ["\t\tCivHookArg< %s >::Ptr a%d;" % (t, i) for i, t in enumerate(types)]
+    lines += ["\t\tCivHookArg< %s >::Ptr a%d;" % (t, i) for i, t in enumerate(copies)]
     if not is_void:
         lines.append("\t\tciv_Res* res;")
     lines.append(original_line(fn, self_type, types, result))
     lines += thunk_lines(is_void, plugin_args)
-    lines += hooked_lines(is_void, self_type, types, names, inner_call)
+    lines += hooked_lines(is_void, self_type, copies, names, inner_call)
     lines.append("\t};")
     lines.append("\tif (!g_CivHookActive[%s])" % ID_PLACEHOLDER)
     lines.append("\t\treturn %s(%s);" % (orig_name(fn), ", ".join(names)))
@@ -682,31 +685,115 @@ def plugin_spelling(type_text):
     return type_text
 
 
-def hook_type_lines(result, params, suffix=""):
+HookParameters = collections.namedtuple("HookParameters", "original before after")
+
+
+def without_template_arguments(type_text):
+    """A > inside parentheses, as in an argument libclang writes as an expression, does not close the brackets."""
+    angles, parens, kept = 0, 0, []
+    for ch in type_text:
+        if angles and ch in "()":
+            parens += 1 if ch == "(" else -1
+        elif ch == "<" and not parens:
+            angles += 1
+            continue
+        elif ch == ">" and not parens and angles:
+            angles -= 1
+            continue
+        if not angles:
+            kept.append(ch)
+    return "".join(kept)
+
+
+def without_top_const(type_text):
+    """A value's type without a top-level const, which only stops the function's own body from changing its copy.
+    libclang writes a const pointer as `char *const`, with no space."""
+    value = re.sub(r"\s*\bconst$", "", type_text).rstrip()
+    if value.startswith("const ") and not re.search(r"[*&]", without_template_arguments(value)):
+        value = value[len("const ") :]
+    return value
+
+
+def hooked_copy(type_text):
+    """A before-hook changes the wrapper's copy through a reference, so the copy must not be const."""
+    return type_text if type_text.endswith("&") else without_top_const(type_text)
+
+
+def by_reference(type_text):
+    """A before-hook's type for a value of type_text: a reference to the wrapper's copy, so that the hook can change the
+    value the function gets. A reference stays as it is, so a const one stays read-only."""
+    if type_text.endswith("&"):
+        return type_text
+    if re.search(r"[(\[]", without_template_arguments(type_text)):
+        raise ValueError("generator: no reference type for a value of type %s" % type_text)
+    return hooked_copy(type_text) + "&"
+
+
+def type_shape(type_text):
+    return re.findall(r"\bconst\b|[*&]", without_template_arguments(type_text))
+
+
+def require_same_hook_types(fn, written_types, written_result):
+    """The wrapper spells types as the game's code does and CivHooks.h as libclang does. If the two disagree, a plugin
+    changes a value through a reference the wrapper does not give it."""
+    pairs = [(by_reference(w), by_reference(p["type"])) for w, p in zip(written_types, fn["params"])]
+    if written_result != "void":
+        pairs.append((result_slot(written_result), result_slot(fn["result_type"])))
+    for mine, theirs in pairs:
+        if type_shape(mine) != type_shape(theirs):
+            raise ValueError(
+                "generator: %s: the game's code gives a hook %s, but libclang %s" % (fn["name"], mine, theirs)
+            )
+
+
+def result_slot(result):
+    """The type of a before-hook's or after-hook's result parameter: a reference to the value the caller gets, or, for a
+    function returning a reference, to a pointer to it."""
+    if result.endswith("&"):
+        return result[:-1].rstrip() + "*&"
+    return without_top_const(result) + "&"
+
+
+def hook_parameters(result, self_type, params):
+    """Hook types for a function that returns result and takes params, on an object of self_type unless that is None.
+    A replacement takes original after its pointer to the game's function. The wrapper, CivHooks.h and the docs all
+    take hook types from here."""
+    head = [self_type] if self_type else []
+    slot = [] if result == "void" else [result_slot(result)]
+    return HookParameters(
+        original=head + params,
+        before=head + [by_reference(t) for t in params] + slot,
+        after=head + params + slot,
+    )
+
+
+def hook_type_lines(result, self_type, params, suffix=""):
     """The typedefs of a hook point's original function, and of a before-hook, after-hook and replacement on it."""
-    slot = [] if result == "void" else ["CivHookSlot< %s >::Type" % result]
+    types = hook_parameters(result, self_type, params)
     original = "Original" + suffix
     return [
-        "typedef %s (*%s)(%s);" % (result, original, ", ".join(params)),
-        "typedef bool (*Before%s)(%s);" % (suffix, ", ".join(params + slot)),
-        "typedef void (*After%s)(%s);" % (suffix, ", ".join(params + slot)),
-        "typedef %s (*Replace%s)(%s);" % (result, suffix, ", ".join([original] + params)),
+        "typedef %s (*%s)(%s);" % (result, original, ", ".join(types.original)),
+        "typedef bool (*Before%s)(%s);" % (suffix, ", ".join(types.before)),
+        "typedef void (*After%s)(%s);" % (suffix, ", ".join(types.after)),
+        "typedef %s (*Replace%s)(%s);" % (result, suffix, ", ".join([original] + types.original)),
     ]
 
 
 def hook_types(fn, qualified=False):
-    """A hook point's result type and parameter types, self first: as the game's code writes them, which a plugin
-    cannot always name (a nested type written inside its own class), or qualified, which reads worse but always names
-    it."""
+    """A hook point's result type, self type (None for a function that is not a method) and parameter types: as the
+    game's code writes them, which a plugin cannot always name (a nested type written inside its own class), or
+    qualified, which reads worse but always names it."""
     if qualified:
         owner = fn["canonical_class"]
         params, result = fn["canonical_params"], fn["canonical_result"]
     else:
         owner = "::".join([n for n in fn["namespaces"] if n] + [fn["class"] or ""])
         params, result = [p["type"] for p in fn["params"]], fn["result_type"]
-    self_type = ["%s%s *" % ("const " if fn["const"] else "", owner)] if fn["class"] and not fn["static_method"] else []
+    self_type = None
+    if fn["class"] and not fn["static_method"]:
+        self_type = plugin_spelling("%s%s *" % ("const " if fn["const"] else "", owner))
     result = "void" if fn["result"]["kind"] == "void" else result
-    return plugin_spelling(result), [plugin_spelling(t) for t in self_type + params]
+    return plugin_spelling(result), self_type, [plugin_spelling(t) for t in params]
 
 
 def plugin_typedefs(fn, qualified=False):

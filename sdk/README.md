@@ -169,8 +169,8 @@ Log("%s starts turn %d with %d gold (turns started: %d, notifications seen: %d)"
 ```cpp
 struct CvPlayer_GetScore { enum { ID = 6887 }; // int CvPlayer::GetScore(bool, bool) const
 	typedef int (*Original)(const CvPlayer *, bool, bool);
-	typedef bool (*Before)(const CvPlayer *, bool, bool, CivHookSlot< int >::Type);
-	typedef void (*After)(const CvPlayer *, bool, bool, CivHookSlot< int >::Type);
+	typedef bool (*Before)(const CvPlayer *, bool&, bool&, int&);
+	typedef void (*After)(const CvPlayer *, bool, bool, int&);
 	typedef int (*Replace)(Original, const CvPlayer *, bool, bool);
 };
 ```
@@ -190,7 +190,7 @@ When you search:
 
 | Kind | Runs | What it can do | Plugins per function |
 |---|---|---|---|
-| **Before-hook** | before the game's function | look at the parameters, and veto the call | any number |
+| **Before-hook** | before the game's function | change the parameters, and veto the call | any number |
 | **After-hook** | after the game's function | read and change the return value | any number |
 | **Replacement** | instead of the game's function | do the work itself, calling the game's own version if it wants | one |
 
@@ -208,7 +208,7 @@ the game calls the function
 the game gets the result
 ```
 
-- **Before-hooks** run in load order. Returning `true` **vetoes** the call: the game's function does not run, and neither do the replacement or the before-hooks after this one. The caller still gets a return value: whatever this hook, or a before-hook above it, stored in `result` (see [Writing a hook](#writing-a-hook)), or, if none stored anything, a default: zero, `false`, or an empty string or object. Functions that return a reference work differently; see [Functions that return a reference](#functions-that-return-a-reference). Returning `false` lets the call go ahead. The after-hooks run either way.
+- **Before-hooks** run in load order, so each before-hook sees the changes that the before-hooks of the plugins higher in the list made. Returning `true` **vetoes** the call: the game's function does not run, and neither do the replacement or the before-hooks after this one. The caller still gets a return value: whatever this hook, or a before-hook above it, stored in `result` (see [Writing a hook](#writing-a-hook)), or, if none stored anything, a default: zero, `false`, or an empty string or object. Functions that return a reference work differently; see [Functions that return a reference](#functions-that-return-a-reference). Returning `false` lets the call go ahead. The after-hooks run either way.
 - **A replacement** runs instead of the game's function. It gets the game's own version as its first parameter, `original`, and calling `original` runs it. Only one plugin can replace a function. If two try, the one lower in the list is not loaded at all, and the Plugins screen names both and says to move it higher to use it instead.
 - **After-hooks** run in reverse load order, so the plugin highest in the list has the last word. They run after the game's function or the replacement, and also after a veto. Each can read the return value and change it.
 
@@ -227,28 +227,29 @@ A hook's parameters must match the game's function exactly. Build them from the 
 |---|---|---|
 | `original` | replacements only | `int (*original)(const CvPlayer*, bool, bool)`: a function pointer to the game's own `GetScore` |
 | `self` | methods that are not static | `const CvPlayer* self`: a pointer to the player, read-only (a pointer to a const `CvPlayer`) because `GetScore` is const |
-| the function's own parameters | always: same types, same order | `bool bFinal, bool bVictory` |
+| the function's own parameters | always, in order; a before-hook gets them by reference so that it can change them | `bool& bFinal, bool& bVictory` |
 | `result` | before-hooks and after-hooks, when the function returns a value | `int& result`: a reference to the return value |
 
 - **`original`** is a function pointer: `original(self, bFinal, bVictory)` runs the game's own version.
-- **`self`** is the object the method was called on (what C++ calls `this`). For a const method it is a pointer to const: the hook can read the object but not change it. Static methods and functions outside any class have no `self`.
+- **`self`** is the object the method was called on (what C++ calls `this`). For a const method it is a pointer to const: the hook can read the object but not change it. A before-hook gets the other parameters by reference, but `self` stays a pointer, so a hook cannot make the call run on another object. Static methods and functions outside any class have no `self`.
+- **The function's own parameters** come to a before-hook by reference, so that the hook can change them: a before-hook for `GetScore` is declared `static bool BeforeScore(const CvPlayer* self, bool& bFinal, bool& bVictory, int& result);`. A change reaches the before-hooks after this one, the replacement or the game's function, and the after-hooks. A parameter that the function takes as a const reference, such as `const CvBuildingEntry& building`, stays a const reference: the hook can read it but not change it. A parameter that is already a reference stays as it is. An after-hook and a replacement get the parameters with the function's own types and see the values as the before-hooks left them.
 - **`result`** is a reference to the value the caller will get, so assigning to it changes what the game gets back. In a before-hook the game's function has not run yet, so `result` holds a default (zero, `false` or empty), or what a before-hook above yours stored, not the game's answer. Functions that return `void` have no `result`.
 
 A before-hook returns a `bool` (`true` vetoes the call), an after-hook returns `void`, and a replacement returns the same type as the game's function, `const` included: for `const bool CvBuildingEntry::GetArtInfoCulturalVariation() const`, a replacement and its `original` return `const bool`. So for `GetScore`, the three kinds are declared like this (each still needs its `{ ... }` body when you write it):
 
 ```cpp
-static bool BeforeScore(const CvPlayer* self, bool bFinal, bool bVictory, int& result);
+static bool BeforeScore(const CvPlayer* self, bool& bFinal, bool& bVictory, int& result);
 static void AfterScore(const CvPlayer* self, bool bFinal, bool bVictory, int& result);
 static int ReplaceScore(int (*original)(const CvPlayer*, bool, bool), const CvPlayer* self, bool bFinal, bool bVictory);
 ```
 
 `static` here only keeps each hook private to your `.cpp` file, as in the template. C++ needs a function declared before it is used, so write your hooks above `CivPluginEntry`.
 
-The hook point's block in `CivHooks.h` spells out the same three types, as function pointer types named `Before`, `After` and `Replace`, with `Original` for the type of `original`. There, the type of `result` is written `CivHookSlot< int >::Type`: the template `CivHookSlot` in `CivPluginApi.h` turns the function's return type into the type of `result`, here `int&`. The typedefs can also spell a type in full where the signature does not, such as `CvLeague::ContributionTier` for a signature's `ContributionTier`: a plugin must write it the typedefs' way.
+The hook point's block in `CivHooks.h` spells out the same three types, as function pointer types named `Before`, `After` and `Replace`, with `Original` for the type of `original`. There, the type of `result` is spelled out in full, here `int&`. The typedefs can also spell a type in full where the signature does not, such as `CvLeague::ContributionTier` for a signature's `ContributionTier`: a plugin must write it the typedefs' way.
 
 The compiler checks your hook against those types when you register it, as below: a hook with a wrong parameter, or a missing one, fails to compile, and the error names your hook's type and the hook point's.
 
-Some hook points have no types in `CivHooks.h`, nearly all of them on the `CvDll` classes, which only pass the game's calls on: their functions take a type that `CvGameCoreDLLPCH.h` does not declare, or one private to its class. Such a hook point's block is a single line, with `}; };` right after its ID. Register hooks on them with `host->RegisterHook`, as below, and get the parameters exactly right by hand: nothing checks them, and if they do not match, your hook may crash or quietly read the wrong values. Bazaar catches a crash and turns your plugin off, and the game keeps going, though it may not be stable afterwards.
+Some hook points have no types in `CivHooks.h`, nearly all of them on the `CvDll` classes, which only pass the game's calls on: their functions take a type that `CvGameCoreDLLPCH.h` does not declare, or one private to its class. Such a hook point's block is a single line, with `}; };` right after its ID. Register hooks on them with `host->RegisterHook`, as below, and get the parameters exactly right by hand: nothing checks them, and if they do not match, your hook may crash or quietly read the wrong values. The parameter table at the start of this section says that Bazaar gives a before-hook each of the function's own parameters by reference, such as `bool& bFinal`, so that the hook can change them, though a parameter that the function takes as a const reference stays a const reference. A before-hook written here with a parameter by value, such as `bool bFinal`, compiles, but Bazaar hands it a reference, so the hook reads the wrong values or crashes. Bazaar catches a crash and turns your plugin off, and the game keeps going, though it may not be stable afterwards.
 
 ### Registering a hook
 
@@ -662,13 +663,13 @@ A few functions return a reference to an object the game already holds, rather t
 ```cpp
 struct CvPlayer_getHandicapInfo { enum { ID = 7473 }; // CvHandicapInfo& CvPlayer::getHandicapInfo() const
 	typedef CvHandicapInfo & (*Original)(const CvPlayer *);
-	typedef bool (*Before)(const CvPlayer *, CivHookSlot< CvHandicapInfo & >::Type);
-	typedef void (*After)(const CvPlayer *, CivHookSlot< CvHandicapInfo & >::Type);
+	typedef bool (*Before)(const CvPlayer *, CvHandicapInfo*&);
+	typedef void (*After)(const CvPlayer *, CvHandicapInfo*&);
 	typedef CvHandicapInfo & (*Replace)(Original, const CvPlayer *);
 };
 ```
 
-This one returns a reference to a `CvHandicapInfo`, the player's difficulty settings. A reference cannot be null and cannot be pointed at another object later, so `result` cannot be one. Instead, for these functions `result` is a pointer to the object, passed by reference so that your hook can change it. C++ writes that as `CvHandicapInfo*& result`, a reference to a pointer to a `CvHandicapInfo`, which is what `CivHookSlot< CvHandicapInfo & >::Type` in `CivHooks.h` stands for:
+This one returns a reference to a `CvHandicapInfo`, the player's difficulty settings. A reference cannot be null and cannot be pointed at another object later, so `result` cannot be one. Instead, for these functions `result` is a pointer to the object, passed by reference so that your hook can change it. C++ writes that as `CvHandicapInfo*& result`, a reference to a pointer to a `CvHandicapInfo`, which is the type that `CivHooks.h` spells out in its `Before` and `After` typedefs:
 
 ```cpp
 static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
@@ -680,7 +681,7 @@ static void AfterHandicap(const CvPlayer* self, CvHandicapInfo*& result);
 ## Word list
 
 - **After-hook**: a hook that runs after the game's function, and can read and change its return value.
-- **Before-hook**: a hook that runs before the game's function, and can veto the call.
+- **Before-hook**: a hook that runs before the game's function, and can change the parameters or veto the call.
 - **The game's code**: the game's core DLL, `CvGameCore_Expansion2.dll`. Bazaar replaces it.
 - **Hand-placed hook**: a fixed spot inside the game's code where Bazaar calls plugins. Each is either a question or an announcement.
 - **Hook**: a function of yours that Bazaar calls before, after or instead of one of the game's functions.

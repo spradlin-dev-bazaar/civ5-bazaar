@@ -25,8 +25,10 @@ class CvUnit;
 
 enum CivHookKind
 {
-	// Returning true vetoes the call: the caller gets what the before-hooks left in the result, and the after-hooks
-	// still run. A veto on a function that returns a reference still runs the function if no before-hook set the result.
+	// Gets the values the function is called with by reference, except those it takes as const references, so a change
+	// reaches the before-hooks after it, the function and the after-hooks. Returning true vetoes the call: the caller
+	// gets what the before-hooks left in the result, and the after-hooks still run. A veto on a function that returns a
+	// reference still runs the function if no before-hook set the result.
 	CIV_HOOK_BEFORE = 0,
 	// Runs after the function, or after a veto, and may change the result.
 	CIV_HOOK_AFTER = 1,
@@ -173,12 +175,6 @@ struct CivHostInfo
 	// class below does this for you.
 	bool (*CallFunction)(int pluginIndex, int function, CivFunctionRunner run, void* args);
 };
-
-// The result parameter of a before-hook or after-hook on a function returning R: a reference to the value the caller
-// gets, or, for a function returning a reference, to a pointer to it.
-template<class R> struct CivHookSlot { typedef R& Type; };
-template<class T> struct CivHookSlot<const T> { typedef T& Type; };
-template<class T> struct CivHookSlot<T&> { typedef T*& Type; };
 
 // Hook is a hook point from CivHooks.h, such as CivHooks::CvPlayer_GetScore. A hook whose type does not match fails to
 // compile.

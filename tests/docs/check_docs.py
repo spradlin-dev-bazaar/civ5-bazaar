@@ -35,15 +35,15 @@ THING = "reference/docs_engine.cpp/Thing/"
 OPTION = "reference/docs_engine.cpp/Setup.Option/"
 DECLARATIONS = {
     "Thing::Score(bool) const": [
-        "static bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);",
+        "static bool BeforeThing_Score(const Thing* self, bool& bFinal, int& result);",
         "static int ReplaceThing_Score(int (*original)(const Thing*, bool), const Thing* self, bool bFinal);",
         "CivRegisterAfter<CivHooks::Thing_Score>(host, &AfterThing_Score);",
     ],
-    "Thing::Get(int)": ["static bool BeforeThing_Get(int i, Thing*& result);"],
+    "Thing::Get(int)": ["static bool BeforeThing_Get(int& i, Thing*& result);"],
     "Thing::Level() const": ["static bool BeforeThing_Level(const Thing* self, int& result);"],
     "Thing::Name() const": ["static bool BeforeThing_Name(const Thing* self, const char*& result);"],
     "Thing::Self() const": ["static bool BeforeThing_Self(const Thing* self, const Thing*& result);"],
-    "Thing::Weight(int) const": ["static bool BeforeThing_Weight(const Thing* self, int arg0, int& result);"],
+    "Thing::Weight(int) const": ["static bool BeforeThing_Weight(const Thing* self, int& arg0, int& result);"],
     "Thing::operator==(const Thing &) const": [
         "static bool BeforeThing_op_eq(const Thing* self, const Thing& other, bool& result);"
     ],
@@ -51,7 +51,7 @@ DECLARATIONS = {
         "static bool BeforeSetup_Option_GetValue(const Setup::Option* self, int& result);"
     ],
     "Thing::Feel(Mood) const": [
-        "static bool BeforeThing_Feel(const Thing* self, Thing::Mood mood, int& result);",
+        "static bool BeforeThing_Feel(const Thing* self, Thing::Mood& mood, int& result);",
         "static int ReplaceThing_Feel(int (*original)(const Thing*, Thing::Mood), const Thing* self, Thing::Mood mood)",
         "CivRegisterBefore<CivHooks::Thing_Feel>(host, &BeforeThing_Feel);",
     ],
@@ -582,7 +582,7 @@ def markdown_problems(site):
             "# Thing::Score(bool) const\n\n"
             "[Game code](../../index.md) / [docs_engine.cpp](../index.md) / [Thing](index.md) / Score\n",
             "- **Hook name:** `CivHooks::Thing_Score`\n",
-            "## Hooks\n\n```cpp\nstatic bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);\n",
+            "## Hooks\n\n```cpp\nstatic bool BeforeThing_Score(const Thing* self, bool& bFinal, int& result);\n",
             "Lines %d to %d of `docs_engine.cpp`, numbered." % score,
             "Left out of this build by an `#if`: lines %d to %d." % left_out,
             "\n%d  int Thing::Score(bool bFinal) const\n" % fixture_line("int Thing::Score(bool bFinal) const"),
