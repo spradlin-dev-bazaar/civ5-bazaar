@@ -1,4 +1,5 @@
 #include "CivHostSaves.h"
+#include "CivHostCalls.h"
 #include "CivHostLock.h"
 #include "CivHostPart.h"
 #include "CivHostRuntime.h"

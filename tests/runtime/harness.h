@@ -3,6 +3,8 @@
 // What the runtime test sections share. Each section loads the plugins it needs first, so any one can run alone and in
 // any order. A section that leaves a plugin in memory on purpose uses a toy no other section loads, and runs at most once
 // per process, because the host refuses that toy until the process ends.
+#include "CivHostCalls.h"
+#include "CivHostRegister.h"
 #include "CivHostRuntime.h"
 #include "toy_api.h"
 
