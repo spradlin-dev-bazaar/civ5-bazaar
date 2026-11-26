@@ -832,8 +832,10 @@ class SourceContractTest(unittest.TestCase):
     """The default crash check reads lines Bazaar writes: this ties it to them."""
 
     def test_a_fault_and_a_refusal_for_stopping_are_the_lines_the_crash_check_finds(self):
-        with open(os.path.join(REPO, "host", "CivHostRuntime.cpp"), encoding="latin-1") as f:
-            source = f.read()
+        source = ""
+        for name in ("CivHostRuntime.cpp", "CivHostCalls.cpp"):
+            with open(os.path.join(REPO, "host", name), encoding="latin-1") as f:
+                source += f.read()
         self.assertEqual(source.count('Log("Plugin %s: %s", rec.name.c_str(), problem'), 2)
         (fault,) = re.findall(r'"(Faulted \(code 0x%08X\) in %s\.)"', source)
         (refusal,) = re.findall(r'Format\("(It stopped working while loading [^"]*)"', source)

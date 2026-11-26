@@ -24,7 +24,7 @@ Plugins build with the SDK's `CivPlugin.vsprops`, written by `sdk/build_sdk.py`,
 
 ## Calls into plugin code
 
-Every call from Bazaar into a plugin goes through `GuardedCall` in `host/CivHostRuntime.cpp`, so a crash turns the plugin off and ends the game cleanly instead of crashing it. Flag:
+Every call from Bazaar into a plugin goes through `GuardedCall` in `host/CivHostCalls.cpp`, so a crash turns the plugin off and ends the game cleanly instead of crashing it. Flag:
 - a new call into plugin code that bypasses it: a hook, an entry or shutdown function, anything a plugin registered;
 - Bazaar state set before a guarded call and restored after it, which a crash leaves half-updated;
 - any way a quarantined plugin's hooks run again before it is unloaded;

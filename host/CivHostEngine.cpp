@@ -1,6 +1,7 @@
 #include "CvGameCoreDLLPCH.h"
 #include "CvNotifications.h"
 
+#include "CivHostCalls.h"
 #include "CivHostEngine.h"
 #include "CivHostLock.h"
 #include "CivHostMods.h"
@@ -8,6 +9,7 @@
 #include "CivHostNotices.h"
 #include "CivHostOrder.h"
 #include "CivHostPath.h"
+#include "CivHostRegister.h"
 #include "CivHostRuntime.h"
 #include "CivHostSaves.h"
 #include "CivHostSetup.h"

@@ -109,18 +109,8 @@ typedef std::pair<std::string, std::string> CivFilePair;
 typedef std::vector<CivFilePair> CivFilePairs;
 
 typedef void (*CivHostLogSink)(const char* line);
-typedef void (*CivHostFaultSink)(int pluginIndex, const char* pluginName, bool shuttingDown, unsigned int code);
-// Pushes a Lua function that hands serial, fn and its own lua_State to CivHostCallLuaFunction.
-typedef void (*CivHostLuaPusher)(lua_State* L, unsigned int serial, CivLuaFunction fn);
 
 void CivHostSetLogSink(CivHostLogSink sink);
-void CivHostSetFaultSink(CivHostFaultSink sink);
-// Set before plugins load: without a pusher, PushLuaFunction pushes nothing.
-void CivHostSetLuaPusher(CivHostLuaPusher pusher);
-// Runs a plugin's Lua function through the crash guard and gives back what it returned, a negative yield included.
-// False, with why, when its plugin is off or unloaded, it was pushed with a wrong index, or it crashed. A Lua error the
-// function raises passes straight through.
-bool CivHostCallLuaFunction(unsigned int serial, CivLuaFunction fn, lua_State* L, int* results, char* why, size_t whySize);
 
 // Adds plugins without unloading any; CivHostSetPlugins is the way to change the list.
 void CivHostLoadPlugins(const std::vector<CivPluginFile>& files);
@@ -129,22 +119,21 @@ void CivHostLoadPlugins(const std::vector<CivPluginFile>& files);
 CivPluginListResult CivHostSetPlugins(const std::vector<CivPluginFile>& files, const CivFilePairs& useBoth = CivFilePairs());
 // False, with nothing changed, when called while a plugin is running.
 bool CivHostUnloadPlugins();
-// From a plugin's crash, other than one while shutting down, until CivHostForgetGameDamage, which the main menu calls.
-bool CivHostGameMayBeDamaged();
-void CivHostForgetGameDamage();
 const std::vector<CivPluginRecord>& CivHostPlugins();
 void CivHostLogLine(const char* line);
 // Every version may change what plugins use, so a plugin runs only on its own version, from the release it was built
 // for on.
 CivApiFit CivApiFitOf(const CivApiNumbers& host, const CivApiNumbers& built);
-const char* CivHostPluginName(int plugin);
 // The refusal of a second plugin with the same key, the lookup of saved data and the finding of published values all
 // use this, or data would mix.
 bool CivSameSaveKey(const std::string& modIdA, const std::string& pluginIdA, const std::string& modIdB, const std::string& pluginIdB);
 bool CivSameSaveKey(const CivPluginRecord& plugin, const std::string& modId, const std::string& pluginId);
-// False, with data empty, when the plugin has no save function, is off, or crashed in it.
-bool CivHostCallSaveFunction(int plugin, std::string* data);
-// A null or empty data tells the plugin there is none.
-void CivHostCallLoadFunction(int plugin, const std::string* data);
 // What the Plugins screen shows for each plugin record, in load order; problems are separated by "\n".
 std::vector<CivPluginReportRow> CivHostReportRows();
+
+// For the host's other files, which share the plugin list and the log.
+CivPluginRecord& CivHostRecord(int plugin);
+bool CivHostAlive(int plugin);
+const char* CivHostPluginName(int plugin);
+void CivHostLog(const char* format, ...);
+std::string CivHostFormat(const char* format, ...);
