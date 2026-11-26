@@ -57,7 +57,7 @@ namespace
 		const CivHookPoint& hp = g_CivHandHookPoints[handHook];
 		if (!hp.before)
 			return false;
-		PlayerQuery c = { { 0, false }, player };
+		PlayerQuery c = { CivHookCtx(), player };
 		return CivHookRunBefore(hp, CivHandHookId(handHook), &PlayerQuery::Ask, &c);
 	}
 
@@ -194,7 +194,7 @@ bool CivHandKeepDeadSlotOpen(int player)
 
 void CivHandPopupRaised(int player, int popupType, int data1, int data2, int data3, bool option1, bool option2, const char* text)
 {
-	Popup c = { { 0, false }, player, popupType, data1, data2, data3, option1, option2, Text(text) };
+	Popup c = { CivHookCtx(), player, popupType, data1, data2, data3, option1, option2, Text(text) };
 	Announce(CIV_HAND_POPUP_RAISED, &Popup::Tell, &c);
 }
 
@@ -208,33 +208,33 @@ void CivHandPopupRaised(const std::vector<int>& players, int popupType, int data
 void CivHandNotificationAdded(int player, int notificationType, const char* message, const char* summary, int x, int y, int data1, int data2,
 	int lookupIndex)
 {
-	Notification c = { { 0, false }, player, notificationType, Text(message), Text(summary), x, y, data1, data2, lookupIndex };
+	Notification c = { CivHookCtx(), player, notificationType, Text(message), Text(summary), x, y, data1, data2, lookupIndex };
 	Announce(CIV_HAND_NOTIFICATION_ADDED, &Notification::Tell, &c);
 }
 
 void CivHandDealResolved(int fromPlayer, int toPlayer, int actingPlayer, bool accepted, bool finalized)
 {
-	Deal c = { { 0, false }, fromPlayer, toPlayer, actingPlayer, accepted, finalized };
+	Deal c = { CivHookCtx(), fromPlayer, toPlayer, actingPlayer, accepted, finalized };
 	Announce(CIV_HAND_DEAL_RESOLVED, &Deal::Tell, &c);
 }
 
 void CivHandUnitOrdersCancelled(CvUnit* unit, int reason)
 {
-	OrdersCancelled c = { { 0, false }, unit, reason };
+	OrdersCancelled c = { CivHookCtx(), unit, reason };
 	Announce(CIV_HAND_UNIT_ORDERS_CANCELLED, &OrdersCancelled::Tell, &c);
 }
 
 void CivHandUnitReplaced(int oldOwner, int oldUnit, CvUnit* newUnit)
 {
 	CivValuesReplaced(CIV_ON_UNIT, CivObjectKey(oldOwner, oldUnit), newUnit);
-	UnitReplaced c = { { 0, false }, oldOwner, oldUnit, newUnit };
+	UnitReplaced c = { CivHookCtx(), oldOwner, oldUnit, newUnit };
 	Announce(CIV_HAND_UNIT_REPLACED, &UnitReplaced::Tell, &c);
 }
 
 void CivHandCityReplaced(int oldOwner, int oldCity, CvCity* newCity)
 {
 	CivValuesReplaced(CIV_ON_CITY, CivObjectKey(oldOwner, oldCity), newCity);
-	CityReplaced c = { { 0, false }, oldOwner, oldCity, newCity };
+	CityReplaced c = { CivHookCtx(), oldOwner, oldCity, newCity };
 	Announce(CIV_HAND_CITY_REPLACED, &CityReplaced::Tell, &c);
 }
 

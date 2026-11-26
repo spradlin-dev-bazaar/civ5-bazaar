@@ -19,6 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import generate  # noqa: E402
 
 
+def types_of(parameters):
+    return [p.type for p in parameters]
+
+
 def function(
     name,
     displayname=None,
@@ -266,8 +270,8 @@ class RegistryTest(unittest.TestCase):
             generate.plugin_typedefs(method),
             [
                 "typedef int (*Original)(const Game::CvPlayer *, bool);",
-                "typedef bool (*Before)(const Game::CvPlayer *, bool, CivHookSlot< int >::Type);",
-                "typedef void (*After)(const Game::CvPlayer *, bool, CivHookSlot< int >::Type);",
+                "typedef bool (*Before)(CivHookCall&, const Game::CvPlayer *, bool&, int&);",
+                "typedef void (*After)(const CivHookCall&, const Game::CvPlayer *, bool, int&);",
                 "typedef int (*Replace)(Original, const Game::CvPlayer *, bool);",
             ],
         )
@@ -277,11 +281,104 @@ class RegistryTest(unittest.TestCase):
             generate.plugin_typedefs(static),
             [
                 "typedef void (*Original)(std::vector<std::vector<int> >);",
-                "typedef bool (*Before)(std::vector<std::vector<int> >);",
-                "typedef void (*After)(std::vector<std::vector<int> >);",
+                "typedef bool (*Before)(CivHookCall&, std::vector<std::vector<int> >&);",
+                "typedef void (*After)(const CivHookCall&, std::vector<std::vector<int> >);",
                 "typedef void (*Replace)(Original, std::vector<std::vector<int> >);",
             ],
         )
+
+    def test_a_before_hook_gets_each_value_by_reference_but_a_const_reference_stays_read_only(self):
+        hook = generate.hook_parameters(
+            "int", "CvUnit *", ["int", "CvPlot *", "const CvPlot *", "const CvBuildInfo &", "int &"]
+        )
+        self.assertEqual(
+            types_of(hook.before),
+            [
+                "CivHookCall&",
+                "CvUnit *",
+                "int&",
+                "CvPlot *&",
+                "const CvPlot *&",
+                "const CvBuildInfo &",
+                "int &",
+                "int&",
+            ],
+        )
+        self.assertEqual(types_of(hook.after), ["const CivHookCall&"] + types_of(hook.original) + ["int&"])
+        self.assertEqual(types_of(generate.hook_parameters("void", None, ["int"]).before), ["CivHookCall&", "int&"])
+
+    def test_a_hook_gets_its_plugins_record_then_self_then_the_values_then_the_result(self):
+        hook = generate.hook_parameters("int", "CvUnit *", ["int", "bool"])
+        before, replace, after = generate.thunk_lines("int", hook)
+        self.assertIn("(*c.civ_h.call, c.self, *c.a0, *c.a1, c.res->value)", before)
+        self.assertIn("(&civ_C::Original, c.self, *c.a0, *c.a1)", replace)
+        self.assertIn("(*c.civ_h.call, c.self, *c.a0, *c.a1, c.res->value)", after)
+        before, replace, after = generate.thunk_lines("void", generate.hook_parameters("void", None, []))
+        self.assertIn("(*c.civ_h.call)", before)
+        self.assertIn("(&civ_C::Original)", replace)
+        self.assertIn("(*c.civ_h.call)", after)
+
+    def test_only_a_before_hook_on_a_function_returning_a_reference_reports_an_unset_result(self):
+        hook = generate.hook_parameters("CvUnit &", None, [])
+        before, replace, after = generate.thunk_lines("CvUnit &", hook)
+        self.assertIn("c.civ_h.resultUnset = c.res->Empty();", before)
+        self.assertNotIn("resultUnset", replace + after)
+        hook = generate.hook_parameters("int", None, [])
+        self.assertNotIn("resultUnset", "".join(generate.thunk_lines("int", hook)))
+
+    def test_a_value_the_definition_marks_const_can_still_be_changed_by_a_before_hook(self):
+        for written, before in [
+            ("const int", "int&"),
+            ("int const", "int&"),
+            ("const char *const", "const char *&"),
+            ("const CvCity * const", "const CvCity *&"),
+            ("const std::vector<CvUnit*>", "std::vector<CvUnit*>&"),
+        ]:
+            self.assertEqual(generate.by_reference(written), before, written)
+
+    def test_a_type_with_no_reference_spelling_stops_the_generator_rather_than_losing_a_hook(self):
+        for written in ["void (*)(int)", "int[3]"]:
+            with self.assertRaisesRegex(ValueError, "no reference type"):
+                generate.by_reference(written)
+        self.assertEqual(
+            generate.by_reference("CvWeightedVector<TeamTypes, ((63)), true>"),
+            "CvWeightedVector<TeamTypes, ((63)), true>&",
+        )
+
+    def test_a_hooks_result_parameter_points_at_what_the_caller_gets(self):
+        for result, slot in [
+            ("int", "int&"),
+            ("const int", "int&"),
+            ("int const", "int&"),
+            ("CvUnit *", "CvUnit *&"),
+            ("const CvUnit *", "const CvUnit *&"),
+            ("CvUnit * const", "CvUnit *&"),
+            ("const char *const", "const char *&"),
+            ("const std::vector<CvUnit*>", "std::vector<CvUnit*>&"),
+            ("const CvHandicapInfo &", "const CvHandicapInfo*&"),
+            ("CvString &", "CvString*&"),
+        ]:
+            self.assertEqual(generate.result_slot(result), slot, result)
+
+    def test_a_hook_point_whose_two_spellings_give_hooks_the_same_types_passes_the_check(self):
+        fn = function("Nick", params=["const char *const"], result_type="const char *const")
+        fn["result"] = {"kind": "scalar"}
+        generate.require_same_hook_types(fn, ["const char* const"], "const char* const")
+
+    def test_a_hook_point_whose_two_spellings_give_hooks_other_types_stops_the_generator(self):
+        fn = function("Count", params=["const unsigned int"])
+        with self.assertRaisesRegex(
+            ValueError, "Count: the game's code gives a hook unsigned const int&, but libclang"
+        ):
+            generate.require_same_hook_types(fn, ["unsigned const int"], "void")
+        fn = function("Count", params=["int"], result_type="const unsigned int")
+        fn["result"] = {"kind": "scalar"}
+        with self.assertRaisesRegex(ValueError, "unsigned const int&"):
+            generate.require_same_hook_types(fn, ["int"], "unsigned const int")
+
+    def test_a_greater_than_sign_inside_parentheses_does_not_close_a_template(self):
+        self.assertEqual(generate.without_template_arguments("const Foo<(a>b)> *"), "const Foo *")
+        self.assertEqual(generate.by_reference("const Foo<(a>b)> *"), "const Foo<(a>b)> *&")
 
     def test_a_hook_points_qualified_types_and_the_functions_own_types_name_types_from_outside_their_class(self):
         method = function("Feel", "Feel(Mood)", "Unit", ["Game"], const=True, params=["Mood"], result_type="int")
@@ -554,6 +651,15 @@ class SignatureTest(unittest.TestCase):
         self.assertEqual(
             generate.wrapper_signature(fn, data, keep_defaults=True), "int CvUnit::f(int a = 3, bool civ_p1)"
         )
+
+    def test_the_wrapper_stops_on_a_parameter_whose_two_spellings_give_hooks_other_types(self):
+        data = b"void CvUnit::f(unsigned const int a)"
+        params = written_params(data, ("unsigned const int a", "a"))
+        params[0]["type"] = "const unsigned int"
+        fn = {"def_start": 0, "body_start": len(data), "params": params, "result": {"kind": "void"}}
+        fn.update(name="f", static_method=False, const=False, **{"class": "CvUnit"})
+        with self.assertRaisesRegex(ValueError, "f: the game's code gives a hook unsigned const int&"):
+            generate.wrapper_code(fn, data, "CvUnit.cpp", False)
 
     def test_an_unnamed_parameter_with_a_default_is_skipped(self):
         data = b"void f(int = 3)"

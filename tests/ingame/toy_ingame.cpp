@@ -45,8 +45,9 @@ static void LogRegistered(int result, const char* what)
 static CivFunction<int ()> s_turnsPlayed;
 
 // Found each turn, since Toy Saves may be listed below Toy Gold and so not loaded yet when Toy Gold's entry runs.
-static bool BeforeDoTurn(CvPlayer* self)
+static bool BeforeDoTurn(CivHookCall& call, CvPlayer* self)
 {
+	call.note = self;
 	if (!self->isHuman())
 		return false;
 	Log("turn starting for %s with %d gold", self->getCivilizationShortDescription(), self->GetTreasury()->GetGold());
@@ -60,10 +61,11 @@ static bool BeforeDoTurn(CvPlayer* self)
 	return false;
 }
 
-static void AfterDoTurn(CvPlayer* self)
+static void AfterDoTurn(const CivHookCall& call, CvPlayer* self)
 {
 	if (self->isHuman())
-		Log("turn finished for %s with %d gold", self->getCivilizationShortDescription(), self->GetTreasury()->GetGold());
+		Log("turn finished for %s with %d gold; the before-hook's note %s", self->getCivilizationShortDescription(), self->GetTreasury()->GetGold(),
+			call.note == self ? "reached the after-hook" : "was lost");
 }
 
 static int ReplaceScore(ScoreFn original, const CvPlayer* self, bool bFinal, bool bVictory)
@@ -103,7 +105,7 @@ TOY_EXPORT bool CivPluginEntry(const CivHostInfo* host, CivPluginInfo* info)
 
 #elif defined(TOY_CRASH)
 
-static void AfterDoTurn(CvPlayer* self)
+static void AfterDoTurn(const CivHookCall&, CvPlayer* self)
 {
 	if (self->isHuman())
 	{
@@ -119,7 +121,7 @@ static int CrashFromLua(lua_State* L)
 	return *nowhere;
 }
 
-static void AfterRegisterGame(lua_State* L)
+static void AfterRegisterGame(const CivHookCall&, lua_State* L)
 {
 	s_host->PushLuaFunction(s_host->pluginIndex, L, &CrashFromLua);
 	lua_setfield(L, -2, "ToyCrashLua");
@@ -201,7 +203,7 @@ static int Raise(lua_State* L)
 }
 
 // The Game table is on top of the stack while its methods are registered.
-static void AfterRegisterGame(lua_State* L)
+static void AfterRegisterGame(const CivHookCall&, lua_State* L)
 {
 	s_host->PushLuaFunction(s_host->pluginIndex, L, &Ping);
 	lua_setfield(L, -2, "ToyHandPing");
@@ -271,7 +273,7 @@ static void LoadData(const void* data, int size)
 }
 
 // Every player's units and cities get values, so a captured one shows what carried over; only the human's are logged.
-static bool BeforeDoTurn(CvPlayer* self)
+static bool BeforeDoTurn(CivHookCall&, CvPlayer* self)
 {
 	const bool human = self->isHuman();
 	int loop = 0;

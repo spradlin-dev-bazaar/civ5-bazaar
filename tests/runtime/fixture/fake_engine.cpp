@@ -42,6 +42,16 @@ int FakeUnit::Scale(int v, int factor) const
 	return v * factor;
 }
 
+int FakeUnit::Half(const int v) const
+{
+	return v / 2;
+}
+
+int FakeUnit::Countdown(int n) const
+{
+	return n <= 0 ? 0 : 1 + Countdown(n - 1);
+}
+
 void FakeUnit::Ignore(int)
 {
 }

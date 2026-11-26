@@ -245,23 +245,90 @@ void TestHooks()
 	StartWith(names);
 	FakeUnit unit;
 	ClearLog();
-	Check(unit.add(2, 3) == 110, "after-hooks run in reverse load order (5 * 2 + 100 = 110)");
+	Check(unit.add(2, 3) == 210, "after-hooks run in load order ((5 + 100) * 2 = 210)");
 	const int basicBefore = LogIndex("[Toy Basic] before add");
 	Check(basicBefore >= 0 && basicBefore < LogIndex("[Toy Second] before add"), "before-hooks run in load order");
 	const int secondBefore = Call(TOY_FUNCTION("toy_second.dll", ToyBeforeCalls), -1);
-	Check(unit.add(13, 1) == 98, "a veto skips the function; its result still passes through the after-hooks");
+	Check(unit.add(13, 1) == 198, "a veto skips the function; its result still passes through the after-hooks");
 	Check(Call(TOY_FUNCTION("toy_second.dll", ToyBeforeCalls), -2) == secondBefore, "a veto skips the remaining before-hooks");
 	unit.notify(5);
 	Check(unit.m_notified == 10, "a replacement runs instead of the original, and can call the original itself");
 	Check(unit.Subtract(7, 2) == 50, "the original gets the replacement's arguments in order and returns its result");
 	Check(unit.name() == "Hooked Warrior", "an after-hook can change a function's returned reference");
-	Check(unit.add(1, 1) == 104, "hooks from refused plugins never run, including the other hooks of a turned-off plugin");
+	Check(unit.add(1, 1) == 204, "hooks from refused plugins never run, including the other hooks of a turned-off plugin");
 	Check(unit.Grow(1) == 102, "a replacement runs on the overload it was registered for");
 	Check(unit.Grow(1, 2) == 3, "a replacement leaves the other overload of the function alone");
 
 	Load("toy_basic.dll");
 	Check(HasStatus("toy_basic.dll", CIV_PLUGIN_DUPLICATE), "a plugin listed twice is loaded once");
-	Check(unit.add(2, 3) == 110, "the hooks of a plugin listed twice still run once per call");
+	Check(unit.add(2, 3) == 210, "the hooks of a plugin listed twice still run once per call");
+}
+
+void TestChangedValues()
+{
+	FakeUnit unit;
+	const char* const changeLast[] = {"toy_basic.dll", "toy_change.dll"};
+	StartWith(changeLast);
+	ClearLog();
+	Check(unit.add(2, 3) == 112, "a before-hook's change reaches the function (2 + 10, then Toy Basic's 100)");
+	Check(LogIndex("[Toy Change] after add sees a 2 b 10") >= 0, "the after-hooks see the changed value");
+	Check(unit.Half(10) == 20, "a before-hook can change a value that the function's definition marks const (40 / 2)");
+	Check(unit.Greet("you") == "Hello changed", "a before-hook can change an object passed by value, such as a string");
+	const char* const changeFirst[] = {"toy_change.dll", "toy_basic.dll"};
+	StartWith(changeFirst);
+	ClearLog();
+	Check(unit.add(12, 1) == 99, "a before-hook lower in the list sees the change of one above it (Toy Basic vetoes 13)");
+	Check(LogIndex("[Toy Change] after add sees a 13 b 1") >= 0, "the after-hooks see the changed value after another plugin's veto");
+	const char* const withReplacement[] = {"toy_change.dll", "toy_second.dll"};
+	StartWith(withReplacement);
+	Check(unit.Subtract(7, 2) == 70, "a replacement gets the values the before-hooks changed ((9 - 2) * 10)");
+}
+
+void TestCallRecords()
+{
+	FakeUnit unit;
+	const char* const recordOnly[] = {"toy_record.dll"};
+	StartWith(recordOnly);
+	Check(unit.add(2, 3) == 5 && LogIndex("[Toy Record] add note 1002 vetoed 0") >= 0,
+		"an after-hook gets the note that its plugin's before-hook left on the call, and no veto");
+	Check(unit.add(99, 1) == 0 && LogIndex("[Toy Record] add note 1099 vetoed 1") >= 0,
+		"a plugin's own after-hook sees its before-hook's veto, and the note that before-hook left");
+	Check(unit.Subtract(7, 2) == 5 && LogIndex("[Toy Record] subtract note 3") >= 0,
+		"a plugin's two before-hooks on one function share its record, which starts blank");
+	Check(unit.Countdown(2) == 2 && LogIndex("[Toy Record] countdown 2 note 3") >= 0,
+		"a function that calls itself: the outermost call keeps its own record");
+	Check(LogIndex("[Toy Record] countdown 1 note 2") >= 0, "a function that calls itself: the middle call keeps its own record");
+	Check(LogIndex("[Toy Record] countdown 0 note 1") >= 0, "a function that calls itself: the innermost call keeps its own record");
+	Check(unit.Half(10) == 5 && LogIndex("[Toy Record] half note 0 vetoed 0") >= 0,
+		"an after-hook whose plugin has no before-hook on the function gets a blank record, though earlier calls used that stack");
+	const char* const basicFirst[] = {"toy_basic.dll", "toy_record.dll"};
+	StartWith(basicFirst);
+	Check(unit.add(13, 1) == 99 && LogIndex("[Toy Record] add note 0 vetoed 1") >= 0,
+		"after another plugin's veto, an after-hook sees the veto and a blank note, since its before-hook never ran");
+	const char* const recordFirst[] = {"toy_record.dll", "toy_change.dll"};
+	StartWith(recordFirst);
+	Check(unit.add(2, 3) == 12 && LogIndex("[Toy Record] add note 1002 vetoed 0") >= 0,
+		"a plugin's note is its own: the before-hook of a plugin lower in the list does not overwrite it");
+	Check(LogIndex("[Toy Change] after add sees a 2 b 10 note 7") >= 0, "the plugin lower in the list gets its own note too");
+	const char* const vetoFirst[] = {"toy_veto.dll", "toy_record.dll"};
+	StartWith(vetoFirst);
+	const char* const ignored = "Plugin Toy Veto: its before-hook on FakeUnit::name() const returned true to veto the call but left result null.";
+	Check(unit.name() == "Warrior" && LogIndex("[Toy Record] name note 5 vetoed 0") >= 0,
+		"a veto that leaves a reference result unset does not count: the before-hooks after it run, and the after-hooks see no veto");
+	Check(LogIndex("[Toy Record] replacement of name runs") >= 0, "a veto that leaves a reference result unset does not skip the replacement");
+	unit.name();
+	Check(LogCount(ignored) == 1, "Bazaar logs once, naming the plugin and the function, that it ignored such a veto");
+	ClearLog();
+	ToyVetoNameWithResultFn* const withResult = TOY_FUNCTION("toy_veto.dll", ToyVetoNameWithResult);
+	if (withResult)
+		withResult();
+	Check(withResult && unit.name() == "Vetoed Warrior" && LogIndex("[Toy Record] name note 0 vetoed 1") >= 0,
+		"a veto that sets a reference result counts: the caller gets that object, and the after-hooks see the veto");
+	Check(LogIndex("[Toy Record] replacement of name runs") < 0, "a veto that sets a reference result skips the replacement");
+	const char* const faultFirst[] = {"toy_fault_before.dll", "toy_record.dll"};
+	StartWith(faultFirst);
+	Check(unit.add(2, 3) == 5 && LogIndex("[Toy Record] add note 1002 vetoed 0") >= 0,
+		"a plugin that crashes in its before-hook leaves the next plugin's record right");
 }
 
 void TestShapes()
@@ -298,7 +365,7 @@ void TestQuarantine()
 		"faulting before- and after-hooks are both caught and reported as crashes, not as ones while shutting down");
 	Check(CivHostGameMayBeDamaged(), "after a crash in a hook, the game may be damaged");
 	Check(SymGetOptions() == options, "a crash report puts back dbghelp's settings, which the game's own crash handling shares");
-	Check(result == 110, "the other plugins' hooks still run on the same call");
+	Check(result == 210, "the other plugins' hooks still run on the same call");
 	Check(IsQuarantined("toy_fault.dll"), "a faulting plugin is quarantined");
 	Check(ReportRow("toy_fault.dll").problems.find("Faulted") != std::string::npos, "a quarantined plugin's row gives the fault");
 	Check(LogHas("  It read address 0x00000000, at toy_fault.dll+0x"), "the log says what memory the crash touched, and where in the plugin");
@@ -311,7 +378,7 @@ void TestQuarantine()
 	const int unnamed = LogIndex("    #00 toy_fault_before.dll+0x");
 	Check(unnamed >= 0 && LogLine(unnamed).find('(') == std::string::npos, "a frame in a plugin without its .pdb names no function, rather than a wrong exported one");
 	ClearLog();
-	Check(unit.add(2, 3) == 110, "the other plugins' hooks still run once the faulting ones are quarantined");
+	Check(unit.add(2, 3) == 210, "the other plugins' hooks still run once the faulting ones are quarantined");
 	Check(!LogHas("Plugin Toy Fault: Faulted") && !LogHas("Plugin Toy Fault Before: Faulted"), "a quarantined plugin's hooks never run again");
 	const CivPluginReportRow faulted = ReportRow("toy_fault.dll");
 	Check(faulted.failed && faulted.status == "Turned off after a crash", "the Plugins screen lists a quarantined plugin as turned off");
@@ -453,7 +520,7 @@ void TestVetoAndReplace()
 	Check(unit.Subtract(7, 2) == 50, "a replacement runs when no before-hook vetoes");
 	Check(unit.Subtract(99, 1) == 77, "a veto skips the replacement as well as the original, and the call returns the veto's result");
 	Check(unit.Scale(99, 3) == 0 && unit.Scale(4, 3) == 12, "a veto that sets no result returns the type's default");
-	Check(unit.name() == "Warrior", "a veto that sets no reference result runs the original after all, since a reference can't be empty");
+	Check(unit.name() == "Warrior", "a veto that sets no reference result does not count, since a reference can't be empty");
 	Check(unit.Greet("veto") == "Vetoed" && unit.Greet("quiet").empty() && unit.Greet("Bob") == "Hello Bob",
 		"a function returning a class returns the veto's result, or an empty one when the veto sets none");
 }
@@ -463,8 +530,8 @@ void TestExceptions()
 	StartWithNone();
 	FakeUnit unit;
 	const int original = unit.Range();
-	// toy_throw loads last, so its after-hook runs first and toy_shapes' runs after it.
-	const char* const names[] = {"toy_shapes.dll", "toy_throw.dll"};
+	// toy_throw loads first, so its after-hook runs first and toy_shapes' runs after it.
+	const char* const names[] = {"toy_throw.dll", "toy_shapes.dll"};
 	StartWith(names);
 	const int before = FaultCount();
 	const int range = unit.Range();

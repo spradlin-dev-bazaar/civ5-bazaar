@@ -18,6 +18,8 @@ typedef void ToyReleaseStringsFn(std::string& s, std::vector<std::string>& v);
 typedef void ToySetHostCallFn(ToyHostCallFn* call);
 typedef int ToyHostCallResultFn();
 typedef void ToyBreakOnNextCallFn();
+// Makes Toy Veto's before-hook on FakeUnit::name set result before it vetoes.
+typedef void ToyVetoNameWithResultFn();
 typedef void ToyStartThreadFn(int throughRuntime);
 typedef void ToyLeaveThreadRunningFn();
 typedef void ToyWaitFn(int caller);

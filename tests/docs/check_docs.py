@@ -35,38 +35,42 @@ THING = "reference/docs_engine.cpp/Thing/"
 OPTION = "reference/docs_engine.cpp/Setup.Option/"
 DECLARATIONS = {
     "Thing::Score(bool) const": [
-        "static bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);",
+        "static bool BeforeThing_Score(CivHookCall& call, const Thing* self, bool& bFinal, int& result);",
         "static int ReplaceThing_Score(int (*original)(const Thing*, bool), const Thing* self, bool bFinal);",
         "CivRegisterAfter<CivHooks::Thing_Score>(host, &AfterThing_Score);",
     ],
-    "Thing::Get(int)": ["static bool BeforeThing_Get(int i, Thing*& result);"],
-    "Thing::Level() const": ["static bool BeforeThing_Level(const Thing* self, int& result);"],
-    "Thing::Name() const": ["static bool BeforeThing_Name(const Thing* self, const char*& result);"],
-    "Thing::Self() const": ["static bool BeforeThing_Self(const Thing* self, const Thing*& result);"],
-    "Thing::Weight(int) const": ["static bool BeforeThing_Weight(const Thing* self, int arg0, int& result);"],
+    "Thing::Get(int)": ["static bool BeforeThing_Get(CivHookCall& call, int& i, Thing*& result);"],
+    "Thing::Level() const": ["static bool BeforeThing_Level(CivHookCall& call, const Thing* self, int& result);"],
+    "Thing::Name() const": ["static bool BeforeThing_Name(CivHookCall& call, const Thing* self, const char*& result);"],
+    "Thing::Self() const": [
+        "static bool BeforeThing_Self(CivHookCall& call, const Thing* self, const Thing*& result);"
+    ],
+    "Thing::Weight(int) const": [
+        "static bool BeforeThing_Weight(CivHookCall& call, const Thing* self, int& arg0, int& result);"
+    ],
     "Thing::operator==(const Thing &) const": [
-        "static bool BeforeThing_op_eq(const Thing* self, const Thing& other, bool& result);"
+        "static bool BeforeThing_op_eq(CivHookCall& call, const Thing* self, const Thing& other, bool& result);"
     ],
     "Setup::Option::GetValue() const": [
-        "static bool BeforeSetup_Option_GetValue(const Setup::Option* self, int& result);"
+        "static bool BeforeSetup_Option_GetValue(CivHookCall& call, const Setup::Option* self, int& result);"
     ],
     "Thing::Feel(Mood) const": [
-        "static bool BeforeThing_Feel(const Thing* self, Thing::Mood mood, int& result);",
+        "static bool BeforeThing_Feel(CivHookCall& call, const Thing* self, Thing::Mood& mood, int& result);",
         "static int ReplaceThing_Feel(int (*original)(const Thing*, Thing::Mood), const Thing* self, Thing::Mood mood)",
         "CivRegisterBefore<CivHooks::Thing_Feel>(host, &BeforeThing_Feel);",
     ],
 }
 WHOLE_DECLARATIONS = {
-    "Thing::Reset()": """static bool BeforeThing_Reset(Thing* self);
-static void AfterThing_Reset(Thing* self);
+    "Thing::Reset()": """static bool BeforeThing_Reset(CivHookCall& call, Thing* self);
+static void AfterThing_Reset(const CivHookCall& call, Thing* self);
 static void ReplaceThing_Reset(void (*original)(Thing*), Thing* self);
 
 CivRegisterBefore<CivHooks::Thing_Reset>(host, &BeforeThing_Reset);
 CivRegisterAfter<CivHooks::Thing_Reset>(host, &AfterThing_Reset);
 CivRegisterReplace<CivHooks::Thing_Reset>(host, &ReplaceThing_Reset);
 """,
-    "Measure(const Shape &)": """static bool BeforeMeasure(const Shape& shape, int& result);
-static void AfterMeasure(const Shape& shape, int& result);
+    "Measure(const Shape &)": """static bool BeforeMeasure(CivHookCall& call, const Shape& shape, int& result);
+static void AfterMeasure(const CivHookCall& call, const Shape& shape, int& result);
 static int ReplaceMeasure(int (*original)(const Shape&), const Shape& shape);
 
 // CivHooks.h gives this hook point no types, so nothing checks these hooks' parameters.
@@ -582,7 +586,8 @@ def markdown_problems(site):
             "# Thing::Score(bool) const\n\n"
             "[Game code](../../index.md) / [docs_engine.cpp](../index.md) / [Thing](index.md) / Score\n",
             "- **Hook name:** `CivHooks::Thing_Score`\n",
-            "## Hooks\n\n```cpp\nstatic bool BeforeThing_Score(const Thing* self, bool bFinal, int& result);\n",
+            "## Hooks\n\n```cpp\n"
+            "static bool BeforeThing_Score(CivHookCall& call, const Thing* self, bool& bFinal, int& result);\n",
             "Lines %d to %d of `docs_engine.cpp`, numbered." % score,
             "Left out of this build by an `#if`: lines %d to %d." % left_out,
             "\n%d  int Thing::Score(bool bFinal) const\n" % fixture_line("int Thing::Score(bool bFinal) const"),

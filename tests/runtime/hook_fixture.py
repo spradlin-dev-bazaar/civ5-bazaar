@@ -96,17 +96,24 @@ def typed_header_problems():
     if "typedef int (*Original)(const FakeUnit *, FakeUnit::Mood);" not in text:
         problems.append("FakeUnit_Feel, which takes a nested type written without its class, is not typed qualified")
     project = fixture_project(["fake_engine.cpp"])
-    for result, should_compile in (("int& result", True), ("long& result", False), ("", False)):
+    record = "const CivHookCall&, "
+    for first, result, should_compile in (
+        (record, "int& result", True),
+        (record, "long& result", False),
+        (record, "", False),
+        ("", "int& result", False),
+    ):
+        params = first + "const FakeUnit*, int, int" + (", " + result if result else "")
         code = (
-            "static void AfterAdd(const FakeUnit*, int, int%s) {}\n"
+            "static void AfterAdd(%s) {}\n"
             "int Register(const CivHostInfo* host)\n"
             "{ return CivRegisterAfter<CivHooks::FakeUnit_add>(host, &AfterAdd); }\n"
-        ) % (", " + result if result else "")
+        ) % params
         tu = analyze.parse_as_plugin(project, header, code)
         compiled = not any(d.severity >= analyze.ci.Diagnostic.Error for d in tu.diagnostics)
         if compiled != should_compile:
             outcome = "compiles" if compiled else "fails to compile"
-            problems.append("an after-hook on FakeUnit::add taking %r %s" % (result, outcome))
+            problems.append("an after-hook on FakeUnit::add taking (%s) %s" % (params, outcome))
     return problems
 
 

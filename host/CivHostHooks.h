@@ -2,6 +2,7 @@
 
 #include "CivPluginApi.h"
 
+#include <malloc.h>
 #include <new>
 
 struct CivHookEntry
@@ -10,6 +11,10 @@ struct CivHookEntry
 	int plugin;
 	CivHookEntry* next;
 	bool loggedSkippedOriginal;
+	bool loggedIgnoredVeto;
+	// An index into a call's records, the same for every before-hook and after-hook of this plugin on this hook point;
+	// -1 for a replacement and for a hand-placed hook.
+	int record;
 };
 
 struct CivHookPoint
@@ -17,14 +22,35 @@ struct CivHookPoint
 	CivHookEntry* before;
 	CivHookEntry* after;
 	CivHookEntry* replace;
+	// One for each plugin with a before-hook or after-hook here; a hand-placed hook point keeps 0.
+	int recordCount;
 };
 
-// The first member of every generated thunk context; the runtime reaches it through a void*.
+// The first member of every generated thunk context; the runtime reaches it through a void*, so a context struct
+// never gets a base class or a virtual function.
 struct CivHookCtx
 {
+	CivHookCtx() : fn(0), veto(false), call(0), records(0), recordCount(0), resultUnset(false) {}
+	// Blanks the records here, where the wrapper hands them over, since _alloca leaves whatever the stack held.
+	CivHookCtx(CivHookCall* first, int count) : fn(0), veto(false), call(0), records(first), recordCount(count), resultUnset(false)
+	{
+		const CivHookCall blank = {false, 0};
+		for (int i = 0; i < count; ++i)
+			records[i] = blank;
+	}
+
 	void* fn;
 	bool veto;
+	// The record of the plugin whose hook runs now.
+	CivHookCall* call;
+	CivHookCall* records;
+	int recordCount;
+	// Set by a before-hook's thunk on a function that returns a reference, where a veto needs a result.
+	bool resultUnset;
 };
+
+// _alloca makes the records in the frame of the wrapper that calls this, so they last until its after-hooks have run.
+#define CIV_HOOK_RECORDS(count) static_cast<CivHookCall*>(_alloca((count) * sizeof(CivHookCall)))
 
 typedef void (*CivHookThunk)(void*);
 
@@ -67,14 +93,13 @@ template<class T> struct CivHookArg { typedef T* Ptr; typedef T Type; };
 template<class T> struct CivHookArg<T&> { typedef T* Ptr; typedef T& Type; };
 
 // A vetoed call returns what the hooks left in value: the type's default unless a hook set it.
-// A reference result can't be empty, so its wrapper runs the original instead.
+// A reference result has no default, so CivHookRunBefore ignores a veto that leaves it empty.
 template<class R> struct CivHookResult
 {
 	R value;
 	CivHookResult() : value() {}
 	// Copy-construct rather than assign: some engine handles copy state their operator= drops.
 	void Set(R v) { value.~R(); new (&value) R(v); }
-	bool Empty() const { return false; }
 	R Get() { return value; }
 };
 

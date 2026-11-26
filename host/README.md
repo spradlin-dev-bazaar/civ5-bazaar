@@ -21,7 +21,7 @@ The host's own code, compiled into the host DLL. Every `.cpp` file here is built
 - `CivHostPath`: file names and paths. Bazaar keeps them in UTF-8 and gives them to Windows as wide characters, so names in any language work.
 - `CivHostEngine`: the link to the game: the plugin list and the switched-on mods from its databases, the saved order file, the Plugins screen's calls, the log file, Bazaar's part of the game's saves, telling which player, city, unit or plot a value is on, Lua's `Game.GetPluginValue`, and showing notices in the game.
 - `CivHostHooks.h`: what the generated hook wrappers need from the runtime.
-- `CivHostHookList.h`: the hook lists' functions that the host's other files use: a hook's name, adding a plugin's hook to the lists, and removing every hook.
+- `CivHostHookList.h`: the hook lists' functions that the host's other files use: a hook's name, adding a plugin's hook to the lists, removing every hook, which plugin's replacement of a hook point is in effect, and which plugins registered for a hand-placed hook, in load order.
 - `CivHostPart.h`: writing and reading the numbers and texts Bazaar's part of a save is made of.
 - `CivHostLock.h`: a small lock class that the rest of Bazaar's host uses where two threads share data that only one thread at a time may use, since Civilization V writes one save from a thread of its own, and runs hooked functions on two threads at the same time, its drawing thread and its game core thread.
 - `CivTurnBench.h`: a turn timer used only in benchmark builds.

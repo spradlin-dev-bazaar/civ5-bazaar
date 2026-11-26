@@ -5,6 +5,8 @@
 #include "CivHostRuntime.h"
 #include "CivHostValues.h"
 
+#include <algorithm>
+
 namespace
 {
 	struct PossibleConflict
@@ -115,10 +117,8 @@ namespace
 
 	bool RegisteredHandHook(int plugin, int handHook)
 	{
-		for (const CivHookEntry* e = g_CivHandHookPoints[handHook].before; e; e = e->next)
-			if (e->plugin == plugin)
-				return true;
-		return false;
+		const std::vector<int> plugins = CivHandHookPlugins(handHook);
+		return std::find(plugins.begin(), plugins.end(), plugin) != plugins.end();
 	}
 
 	bool LoadingPluginUses(int handHook)
@@ -134,9 +134,9 @@ namespace
 		for (int i = 0; i < g_CivHandHookSiteCount; ++i)
 		{
 			const CivHandHookSite& site = g_CivHandHookSites[i];
-			const CivHookEntry* replacement = g_CivHookPoints[site.hookPoint].replace;
-			if (site.handHook == handHook && replacement)
-				NotePossibleConflict(replacement->plugin, site.hookPoint, handHook, false, carriedValues);
+			const int replacer = CivHookReplacer(site.hookPoint);
+			if (site.handHook == handHook && replacer >= 0)
+				NotePossibleConflict(replacer, site.hookPoint, handHook, false, carriedValues);
 		}
 	}
 
@@ -154,12 +154,12 @@ namespace
 
 std::string CivConflictsTurnAwayIfReplaced(int hookId)
 {
-	const CivHookEntry* taken = g_CivHookPoints[hookId].replace;
-	if (!taken)
+	const int taken = CivHookReplacer(hookId);
+	if (taken < 0)
 		return std::string();
 	// Its other hooks may rely on the replacement it lost, so the whole plugin stays off.
 	s_replaceTaken = true;
-	const char* owner = CivHostRecord(taken->plugin).name.c_str();
+	const char* owner = CivHostRecord(taken).name.c_str();
 	return CivHostFormat("%s, higher in the list, already replaces %s, and only one plugin can replace a function. To use this one instead, move it above %s.",
 		owner, CivHookShortName(hookId).c_str(), owner);
 }
@@ -171,8 +171,9 @@ void CivConflictsOnReplace(int plugin, int hookId)
 		const CivHandHookSite& site = g_CivHandHookSites[i];
 		if (site.hookPoint != hookId)
 			continue;
-		for (const CivHookEntry* e = g_CivHandHookPoints[site.handHook].before; e; e = e->next)
-			NotePossibleConflict(e->plugin, hookId, site.handHook, true, false);
+		const std::vector<int> users = CivHandHookPlugins(site.handHook);
+		for (size_t u = 0; u < users.size(); ++u)
+			NotePossibleConflict(users[u], hookId, site.handHook, true, false);
 		const int kind = CarriedKind(site.handHook);
 		for (int other = 0; kind >= 0 && other < plugin; ++other)
 			if (CivValuesCarryOver(other, kind) && !RegisteredHandHook(other, site.handHook))
